@@ -72,7 +72,10 @@ Deno.serve(async (req) => {
         body: JSON.stringify({ model: MODEL, max_tokens: Math.min(2500, b.max_tokens || 1500), system: String(b.system || "").slice(0, 6000), messages: b.messages, tools, ...(b.tool_choice ? { tool_choice: b.tool_choice } : {}) }),
       });
       const j = await r.json();
-      if (!r.ok) return json({ error: "שגיאה מ-Claude", status: r.status, detail: j?.error?.message }, r.status === 400 ? 400 : 502);
+      if (!r.ok) {
+        console.error("claude error", r.status, MODEL, JSON.stringify(j?.error || j).slice(0, 800), "tools:", tools.map((t: any) => t.type || t.name).join(","));
+        return json({ error: "שגיאה מ-Claude", status: r.status, detail: j?.error?.message }, r.status === 400 ? 400 : 502);
+      }
       return json(j);
     }
 

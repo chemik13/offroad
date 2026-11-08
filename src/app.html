@@ -390,7 +390,7 @@ const hasGroup = () => !!store.get('groupCode');
 async function api(path, opts = {}) {
   const r = await fetch(API + path, { ...opts, headers: { 'content-type': 'application/json', 'x-group-code': store.get('groupCode') || '', ...(opts.headers || {}) } });
   let j = null; try { j = await r.json(); } catch {}
-  if (!r.ok) { const e = new Error(j?.error || ('שגיאת שרת ' + r.status)); e.status = r.status; throw e; }
+  if (!r.ok) { const e = new Error(j?.error || ('שגיאת שרת ' + r.status)); e.status = r.status; e.detail = j?.detail; throw e; }
   return j;
 }
 async function checkConn() {
@@ -755,12 +755,13 @@ async function run(fromPrompt) {
       store.set('lastPrompt', text);
       const key = store.get('apiKey');
       p = null;
+      let smartErr = null;
       if (hasGroup() || key) {
         status('מבין את הבקשה (ואם צריך, מחפש ברשת)…');
         try { p = await parseSmart(text); }
-        catch (e) { status(e.status === 401 ? 'קוד הקבוצה או המפתח לא נכונים. משתמש בפענוח בסיסי.' : e.status === 503 ? 'מפתח Claude לא הוגדר בשרת. משתמש בפענוח בסיסי.' : 'הפענוח החכם נכשל. משתמש בפענוח בסיסי.'); }
+        catch (e) { smartErr = e.status === 401 ? 'קוד הקבוצה או המפתח לא נכונים.' : e.status === 503 ? 'מפתח Claude לא הוגדר בשרת.' : 'הפענוח החכם נכשל' + (e.detail ? ` (${e.detail})` : e.status ? ` (${e.status})` : '') + '.'; }
       }
-      if (!p) { p = parseLocal(text); p._basic = true; }
+      if (!p) { p = parseLocal(text); p._basic = true; p._smartErr = smartErr; }
       if (!p.start && (p.from_my_location || /מהמיקום שלי|מאיפה שאני|מהמקום שלי/.test(text))) {
         status('מאתר את המיקום שלך…');
         const pos = await new Promise((res, rej) => navigator.geolocation ? navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: false, timeout: 12000, maximumAge: 300000 }) : rej(new Error('no geo'))).catch(() => null);
@@ -771,7 +772,7 @@ async function run(fromPrompt) {
       if (!p.start) {
         if (pickedStart) p.start = { name: $('pStart').value || '📍 נקודה על המפה', latlng: pickedStart };
         else if (map.getZoom() >= 10) { const c = map.getCenter(); p.start = { name: '📍 מרכז המפה', latlng: [c.lat, c.lng] }; }
-        else throw new Error(p._basic
+        else throw new Error(p._smartErr ? p._smartErr + ' בלי הפענוח החכם לא הבנתי מאיפה יוצאים. כתבו מקום, "מהמיקום שלי", או לחצו על המפה.' : p._basic
           ? 'לא הבנתי מאיפה יוצאים. הפענוח הבסיסי לא מכיר נושאים כמו "בעקבות מבצע…". הגדירו מפתח Claude (⚙) כדי שאחפש ואתכנן לבד, או כתבו מקום, "מהמיקום שלי", או לחצו על המפה.'
           : 'לא כתבתם מאיפה יוצאים. כתבו מקום, "מהמיקום שלי", או עשו זום לאזור במפה.');
       }
