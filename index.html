@@ -145,6 +145,24 @@ ul.pois li{margin-bottom:8px}
 .wxpop b{font-weight:600}
 .go.offroad{display:flex;align-items:center;justify-content:center;gap:8px;padding-block:12px;font-size:16px}
 .orhint{font-size:13px;line-height:1.5;color:var(--ink);background:var(--accent-soft);border-radius:8px;padding:8px 10px;margin-top:8px}
+#calDlg{width:min(420px,calc(100vw - 16px));box-sizing:border-box;padding:14px}
+.calhead{display:flex;align-items:center;gap:8px}
+.calhead h2{flex:1;text-align:center;margin:0}
+.calgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin-top:10px}
+.calgrid .dow{font-size:11px;color:var(--muted);text-align:center;padding:2px 0}
+.calgrid button{height:46px;min-width:0;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:8px;font:500 14px var(--body);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:0;font-variant-numeric:tabular-nums;position:relative}
+.calgrid button small{font-size:8.5px;line-height:1;color:var(--muted);max-width:100%;overflow:hidden;white-space:nowrap}
+.calgrid button.open{background:#e9f6ee;border-color:#bfe3cc}
+.calgrid button.hol{background:#2e9b4f;border-color:#2e9b4f;color:#fff}
+.calgrid button.hol small{color:#eaf7ee}
+.calgrid button.sel{outline:2px solid var(--accent);outline-offset:-2px}
+.calgrid button.today{font-weight:700;text-decoration:underline}
+.calgrid button:disabled{opacity:.35;cursor:default}
+.callegend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--muted);margin-top:8px}
+.callegend .lg{display:inline-block;width:11px;height:11px;border-radius:3px;margin-inline-end:4px;vertical-align:-1px;border:1px solid var(--line)}
+.lg.open{background:#e9f6ee}.lg.hol{background:#2e9b4f}.lg.sel{background:#fff;outline:2px solid var(--accent);outline-offset:-2px}
+.calnext{font-size:13px;margin-top:8px;display:flex;flex-direction:column;gap:3px}
+.calnext button{background:none;border:0;padding:0;color:var(--accent);font:inherit;cursor:pointer;text-align:start}
 .daychips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-top:8px}
 .daychips button{flex:none;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:7px 12px;font:500 13px var(--body);cursor:pointer;font-variant-numeric:tabular-nums}
 .daychips button[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
@@ -235,7 +253,7 @@ ul.pois li{margin-bottom:8px}
         <label class="full"><span class="checks">
           <label><input type="checkbox" id="pAsph"> להימנע מכבישים</label>
           </span></label>
-        <label>תאריך יציאה<input type="date" id="pDate"></label>
+        <label>תאריך יציאה<span style="display:flex;gap:6px"><input type="date" id="pDate" style="flex:1;min-width:0"><button type="button" class="ghost" id="calBtn" style="padding:6px 10px;font-size:13px;white-space:nowrap">לוח שטחי אש</button></span></label>
         <label>שעת יציאה<input type="time" id="pTime" value="08:00"></label>
         <label>שטחי אש<select id="pMil"><option value="auto">לפי התאריך (סופ"ש וחגים)</option><option value="avoid">תמיד להימנע</option><option value="allow">לכלול תמיד</option></select></label>
         <label class="full" id="milNote" style="color:var(--muted)"></label>
@@ -288,8 +306,17 @@ ul.pois li{margin-bottom:8px}
       <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off"></details>
   </div>
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.18 · 08.11.2026 15:34</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.19 · 08.11.2026 18:43</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
+</dialog>
+
+<dialog id="calDlg">
+  <div class="calhead"><button class="ghost" id="calPrev" aria-label="חודש קודם">›</button><h2 id="calTitle"></h2><button class="ghost" id="calNext" aria-label="חודש הבא">‹</button></div>
+  <div class="calgrid" id="calGrid"></div>
+  <div class="callegend"><span><i class="lg open"></i>סופ"ש: שטחי אש בד"כ פתוחים</span><span><i class="lg hol"></i>חג / חול המועד</span><span><i class="lg sel"></i>ימי הטיול</span></div>
+  <div class="calnext" id="calNext2"></div>
+  <p style="font-size:12px;color:var(--muted);margin:8px 0 0">זה דפוס, לא אישור: לפני היציאה ודאו מול פרסומי צה"ל לשטחי אש לתאריך הספציפי.</p>
+  <div class="actions" style="margin-top:10px"><button class="ghost" id="calClose">סגירה</button></div>
 </dialog>
 
 <dialog id="library">
@@ -832,18 +859,27 @@ function hebDay(d) {
   const f = new Intl.DateTimeFormat('en-u-ca-hebrew', { month: 'long', day: 'numeric', timeZone: 'Asia/Jerusalem' }).formatToParts(d);
   return { m: f.find(x => x.type === 'month').value, day: +f.find(x => x.type === 'day').value };
 }
-const HOLIDAYS = { Tishri: [[1, 2], [10, 10], [15, 22]], Nisan: [[15, 21]], Sivan: [[6, 6]] };
+// Days firing zones usually open: Fri/Sat, Jewish holidays incl. chol hamoed, Independence Day.
+const HOLIDAY_NAMES = {
+  Tishri: { 1: 'ראש השנה', 2: 'ראש השנה', 9: 'ערב יום כיפור', 10: 'יום כיפור', 14: 'ערב סוכות', 15: 'סוכות', 16: 'חול המועד סוכות', 17: 'חול המועד סוכות', 18: 'חול המועד סוכות', 19: 'חול המועד סוכות', 20: 'חול המועד סוכות', 21: 'הושענא רבה', 22: 'שמחת תורה' },
+  Nisan: { 14: 'ערב פסח', 15: 'פסח', 16: 'חול המועד פסח', 17: 'חול המועד פסח', 18: 'חול המועד פסח', 19: 'חול המועד פסח', 20: 'חול המועד פסח', 21: 'שביעי של פסח' },
+  Sivan: { 5: 'ערב שבועות', 6: 'שבועות' },
+};
 function dayInfo(iso) {
   const d = new Date(iso + 'T12:00:00+02:00');
   const wd = d.getUTCDay();
-  if (wd === 5) return { open: true, why: 'יום שישי' };
-  if (wd === 6) return { open: true, why: 'שבת' };
+  let holiday = null;
   try {
     const h = hebDay(d);
-    for (const [a, b] of HOLIDAYS[h.m] || []) if (h.day >= a && h.day <= b) return { open: true, why: 'חג / חול המועד' };
-    if (h.m === 'Tishri' && (h.day === 9 || h.day === 14)) return { open: true, why: 'ערב חג' };
-    if (h.m === 'Nisan' && h.day === 14) return { open: true, why: 'ערב חג' };
+    holiday = HOLIDAY_NAMES[h.m]?.[h.day] || null;
+    // Independence Day: 5 Iyar, moved to Thursday if it falls on Fri/Sat, to Tuesday if on Monday
+    if (/^Iyar/.test(h.m)) {
+      const ind = { 5: [1, 2, 3, 4], 4: [4], 3: [4], 6: [2] }[h.day];
+      if (ind && ind.includes(wd)) holiday = 'יום העצמאות';
+    }
   } catch {}
+  const wk = wd === 5 ? 'יום שישי' : wd === 6 ? 'שבת' : null;
+  if (holiday || wk) return { open: true, why: [holiday, wk].filter(Boolean).join(' · '), holiday };
   return { open: false, why: 'יום חול' };
 }
 function resolveMilitary(p) {
@@ -2011,6 +2047,63 @@ async function renderWeather(r, p, D) {
   box.innerHTML = html;
   if (warn.length) $('warns').insertAdjacentHTML('afterbegin', [...new Set(warn)].map(t => `<div class="warn">${t}</div>`).join(''));
 }
+// ---------- firing-zone calendar ----------
+let calMonth = null;
+function isoOf(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+function openCalendar() {
+  const cur = $('pDate').value || nextSaturday();
+  const d = new Date(cur + 'T12:00:00'); calMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+  drawCalendar(); drawUpcoming(); $('calDlg').showModal();
+}
+function drawCalendar() {
+  const y = calMonth.getFullYear(), m = calMonth.getMonth();
+  $('calTitle').textContent = calMonth.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
+  const g = $('calGrid'); g.innerHTML = '';
+  for (const n of ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש']) g.insertAdjacentHTML('beforeend', `<div class="dow">${n}</div>`);
+  for (let k = 0; k < new Date(y, m, 1).getDay(); k++) g.insertAdjacentHTML('beforeend', '<div></div>');
+  const today = isoToday(), sel = $('pDate').value || nextSaturday(), days = Math.max(1, +$('pDays').value || 1);
+  const selEnd = addDays(sel, days - 1);
+  for (let day = 1; day <= new Date(y, m + 1, 0).getDate(); day++) {
+    const iso = isoOf(new Date(y, m, day)); const info = dayInfo(iso);
+    const b = document.createElement('button'); b.type = 'button';
+    b.className = [info.holiday ? 'hol' : info.open ? 'open' : '', iso >= sel && iso <= selEnd ? 'sel' : '', iso === today ? 'today' : ''].join(' ');
+    b.innerHTML = `<span>${day}</span>${info.holiday ? `<small>${info.holiday.replace('חול המועד', 'חוה"מ')}</small>` : ''}`;
+    b.title = info.why; b.disabled = iso < today;
+    b.onclick = () => pickDate(iso);
+    g.append(b);
+  }
+}
+function drawUpcoming() { // next holiday periods (consecutive open holiday days), a year ahead
+  const out = []; let cur = null; let d = isoToday();
+  for (let k = 0; k < 400; k++, d = addDays(d, 1)) {
+    const info = dayInfo(d);
+    if (info.holiday && !/^ערב/.test(info.holiday)) {
+      const name = /סוכות|הושענא|שמחת תורה/.test(info.holiday) ? 'סוכות (כולל חול המועד)' : /פסח/.test(info.holiday) ? 'פסח (כולל חול המועד)' : info.holiday;
+      if (cur && cur.name === name && addDays(cur.to, 1) >= d) cur.to = d; else { cur = { name, from: d, to: d }; out.push(cur); }
+    }
+  }
+  const fmt = iso => new Date(iso + 'T12:00:00').toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' });
+  $('calNext2').innerHTML = '<b style="font-size:13px">חגים קרובים</b>';
+  for (const h of out.slice(0, 6)) {
+    const b = document.createElement('button'); b.type = 'button';
+    const wd = iso => new Date(iso + 'T12:00:00').toLocaleDateString('he-IL', { weekday: 'short' });
+    b.textContent = `${h.name}: ${fmt(h.from)}${h.to !== h.from ? '–' + fmt(h.to) : ''} (${wd(h.from)}${h.to !== h.from ? '–' + wd(h.to) : ''})`;
+    b.onclick = () => { const dd = new Date(h.from + 'T12:00:00'); calMonth = new Date(dd.getFullYear(), dd.getMonth(), 1); drawCalendar(); };
+    $('calNext2').append(b);
+  }
+}
+function pickDate(iso) {
+  $('pDate').value = iso; milNote(); $('calDlg').close();
+  const days = Math.max(1, +$('pDays').value || 1);
+  const allOpen = Array.from({ length: days }, (_, k) => dayInfo(addDays(iso, k)).open).every(Boolean);
+  status(`נבחר ${heDay(iso)}${days > 1 ? ` (${days} ימים)` : ''}. ${allOpen ? 'כל הימים בסופ"ש / חג: שטחי אש בד"כ פתוחים.' : 'יש ימי חול בטיול: שטחי אש לא ייכללו.'}`);
+  if (current && !$('results').hidden && !current.saved) run(false); // firing zones change the plan itself
+}
+$('calBtn').onclick = openCalendar;
+$('calPrev').onclick = () => { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1); drawCalendar(); };
+$('calNext').onclick = () => { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1); drawCalendar(); };
+$('calClose').onclick = () => $('calDlg').close();
+
 $('pDate').addEventListener('change', () => { if (current && !$('results').hidden) render(current.sel, current.day); });
 $('pTime').addEventListener('change', () => { if (current && !$('results').hidden) render(current.sel, current.day); });
 
@@ -2121,6 +2214,10 @@ function render(i, day = null) {
   if (!current.saved && current.res.L && (p.duration_hours || p.distance_km) && Math.abs(r.len - current.res.L) / current.res.L > 0.35) w.push('לא מצאתי מסלול באורך המבוקש בדיוק. זה הקרוב ביותר.');
   w.push('המסלול מבוסס על נתוני OSM. מצב השטח בפועל (שיטפונות, חסימות, סגירת שמורות) יכול להשתנות: בדקו לפני יציאה.');
   $('warns').innerHTML = w.map(t => `<div class="warn">${t}</div>`).join('');
+  if (w.some(t => /שטח(י)? אש/.test(t))) {
+    const b = document.createElement('button'); b.className = 'ghost'; b.style.alignSelf = 'flex-start'; b.textContent = 'לוח שטחי אש: בחירת תאריך פתוח'; b.onclick = openCalendar;
+    $('warns').append(b);
+  }
   renderWeather(r, { ...p, date: $('pDate').value || p.date }, D);
   $('dayPlan').innerHTML = '';
   if (D) {

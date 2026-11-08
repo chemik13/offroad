@@ -518,18 +518,27 @@ function hebDay(d) {
   const f = new Intl.DateTimeFormat('en-u-ca-hebrew', { month: 'long', day: 'numeric', timeZone: 'Asia/Jerusalem' }).formatToParts(d);
   return { m: f.find(x => x.type === 'month').value, day: +f.find(x => x.type === 'day').value };
 }
-const HOLIDAYS = { Tishri: [[1, 2], [10, 10], [15, 22]], Nisan: [[15, 21]], Sivan: [[6, 6]] };
+// Days firing zones usually open: Fri/Sat, Jewish holidays incl. chol hamoed, Independence Day.
+const HOLIDAY_NAMES = {
+  Tishri: { 1: 'ראש השנה', 2: 'ראש השנה', 9: 'ערב יום כיפור', 10: 'יום כיפור', 14: 'ערב סוכות', 15: 'סוכות', 16: 'חול המועד סוכות', 17: 'חול המועד סוכות', 18: 'חול המועד סוכות', 19: 'חול המועד סוכות', 20: 'חול המועד סוכות', 21: 'הושענא רבה', 22: 'שמחת תורה' },
+  Nisan: { 14: 'ערב פסח', 15: 'פסח', 16: 'חול המועד פסח', 17: 'חול המועד פסח', 18: 'חול המועד פסח', 19: 'חול המועד פסח', 20: 'חול המועד פסח', 21: 'שביעי של פסח' },
+  Sivan: { 5: 'ערב שבועות', 6: 'שבועות' },
+};
 function dayInfo(iso) {
   const d = new Date(iso + 'T12:00:00+02:00');
   const wd = d.getUTCDay();
-  if (wd === 5) return { open: true, why: 'יום שישי' };
-  if (wd === 6) return { open: true, why: 'שבת' };
+  let holiday = null;
   try {
     const h = hebDay(d);
-    for (const [a, b] of HOLIDAYS[h.m] || []) if (h.day >= a && h.day <= b) return { open: true, why: 'חג / חול המועד' };
-    if (h.m === 'Tishri' && (h.day === 9 || h.day === 14)) return { open: true, why: 'ערב חג' };
-    if (h.m === 'Nisan' && h.day === 14) return { open: true, why: 'ערב חג' };
+    holiday = HOLIDAY_NAMES[h.m]?.[h.day] || null;
+    // Independence Day: 5 Iyar, moved to Thursday if it falls on Fri/Sat, to Tuesday if on Monday
+    if (/^Iyar/.test(h.m)) {
+      const ind = { 5: [1, 2, 3, 4], 4: [4], 3: [4], 6: [2] }[h.day];
+      if (ind && ind.includes(wd)) holiday = 'יום העצמאות';
+    }
   } catch {}
+  const wk = wd === 5 ? 'יום שישי' : wd === 6 ? 'שבת' : null;
+  if (holiday || wk) return { open: true, why: [holiday, wk].filter(Boolean).join(' · '), holiday };
   return { open: false, why: 'יום חול' };
 }
 function resolveMilitary(p) {
