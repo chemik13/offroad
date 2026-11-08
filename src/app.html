@@ -598,18 +598,22 @@ function overpassQuery(bb) {
 // on failure it retries with the others, backing off (1s, 3s, 7s), as the servers ask.
 let mirrorOrder = OVERPASS.slice();
 function overpassOnce(url, q, signal) {
-  return fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'content-type': 'application/x-www-form-urlencoded' }, signal })
+  const relay = url === 'relay';
+  return fetch(relay ? API + '/overpass' : url, relay
+      ? { method: 'POST', body: JSON.stringify({ q }), headers: { 'content-type': 'application/json', 'x-group-code': store.get('groupCode') || '' }, signal }
+      : { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'content-type': 'application/x-www-form-urlencoded' }, signal })
     .then(async r => { if (!r.ok) throw new Error('Overpass ' + r.status); const j = await r.json(); if (j.remark && /runtime error|timed out|out of memory/i.test(j.remark)) throw new Error(j.remark); return j.elements; });
 }
 async function fetchOverpass(bbox) {
   const q = overpassQuery(bbox.join(','));
   let netErr = 0;
   for (let attempt = 0; attempt < 4; attempt++) {
-    const pair = [mirrorOrder[(attempt * 2) % mirrorOrder.length], mirrorOrder[(attempt * 2 + 1) % mirrorOrder.length]];
+    const order = hasGroup() ? ['relay', ...mirrorOrder] : mirrorOrder;
+    const pair = [order[(attempt * 2) % order.length], order[(attempt * 2 + 1) % order.length]];
     const ctls = pair.map(() => new AbortController());
     const timer = setTimeout(() => ctls.forEach(c => c.abort()), 90000);
     try {
-      const els = await Promise.any(pair.map((u, k) => overpassOnce(u, q, ctls[k].signal).then(v => { mirrorOrder = [u, ...mirrorOrder.filter(x => x !== u)]; return v; })));
+      const els = await Promise.any(pair.map((u, k) => overpassOnce(u, q, ctls[k].signal).then(v => { if (u !== 'relay') mirrorOrder = [u, ...mirrorOrder.filter(x => x !== u)]; return v; })));
       ctls.forEach(c => c.abort()); return els;
     } catch (agg) {
       for (const e of agg.errors || []) if (e instanceof TypeError) netErr++;
@@ -641,8 +645,10 @@ async function ensureTiles(keys, { bg = false, say = () => {} } = {}) {
     const tick = bg ? null : setInterval(tickTxt, 1000); if (!bg) tickTxt();
     // group areas in 2x2 blocks: few requests, each still light
     const groups = {};
-    for (const k of need) { const [, i, j] = k.split('_').map(Number); (groups[`${i >> 1}_${j >> 1}`] ||= []).push(k); }
+    const big = need.length > 8; // long trips: 1x2 blocks so each request finishes quickly
+    for (const k of need) { const [, i, j] = k.split('_').map(Number); (groups[big ? `${i}_${j >> 1}` : `${i >> 1}_${j >> 1}`] ||= []).push(k); }
     const queue = Object.values(groups);
+    const failed = [];
     const results = {};
     const oneGroup = async ks => {
       const ext = ks.map(tileBBox).reduce((x, y) => [Math.min(x[0], y[0]), Math.min(x[1], y[1]), Math.max(x[2], y[2]), Math.max(x[3], y[3])]);
@@ -650,9 +656,18 @@ async function ensureTiles(keys, { bg = false, say = () => {} } = {}) {
       for (const k of ks) { const t = { ...split[k], at, key: k }; memTiles.set(k, t); idb.set(k, t); pushTile(k, t); done++; }
       if (!bg) tickTxt();
     };
-    const worker = async () => { while (queue.length) { const ks = queue.shift(); const pr = oneGroup(ks); for (const k of ks) results[k] = pr.then(() => memTiles.get(k)); try { await pr; } catch {} } };
-    const all = Promise.all([worker(), worker()]).finally(() => tick && clearInterval(tick));
-    for (const k of need) inflight.set(k, all.then(() => results[k]).finally(() => inflight.delete(k)));
+    const worker = async () => { while (queue.length) { const ks = queue.shift(); try { await oneGroup(ks); } catch { failed.push(ks); } } };
+    const nW = hasGroup() ? 3 : 2;
+    const all = (async () => {
+      await Promise.all(Array.from({ length: nW }, worker));
+      if (failed.length) { // second round, only for what failed, after a pause
+        if (!bg) say(`חלק מהאזורים לא ירדו (${failed.flat().length}). מנסה שוב בעוד רגע…`);
+        await new Promise(r => setTimeout(r, 4000));
+        queue.push(...failed.splice(0));
+        await Promise.all(Array.from({ length: nW }, worker));
+      }
+    })().finally(() => tick && clearInterval(tick));
+    for (const k of need) inflight.set(k, all.then(() => memTiles.get(k)).finally(() => inflight.delete(k)));
     stat.osm += need.length;
   }
   // wait for anything downloading (ours or a background one)
@@ -668,7 +683,8 @@ async function loadGraph(bboxOrKeys) {
   const keys = typeof bboxOrKeys[0] === 'string' ? bboxOrKeys : tilesFor(bboxOrKeys);
   if (gcache && keys.every(k => gcache.keys.has(k))) return gcache.G;
   const { tiles, stat } = await ensureTiles(keys, { say: status });
-  if (keys.some(k => !tiles[k])) throw new Error('חלק מנתוני השבילים לא ירדו. נסו שוב.');
+  const miss = keys.filter(k => !tiles[k]).length;
+  if (miss) throw new Error(`שרתי OpenStreetMap עמוסים: ירדו ${keys.length - miss} מתוך ${keys.length} אזורים. מה שירד נשמר. לחצו שוב "בנה מסלול" בעוד דקה, וזה ימשיך מאיפה שנעצר.`);
   status('מעבד את רשת השבילים…');
   await new Promise(r => setTimeout(r, 0));
   const G = buildGraph(tilesToElements(keys.map(k => tiles[k])));

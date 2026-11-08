@@ -58,6 +58,20 @@ Deno.serve(async (req) => {
       return json(j);
     }
 
+    // ---- Overpass relay: a second network path to OSM (own IP, own server slots); bytes pass through unparsed ----
+    if (path === "/overpass" && req.method === "POST") {
+      const { q } = await req.json();
+      if (typeof q !== "string" || q.length > 4000 || !q.startsWith("[out:json]")) return json({ error: "bad query" }, 400);
+      const mirrors = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
+      for (const m of mirrors) {
+        try {
+          const r = await fetch(m, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "content-type": "application/x-www-form-urlencoded", "user-agent": "offroad-planner/1.0 (group trip planner)" }, signal: AbortSignal.timeout(100_000) });
+          if (r.ok) return new Response(r.body, { headers: { ...CORS, "content-type": "application/json" } });
+        } catch { /* next mirror */ }
+      }
+      return json({ error: "overpass busy" }, 503);
+    }
+
     // ---- import proxy (fetch GPX/KML from a link, avoiding CORS) ----
     if (path === "/import" && req.method === "POST") {
       const { url: target } = await req.json();
