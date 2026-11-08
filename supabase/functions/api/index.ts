@@ -20,6 +20,20 @@ const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SE
 const LIST_FIELDS = "id,created_at,name,created_by,source,region,tags,notes,driven,stats,offroad_url";
 const EDITABLE = ["name", "tags", "notes", "driven", "region", "offroad_url"];
 
+// Daily caps protect the owner's API key if the group code leaks. Limits live in app_config (cap_*).
+const capCache: Record<string, { v: number; t: number }> = {};
+async function cap(kind: string, dflt: number) {
+  const c = capCache[kind];
+  if (c && Date.now() - c.t < 300_000) return c.v;
+  const { data } = await db.from("app_config").select("v").eq("k", "cap_" + kind).maybeSingle();
+  const v = Number(data?.v) || dflt; capCache[kind] = { v, t: Date.now() }; return v;
+}
+async function underQuota(kind: string, dflt: number) {
+  const { data, error } = await db.rpc("use_quota", { k: kind, cap: await cap(kind, dflt) });
+  return error ? true : data === true; // never block on a counting failure
+}
+const overQuota = (what: string) => json({ error: `הגעתם למכסה היומית של ${what}. היא מתאפסת בחצות.`, quota: true }, 429);
+
 function privateHost(h: string) {
   return /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.|\[?::1\]?|.*\.internal$|.*\.local$)/i.test(h);
 }
@@ -41,6 +55,7 @@ Deno.serve(async (req) => {
     if (path === "/claude" && req.method === "POST") {
       const key = Deno.env.get("ANTHROPIC_API_KEY");
       if (!key) return json({ error: "מפתח Claude לא הוגדר בשרת" }, 503);
+      if (!(await underQuota("claude", 150))) return overQuota("פענוח חכם");
       const b = await req.json();
       const tools = (Array.isArray(b.tools) ? b.tools : []).filter((t: any) => t && (t.input_schema || (t.type && /^web_search_\d+$/.test(t.type))))
         .map((t: any) => t.type ? { type: t.type, name: "web_search", max_uses: Math.min(4, t.max_uses || 3) } : t); // note: user_location country IL is rejected by the API
@@ -60,6 +75,7 @@ Deno.serve(async (req) => {
 
     // ---- Overpass relay: a second network path to OSM (own IP, own server slots); bytes pass through unparsed ----
     if (path === "/overpass" && req.method === "POST") {
+      if (!(await underQuota("overpass", 400))) return overQuota("הורדות שבילים דרך השרת");
       const { q } = await req.json();
       if (typeof q !== "string" || q.length > 4000 || !q.startsWith("[out:json]")) return json({ error: "bad query" }, 400);
       const mirrors = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
@@ -72,8 +88,17 @@ Deno.serve(async (req) => {
       return json({ error: "overpass busy" }, 503);
     }
 
+    // ---- today's usage vs caps (shown in settings) ----
+    if (path === "/usage" && req.method === "GET") {
+      const day = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" });
+      const { data } = await db.from("usage_daily").select("kind,n").eq("day", day);
+      const used = Object.fromEntries((data || []).map((r: any) => [r.kind, r.n]));
+      return json({ claude: { used: used.claude || 0, cap: await cap("claude", 150) }, overpass: { used: used.overpass || 0, cap: await cap("overpass", 400) } });
+    }
+
     // ---- import proxy (fetch GPX/KML from a link, avoiding CORS) ----
     if (path === "/import" && req.method === "POST") {
+      if (!(await underQuota("import", 100))) return overQuota("ייבוא מסלולים");
       const { url: target } = await req.json();
       let u: URL;
       try { u = new URL(target); } catch { return json({ error: "לינק לא תקין" }, 400); }

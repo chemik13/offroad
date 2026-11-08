@@ -192,12 +192,39 @@ function matchPoi(k, t) {
   return false;
 }
 
+// Field reports from the group: closed / missing block nearby segments, harder / easier shift difficulty.
+const REPORT_RADIUS = 120; // m from the reported point to a segment
+function applyReports(G, reports) {
+  if (!G.eD0) G.eD0 = G.eD.slice();
+  G.eD.set(G.eD0); G.eClosed = new Uint8Array(G.E); G.eRep = new Uint8Array(G.E);
+  if (!reports || !reports.length) return 0;
+  let touched = 0;
+  const latR = REPORT_RADIUS / 111000, lonR = REPORT_RADIUS / 96000;
+  for (const r of reports) {
+    for (let e = 0; e < G.E; e++) {
+      const a1 = G.lat[G.eA[e]], o1 = G.lon[G.eA[e]], a2 = G.lat[G.eB[e]], o2 = G.lon[G.eB[e]];
+      if (Math.min(a1, a2) - latR > r.lat || Math.max(a1, a2) + latR < r.lat || Math.min(o1, o2) - lonR > r.lon || Math.max(o1, o2) + lonR < r.lon) continue;
+      // distance from the point to the segment (local metric projection)
+      const ax = (o1 - r.lon) * 96000, ay = (a1 - r.lat) * 111000, bx = (o2 - r.lon) * 96000, by = (a2 - r.lat) * 111000;
+      const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+      const t = L2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / L2)) : 0;
+      if (Math.hypot(ax + t * dx, ay + t * dy) > REPORT_RADIUS) continue;
+      touched++; G.eRep[e] = 1;
+      if (r.kind === 'closed' || r.kind === 'missing') G.eClosed[e] = 1;
+      else if (r.kind === 'harder' && !G.eAsph[e]) G.eD[e] = Math.min(5, Math.max(G.eD[e], G.eD0[e] + 1));
+      else if (r.kind === 'easier' && !G.eAsph[e]) G.eD[e] = Math.max(1, Math.min(G.eD[e], G.eD0[e] - 1));
+    }
+  }
+  return touched;
+}
+
 function factors(G, p) {
   const f = new Float64Array(G.E);
   const maxD = VEHICLE_MAX[p.vehicle] || 4;
   const tD = TARGET_D[p.difficulty] || 3;
   for (let e = 0; e < G.E; e++) {
     const d = G.eD[e];
+    if (G.eClosed && G.eClosed[e]) { f[e] = Infinity; continue; }
     if (G.eAA[e] && !p.allow_area_a) { f[e] = Infinity; continue; }
     // paved public roads stay open through firing zones and military land (OSM base polygons often cover public roads)
     if (G.eMil[e] === 2 && !G.eAsph[e]) { f[e] = Infinity; continue; }
@@ -837,6 +864,39 @@ function planMultiVia(G, p, nodes, onProgress = () => {}) {
   return { results: [r], L: total, dayL, note: notes.join(' ') || null };
 }
 
+// ---------- elevation ----------
+// sample a route every `step` m (max n points) -> [{lat, lon, d}] with cumulative distance d
+function sampleRoute(coords, maxN = 300) {
+  let total = 0; for (let i = 1; i < coords.length; i++) total += hav(coords[i - 1][0], coords[i - 1][1], coords[i][0], coords[i][1]);
+  const step = Math.max(80, total / (maxN - 1));
+  const out = [{ lat: coords[0][0], lon: coords[0][1], d: 0 }];
+  let acc = 0, next = step;
+  for (let i = 1; i < coords.length; i++) {
+    const [a1, o1] = coords[i - 1], [a2, o2] = coords[i]; const L = hav(a1, o1, a2, o2);
+    while (acc + L >= next) { const t = (next - acc) / L; out.push({ lat: a1 + (a2 - a1) * t, lon: o1 + (o2 - o1) * t, d: next }); next += step; }
+    acc += L;
+  }
+  const [la, lo] = coords[coords.length - 1]; if (total - out[out.length - 1].d > step / 3) out.push({ lat: la, lon: lo, d: total });
+  return out;
+}
+// ascent / descent (with 3 m hysteresis against DEM noise) and steep stretches (grade over >= 150 m)
+function analyzeElevation(samples, elev, steepPct = 15) {
+  let up = 0, down = 0, ref = elev[0];
+  for (const h of elev) { if (h - ref > 3) { up += h - ref; ref = h; } else if (ref - h > 3) { down += ref - h; ref = h; } }
+  const steep = [];
+  for (let i = 0; i < samples.length; i++) {
+    let j = i; while (j + 1 < samples.length && samples[j].d - samples[i].d < 150) j++;
+    if (j === i) break;
+    const run = samples[j].d - samples[i].d, g = (elev[j] - elev[i]) / run * 100;
+    if (Math.abs(g) >= steepPct) {
+      const last = steep[steep.length - 1];
+      if (last && samples[i].d <= last.to + 50 && Math.sign(last.grade) === Math.sign(g)) { last.to = samples[j].d; if (Math.abs(g) > Math.abs(last.grade)) { last.grade = g; last.lat = samples[i].lat; last.lon = samples[i].lon; } }
+      else steep.push({ from: samples[i].d, to: samples[j].d, grade: g, lat: samples[i].lat, lon: samples[i].lon });
+    }
+  }
+  return { up: Math.round(up), down: Math.round(down), min: Math.round(Math.min(...elev)), max: Math.round(Math.max(...elev)), steep };
+}
+
 function targetLengthM(p) {
   if (p.distance_km) return p.distance_km * 1000;
   const h = p.duration_hours || 3;
@@ -929,5 +989,5 @@ function parseLocal(text) {
   return p;
 }
 
-if (typeof module !== 'undefined') module.exports = { dijkstra, multiMilitary, corridorTiles, planMultiVia, pathEdges, TILE, tileKey, tilesFor, tileBBox, splitToTiles, tilesToElements, planMulti, addDays, campAuth, KNOWN_CAMPS, AREA_A, inAreaA, lookupPlace, dayInfo, resolveMilitary, nextSaturday, buildGraph, plan, nearestNode, factors, toGPX, parseLocal, targetLengthM, wayInfo, POI_TYPES };
+if (typeof module !== 'undefined') module.exports = { sampleRoute, analyzeElevation, applyReports, dijkstra, multiMilitary, corridorTiles, planMultiVia, pathEdges, TILE, tileKey, tilesFor, tileBBox, splitToTiles, tilesToElements, planMulti, addDays, campAuth, KNOWN_CAMPS, AREA_A, inAreaA, lookupPlace, dayInfo, resolveMilitary, nextSaturday, buildGraph, plan, nearestNode, factors, toGPX, parseLocal, targetLengthM, wayInfo, POI_TYPES };
 // ===== END ENGINE =====

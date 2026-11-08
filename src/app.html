@@ -193,6 +193,13 @@ ul.pois li{margin-bottom:8px}
 .bub{max-width:85%;padding:7px 10px;border-radius:12px;font-size:14px;line-height:1.45}
 .bub.me{align-self:flex-start;background:var(--accent-soft)}
 .bub.ai{align-self:flex-end;background:var(--stone)}
+.repic{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;font:700 12px var(--body);color:#fff;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.rep-closed,.rep-missing{background:#c62f2f}.rep-harder{background:#d2691e}.rep-easier{background:#2e9b4f}.rep-note{background:#646b66}
+.repbtns{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.repbtns button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 8px;font:500 12px var(--body);cursor:pointer;color:var(--ink)}
+.repnote{width:100%;box-sizing:border-box;margin-top:6px;font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px}
+.elevax{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.steepic{background:#fff;border:1.5px solid #d23a2a;color:#d23a2a;border-radius:4px;font:700 10px var(--body);padding:0 4px;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.25)}
 .daychips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-top:8px}
 .daychips button{flex:none;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:7px 12px;font:500 13px var(--body);cursor:pointer;font-variant-numeric:tabular-nums}
 .daychips button[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
@@ -301,6 +308,7 @@ ul.pois li{margin-bottom:8px}
       <div id="dayPlan"></div>
       <div id="stopsBox"></div>
       <div class="refine" id="refineRow"><input type="text" id="refineIn" placeholder="שיפור במילים: &quot;תסיים באילת&quot;, &quot;תוסיף עצירה בעין עבדת&quot;, &quot;פחות כביש&quot;"><button class="ghost" id="refineBtn">עדכון</button></div>
+      <div id="elev"></div>
       <div id="wx"></div>
       <div id="poiList" style="margin-top:6px"></div>
       <div class="saverow" style="margin-top:10px" id="saveRow">
@@ -419,12 +427,13 @@ function setEnd(ll, label) { pickedEnd = ll; if (endMarker) endMarker.remove(); 
 map.on('click', ev => {
   const ll = [ev.latlng.lat, ev.latlng.lng];
   const div = document.createElement('div');
-  div.innerHTML = '<div class="popbtns"><button data-a="s">התחלה מכאן</button><button data-a="e">יעד כאן</button><button data-a="v">תחנה בדרך</button><button data-a="w">מזג אוויר כאן</button></div><div class="wxpop"></div>';
+  div.innerHTML = '<div class="popbtns"><button data-a="s">התחלה מכאן</button><button data-a="e">יעד כאן</button><button data-a="v">תחנה בדרך</button><button data-a="w">מזג אוויר כאן</button><button data-a="r">דיווח מהשטח</button></div><div class="wxpop"></div>';
   const pop = L.popup().setLatLng(ev.latlng).setContent(div).openOn(map);
   div.onclick = e => {
     const a = e.target.dataset.a; if (!a) return;
     if (a === 'w') { pointForecast(ll, div.querySelector('.wxpop')).then(() => pop.update()); return; }
     if (a === 'v') { map.closePopup(pop); addStopAt(ll); return; }
+    if (a === 'r') { reportForm(ll, pop); return; }
     if (a === 's') setStart(ll, '📍 נקודה על המפה'); else { setEnd(ll, '📍 נקודה על המפה'); $('pLoop').value = '0'; }
     map.closePopup(pop);
   };
@@ -470,7 +479,9 @@ async function checkConn() {
     if (!h.group) { $('connState').textContent = 'השרת עוד לא הוגדר (חסר קוד קבוצה בשרת).'; return; }
     if (!hasGroup()) { $('connState').textContent = 'מחובר לשרת. הכניסו קוד קבוצה.'; return; }
     await api('/routes');
-    $('connState').textContent = 'מחובר לספרייה המשותפת' + (h.claude ? ' · פענוח חכם פעיל' : ' · פענוח חכם לא הוגדר בשרת');
+    let use = '';
+    try { const u = await api('/usage'); use = ` · היום: ${u.claude.used}/${u.claude.cap} פענוחים`; } catch {}
+    $('connState').textContent = 'מחובר לספרייה המשותפת' + (h.claude ? ' · פענוח חכם פעיל' : ' · פענוח חכם לא הוגדר בשרת') + use;
   } catch (e) { $('connState').textContent = e.status === 401 ? 'קוד הקבוצה לא נכון.' : 'אין חיבור לשרת.'; }
 }
 $('settingsBtn').onclick = () => { $('apiKey').value = store.get('apiKey') || ''; $('groupCode').value = store.get('groupCode') || ''; $('nick').value = store.get('nick') || ''; $('myVeh').value = myVehicle(); $('settings').showModal(); checkConn(); };
@@ -783,6 +794,7 @@ async function loadGraph(bboxOrKeys) {
   await new Promise(r => setTimeout(r, 0));
   const G = buildGraph(tilesToElements(keys.map(k => tiles[k])));
   G.cacheStat = stat;
+  await loadReports(G);
   gcache = { keys: new Set(keys), G };
   return G;
 }
@@ -949,6 +961,91 @@ const talk = (() => {
   return { start, stop };
 })();
 
+// ---------- elevation profile (Open-Meteo elevation API, free, no key) ----------
+const elevCache = new Map();
+async function elevations(pts) {
+  const out = new Array(pts.length); const need = [];
+  pts.forEach((q, i) => { const k = q.lat.toFixed(4) + ',' + q.lon.toFixed(4); if (elevCache.has(k)) out[i] = elevCache.get(k); else need.push(i); });
+  for (let s = 0; s < need.length; s += 100) {
+    const chunk = need.slice(s, s + 100);
+    const u = 'https://api.open-meteo.com/v1/elevation?latitude=' + chunk.map(i => pts[i].lat.toFixed(5)).join(',') + '&longitude=' + chunk.map(i => pts[i].lon.toFixed(5)).join(',');
+    const j = await (await fetch(u)).json();
+    if (!Array.isArray(j.elevation)) throw new Error('elevation');
+    chunk.forEach((i, k) => { out[i] = j.elevation[k]; elevCache.set(pts[i].lat.toFixed(4) + ',' + pts[i].lon.toFixed(4), j.elevation[k]); });
+  }
+  return out;
+}
+let elevLayer = null;
+async function renderElevation(r) {
+  const box = $('elev'); const tok = (renderElevation.tok = (renderElevation.tok || 0) + 1);
+  box.innerHTML = '<div class="wx"><h3>גובה ועליות<small>טוען…</small></h3></div>';
+  if (elevLayer) { elevLayer.remove(); elevLayer = null; }
+  let samples, elev;
+  try { samples = sampleRoute(r.coords, 300); elev = await elevations(samples); } catch { if (tok === renderElevation.tok) box.innerHTML = ''; return; }
+  if (tok !== renderElevation.tok) return;
+  const A = analyzeElevation(samples, elev, 15);
+  // chart
+  const W = 360, H = 96, pad = 4, km = samples[samples.length - 1].d / 1000;
+  const lo = A.min - 10, hi = A.max + 10, x = d => W - pad - d / 1000 / km * (W - 2 * pad) /* RTL: start on the right */, y = h => H - pad - (h - lo) / (hi - lo || 1) * (H - 2 * pad - 12);
+  const line = samples.map((s, i) => `${x(s.d).toFixed(1)},${y(elev[i]).toFixed(1)}`).join(' ');
+  const steepRects = A.steep.map(s => `<rect x="${x(s.to).toFixed(1)}" y="0" width="${Math.max(2, x(s.from) - x(s.to)).toFixed(1)}" height="${H}" fill="#d23a2a" opacity=".16"/>`).join('');
+  const svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" role="img" aria-label="פרופיל גובה">
+    ${steepRects}<polygon points="${x(0)},${H} ${line} ${x(samples[samples.length - 1].d)},${H}" fill="#1f6fd6" opacity=".14"/>
+    <polyline points="${line}" fill="none" stroke="#1f6fd6" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
+  const worst = A.steep.slice().sort((a, b) => Math.abs(b.grade) - Math.abs(a.grade))[0];
+  box.innerHTML = `<div class="wx"><h3>גובה ועליות<small>${A.min}–${A.max} מ׳</small></h3>
+    <div style="padding:8px 10px 2px">${svg}<div class="elevax"><span>0</span><span>${km.toFixed(0)} ק"מ</span></div></div>
+    <div class="wxrow" style="grid-template-columns:1fr 1fr 1fr;text-align:center"><span><b>↑ ${A.up}</b><br><small>מ׳ עלייה מצטברת</small></span><span><b>↓ ${A.down}</b><br><small>מ׳ ירידה מצטברת</small></span><span><b>${A.steep.length}</b><br><small>קטעים תלולים (15%+)</small></span></div></div>`;
+  if (A.steep.length) {
+    elevLayer = L.layerGroup().addTo(map);
+    for (const s of A.steep) L.marker([s.lat, s.lon], { icon: L.divIcon({ className: '', html: `<div class="steepic">${s.grade > 0 ? '⬈' : '⬊'} ${Math.abs(Math.round(s.grade))}%</div>`, iconSize: null, iconAnchor: [0, 0] }) }).addTo(elevLayer).bindTooltip(`${s.grade > 0 ? 'עלייה' : 'ירידה'} תלולה של ${Math.abs(Math.round(s.grade))}% לאורך כ-${Math.round(s.to - s.from)} מ׳, בק"מ ${(s.from / 1000).toFixed(1)}`);
+    if (worst && Math.abs(worst.grade) >= 25) $('warns').insertAdjacentHTML('afterbegin', `<div class="warn">${worst.grade > 0 ? 'עלייה' : 'ירידה'} תלולה מאוד (${Math.abs(Math.round(worst.grade))}%) בק"מ ${(worst.from / 1000).toFixed(1)}. בהילוך כוח, ועדיף שמישהו ייצא לכוון. ייתכן שזו טעות במודל הגובה בקצה מצוק: הסתכלו בשטח.</div>`);
+  }
+}
+
+// ---------- field reports ----------
+const REPORT_KINDS = { closed: 'סגור / חסום', harder: 'קשה מהצפוי', easier: 'קל מהצפוי', missing: 'הדרך לא קיימת', note: 'הערה' };
+let reports = [];
+async function loadReports(G) {
+  if (!hasGroup() || !G.N) { applyReports(G, []); return; }
+  let s = 90, n = -90, w = 180, e = -180;
+  for (let i = 0; i < G.N; i += 7) { const a = G.lat[i], o = G.lon[i]; if (a < s) s = a; if (a > n) n = a; if (o < w) w = o; if (o > e) e = o; }
+  try { reports = (await api(`/reports?s=${s}&w=${w}&n=${n}&e=${e}`)).reports || []; } catch { reports = []; }
+  G.repCount = applyReports(G, reports.filter(r => r.kind !== 'note'));
+}
+const repIcon = k => L.divIcon({ className: '', html: `<div class="repic rep-${k}">${{ closed: '⛔', harder: '▲', easier: '▼', missing: '✕', note: 'i' }[k] || '!'}</div>`, iconSize: [22, 22], iconAnchor: [11, 11] });
+function drawReports(bounds) {
+  for (const r of reports) {
+    if (bounds && !bounds.contains([r.lat, r.lon])) continue;
+    const d = document.createElement('div');
+    d.innerHTML = `<div class="poptitle"></div><div class="popsub"></div>`;
+    d.querySelector('.poptitle').textContent = REPORT_KINDS[r.kind] || 'דיווח';
+    d.querySelector('.popsub').textContent = [r.note, r.created_by, new Date(r.created_at).toLocaleDateString('he-IL')].filter(Boolean).join(' · ');
+    L.marker([r.lat, r.lon], { icon: repIcon(r.kind), zIndexOffset: 900 }).addTo(markLayer).bindPopup(d);
+  }
+}
+function reportForm(ll, popup) {
+  const d = document.createElement('div');
+  d.innerHTML = `<div class="poptitle">דיווח מהשטח</div><div class="popsub">יחול על הקטע הקרוב (עד 120 מ׳) בכל התכנונים של החבורה</div><div class="repbtns"></div><input class="repnote" placeholder="פרטים (לא חובה)"><div class="popsub repmsg"></div>`;
+  for (const [k, t] of Object.entries(REPORT_KINDS)) {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = t;
+    b.onclick = async () => {
+      if (!hasGroup()) { d.querySelector('.repmsg').textContent = 'דיווחים נשמרים בספרייה המשותפת: הכניסו קוד קבוצה ב-⚙.'; return; }
+      try {
+        const j = await api('/reports', { method: 'POST', body: JSON.stringify({ lat: ll[0], lon: ll[1], kind: k, note: d.querySelector('.repnote').value.trim() || null, created_by: store.get('nick') || null, route_id: current?.saved?.id || null }) });
+        reports.push(j.report);
+        const G = current?.G || gcache?.G; let n = 0;
+        if (G) { n = applyReports(G, reports.filter(r => r.kind !== 'note')); }
+        map.closePopup(popup);
+        L.marker(ll, { icon: repIcon(k) }).addTo(markLayer);
+        status(k === 'note' ? 'ההערה נשמרה.' : `תודה! הדיווח נשמר${n ? ' ויחול על הקטע הזה' : ''} בתכנונים הבאים של כל החבורה.` + (current && !current.saved && (k === 'closed' || k === 'missing') ? ' לחצו "בנה שוב" כדי לעקוף אותו עכשיו.' : ''));
+      } catch (e) { d.querySelector('.repmsg').textContent = 'השמירה נכשלה: ' + e.message; }
+    };
+    d.querySelector('.repbtns').append(b);
+  }
+  popup.setContent(d); popup.update();
+}
+
 // ---------- background prefetch ----------
 let busy = false, bgNote = '';
 function bgStatus(t) { bgNote = t; if (!busy && $('results').hidden) status(t); }
@@ -1001,7 +1098,7 @@ async function run(fromPrompt, preset = null) {
       if (!p && (hasGroup() || key)) {
         status('מבין את הבקשה (ואם צריך, מחפש ברשת)…');
         try { p = await parseSmart(text); }
-        catch (e) { smartErr = e.status === 401 ? 'קוד הקבוצה או המפתח לא נכונים.' : e.status === 503 ? 'מפתח Claude לא הוגדר בשרת.' : 'הפענוח החכם נכשל' + (e.detail ? ` (${e.detail})` : e.status ? ` (${e.status})` : '') + '.'; }
+        catch (e) { smartErr = e.status === 429 ? e.message : e.status === 401 ? 'קוד הקבוצה או המפתח לא נכונים.' : e.status === 503 ? 'מפתח Claude לא הוגדר בשרת.' : 'הפענוח החכם נכשל' + (e.detail ? ` (${e.detail})` : e.status ? ` (${e.status})` : '') + '.'; }
       }
       if (!p) { p = parseLocal(text); p._basic = true; p._smartErr = smartErr; }
       if (!p.vehicle) p.vehicle = myVehicle(); // the user's saved car unless the prompt names another
@@ -1487,6 +1584,7 @@ function render(i, day = null) {
     const pp = placePopup(c, c.name, campSub(c));
     L.marker([c.lat, c.lon], { icon: tentIcon(!!c.auth), zIndexOffset: c.auth ? 500 : 0 }).addTo(markLayer).bindPopup(pp.div, { maxWidth: 320, minWidth: 220 }).on('popupopen', pp.load);
   }
+  drawReports(L.latLngBounds(r.coords).pad(0.15));
   r.pois.forEach(pt => {
     const ic = L.divIcon({ className: '', html: `<div class="poi-ic"></div>`, iconSize: null, iconAnchor: [0, 0] });
     const m = L.marker([pt.lat, pt.lon], { icon: ic }).addTo(markLayer);
@@ -1519,6 +1617,7 @@ function render(i, day = null) {
   if (r.unrated) $('legend').innerHTML = `<span><i style="--c:${DCOL('x')}"></i>מסלול מיובא: אין דירוג קושי לקטעים</span>`;
   const w = [];
   if (!current.saved && current.res.note && /^⚠/.test(current.res.note)) w.push(current.res.note);
+  if (current.G?.eRep && r.edges) { const hit = r.edges.filter(e => current.G.eRep[e]).length; if (hit) w.push(`המסלול עובר ליד דיווחים מהשטח של החבורה (קושי שונה מהמפה). לחצו על הסימנים במפה לפרטים.`); }
   if (r.unrated) w.push('המסלול יובא מקובץ. לא בדקתי לו קושי ושטחי אש, רק שטחי A. סעו בו בזהירות כמו במסלול לא מוכר.');
   if (!r.unrated && r.unk / r.len > 0.3) w.push(`ל-${Math.round(r.unk / r.len * 100)}% מהדרך אין דירוג קושי ב-OSM. ההערכה שם שמרנית (בינוני).`);
   const mr = D ? { avoid: multiMilitary(p), info: multiMilitary(p) ? null : { open: true, why: 'כל ימי הטיול בסופ"ש / חג' } } : resolveMilitary(p);
@@ -1544,6 +1643,7 @@ function render(i, day = null) {
     $('warns').append(row);
   }
   renderWeather(r, { ...p, date: $('pDate').value || p.date }, D);
+  renderElevation(dv ? { ...r, coords: r.coords.slice(dv.from, dv.to + 1) } : r);
   $('dayPlan').innerHTML = '';
   if (D) {
     const box = document.createElement('div'); box.className = 'dayplan';
