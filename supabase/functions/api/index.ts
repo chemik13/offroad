@@ -37,39 +37,18 @@ Deno.serve(async (req) => {
   if (!code || req.headers.get("x-group-code") !== code) return json({ error: "קוד קבוצה שגוי" }, 401);
 
   try {
-    // ---- Claude prompt parsing ----
-    if (path === "/parse" && req.method === "POST") {
-      const key = Deno.env.get("ANTHROPIC_API_KEY");
-      if (!key) return json({ error: "מפתח Claude לא הוגדר בשרת" }, 503);
-      const { prompt, system, tool } = await req.json();
-      if (!prompt || String(prompt).length > 2000 || !tool?.name) return json({ error: "בקשה לא תקינה" }, 400);
-      const r = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({
-          model: MODEL, max_tokens: 900, system: String(system || "").slice(0, 4000),
-          tools: [tool], tool_choice: { type: "tool", name: tool.name },
-          messages: [{ role: "user", content: String(prompt) }],
-        }),
-      });
-      const j = await r.json();
-      if (!r.ok) return json({ error: "שגיאה מ-Claude", detail: j?.error?.message }, 502);
-      const tu = (j.content || []).find((c: { type: string }) => c.type === "tool_use");
-      return json({ input: tu?.input ?? null });
-    }
-
     // ---- thin Claude proxy: the client runs the tool loop; model, size and tool types are fixed here ----
     if (path === "/claude" && req.method === "POST") {
       const key = Deno.env.get("ANTHROPIC_API_KEY");
       if (!key) return json({ error: "מפתח Claude לא הוגדר בשרת" }, 503);
       const b = await req.json();
       const tools = (Array.isArray(b.tools) ? b.tools : []).filter((t: any) => t && (t.input_schema || (t.type && /^web_search_\d+$/.test(t.type))))
-        .map((t: any) => t.type ? { type: t.type, name: "web_search", max_uses: Math.min(4, t.max_uses || 3), user_location: { type: "approximate", country: "IL", timezone: "Asia/Jerusalem" } } : t);
+        .map((t: any) => t.type ? { type: t.type, name: "web_search", max_uses: Math.min(4, t.max_uses || 3) } : t); // note: user_location country IL is rejected by the API
       if (!Array.isArray(b.messages) || !b.messages.length || JSON.stringify(b.messages).length > 200_000) return json({ error: "בקשה לא תקינה" }, 400);
       const r = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({ model: MODEL, max_tokens: Math.min(2500, b.max_tokens || 1500), system: String(b.system || "").slice(0, 6000), messages: b.messages, tools, ...(b.tool_choice ? { tool_choice: b.tool_choice } : {}) }),
+        body: JSON.stringify({ model: MODEL, max_tokens: Math.min(2500, b.max_tokens || 1500), system: String(b.system || "").slice(0, 6000), messages: b.messages, tools, ...(b.tool_choice?.type === "auto" ? { tool_choice: { type: "auto" } } : {}) }), // this model rejects forced tool_choice
       });
       const j = await r.json();
       if (!r.ok) {

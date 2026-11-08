@@ -288,7 +288,7 @@ ul.pois li{margin-bottom:8px}
       <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off"></details>
   </div>
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.13 · 08.11.2026 15:01</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.14 · 08.11.2026 15:07</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -1398,20 +1398,24 @@ async function claudeCall(body) {
   return j;
 }
 // Claude may search the web first (themes, unknown places), then must call route_request.
+// This model does not accept a forced tool_choice, so we ask (auto) and nudge up to twice.
 async function parseSmart(text) {
   const messages = [{ role: 'user', content: text }];
   let tools = [WEB_SEARCH, TOOL];
+  const call = () => claudeCall({ system: SYSTEM(), messages, tools, tool_choice: { type: 'auto' }, max_tokens: 2500 });
   let r;
-  try { r = await claudeCall({ system: SYSTEM(), messages, tools, tool_choice: { type: 'auto' }, max_tokens: 2000 }); }
-  catch (e) { if (e.status === 400) { tools = [TOOL]; r = await claudeCall({ system: SYSTEM(), messages, tools, tool_choice: { type: 'tool', name: 'route_request' }, max_tokens: 1500 }); } else throw e; }
+  try { r = await call(); }
+  catch (e) { if (e.status === 400 && /web_search/i.test(e.detail || '')) { tools = [TOOL]; r = await call(); } else throw e; }
+  for (let k = 0; r.stop_reason === 'pause_turn' && k < 3; k++) { messages.push({ role: 'assistant', content: r.content }); r = await call(); } // long web search: let it continue
+  let searched = (r.content || []).some(c => c.type === 'server_tool_use') || messages.length > 1;
   let tu = (r.content || []).find(c => c.type === 'tool_use' && c.name === 'route_request');
-  if (!tu) {
-    messages.push({ role: 'assistant', content: r.content }, { role: 'user', content: 'עכשיו קרא ל-route_request עם הפרמטרים של הטיול.' });
-    r = await claudeCall({ system: SYSTEM(), messages, tools, tool_choice: { type: 'tool', name: 'route_request' }, max_tokens: 1500 });
+  for (let k = 0; !tu && k < 2; k++) {
+    messages.push({ role: 'assistant', content: r.content }, { role: 'user', content: 'עכשיו קרא לכלי route_request עם הפרמטרים של הטיול. אל תכתוב טקסט.' });
+    r = await call();
+    searched = searched || (r.content || []).some(c => c.type === 'server_tool_use');
     tu = (r.content || []).find(c => c.type === 'tool_use' && c.name === 'route_request');
   }
-  if (!tu) throw new Error('לא התקבל פענוח');
-  const searched = (r.content || []).some(c => c.type === 'server_tool_use') || messages.length > 1;
+  if (!tu) throw Object.assign(new Error('לא התקבל פענוח'), { detail: 'Claude לא החזיר פרמטרים' });
   const out = { allow_area_a: false, military_mode: 'auto', date: nextSaturday(), via: [], ...tu.input, _searched: searched };
   for (const pl of [out.start, out.end, ...(out.via || [])]) if (pl && pl.lat && pl.lon) pl.researched = true;
   return out;
