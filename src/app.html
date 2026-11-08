@@ -763,37 +763,52 @@ async function loadGraph(bboxOrKeys) {
 }
 
 // ---------- voice input (Web Speech API, Hebrew) ----------
+// Keeps listening through pauses: ends after SILENCE ms without new words, or when the mic is tapped.
+// Browsers (iOS especially) sometimes end recognition on their own; we restart and keep what was said.
 (() => {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const btn = $('micBtn');
-  let rec = null, listening = false, base = '', finalText = '', gotSpeech = false;
-  const stopUI = () => { listening = false; btn.classList.remove('on'); btn.setAttribute('aria-label', 'דברו במקום להקליד'); };
+  const SILENCE = 3000, FIRST_WORDS = 8000, MAX = 90000;
+  let rec = null, active = false, base = '', said = '', interim = '', timer = null, started = 0, lastErr = null;
+  const show = () => { $('prompt').value = [base, (said + ' ' + interim).trim()].filter(Boolean).join(' '); growPrompt(); };
+  const arm = ms => { clearTimeout(timer); timer = setTimeout(() => finish(true), ms); };
+  const ui = on => { btn.classList.toggle('on', on); btn.setAttribute('aria-label', on ? 'סיום הקלטה' : 'דברו במקום להקליד'); };
+  function startRec() {
+    rec = new SR(); rec.lang = 'he-IL'; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
+    rec.onresult = ev => {
+      interim = '';
+      for (let i = ev.resultIndex; i < ev.results.length; i++) { const t = ev.results[i][0].transcript.trim(); if (ev.results[i].isFinal) said = (said + ' ' + t).trim(); else interim += (interim ? ' ' : '') + t; }
+      show(); arm(SILENCE);
+    };
+    rec.onerror = ev => { lastErr = ev.error; };
+    rec.onend = () => {
+      if (!active) return;
+      if (interim) { said = (said + ' ' + interim).trim(); interim = ''; }
+      if (['not-allowed', 'service-not-allowed', 'audio-capture'].includes(lastErr) || Date.now() - started > MAX) { finish(!!said); return; }
+      lastErr = null;
+      try { startRec(); } catch { finish(!!said); } // browser stopped early: keep listening
+    };
+    rec.start();
+  }
+  function finish(build) {
+    if (!active) return;
+    active = false; clearTimeout(timer); ui(false);
+    try { rec && rec.stop(); } catch {}
+    if (interim) { said = (said + ' ' + interim).trim(); interim = ''; show(); }
+    const err = { 'not-allowed': 'אין הרשאה למיקרופון. אשרו גישה למיקרופון בהגדרות הדפדפן.', 'service-not-allowed': 'אין הרשאה למיקרופון. אשרו גישה למיקרופון בהגדרות הדפדפן.', 'audio-capture': 'לא נמצא מיקרופון.', 'network': 'זיהוי הדיבור צריך חיבור לאינטרנט.' }[lastErr];
+    if (err && !said) { status(err, true); return; }
+    if (build && said && $('prompt').value.trim()) {
+      $('prompt').dispatchEvent(new Event('input')); // starts background trail download
+      status('הבנתי. בונה מסלול…'); run(true);
+    } else if (!said) status('לא שמעתי כלום. נסו שוב.');
+  }
   btn.onclick = () => {
     if (!SR) { status('הדפדפן הזה לא תומך בזיהוי דיבור. השתמשו במיקרופון שבמקלדת של הטלפון.', true); $('prompt').focus(); return; }
-    if (listening) { rec && rec.stop(); return; }
-    rec = new SR(); rec.lang = 'he-IL'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
-    base = $('prompt').value.trim(); finalText = ''; gotSpeech = false;
-    rec.onstart = () => { listening = true; btn.classList.add('on'); btn.setAttribute('aria-label', 'עצירת הקלטה'); status('מקשיב… ספרו מה בא לכם, ובסוף פשוט תשתקו.'); };
-    rec.onresult = ev => {
-      let interim = '';
-      for (let i = ev.resultIndex; i < ev.results.length; i++) { const t = ev.results[i][0].transcript; if (ev.results[i].isFinal) finalText += t + ' '; else interim += t; }
-      gotSpeech = true;
-      $('prompt').value = [base, (finalText + interim).trim()].filter(Boolean).join(' ');
-    };
-    rec.onerror = ev => {
-      stopUI();
-      const m = { 'not-allowed': 'אין הרשאה למיקרופון. אשרו גישה למיקרופון בהגדרות הדפדפן.', 'service-not-allowed': 'אין הרשאה למיקרופון. אשרו גישה למיקרופון בהגדרות הדפדפן.', 'no-speech': 'לא שמעתי כלום. נסו שוב.', 'network': 'זיהוי הדיבור צריך חיבור לאינטרנט.', 'audio-capture': 'לא נמצא מיקרופון.' }[ev.error];
-      if (ev.error !== 'aborted') status(m || 'זיהוי הדיבור נכשל. נסו שוב או הקלידו.', true);
-    };
-    rec.onend = () => {
-      const had = listening; stopUI();
-      if (!had) return;
-      if (gotSpeech && $('prompt').value.trim()) {
-        $('prompt').dispatchEvent(new Event('input')); // starts background trail download
-        status('הבנתי. בונה מסלול…'); run(true);
-      } else status('');
-    };
-    try { rec.start(); } catch { stopUI(); }
+    if (active) { finish(true); return; } // tap again = done
+    base = $('prompt').value.trim(); said = ''; interim = ''; lastErr = null; started = Date.now(); active = true;
+    ui(true); status('מקשיב… דברו בחופשיות. מסיים אחרי 3 שניות שקט, או בלחיצה על המיקרופון.');
+    arm(FIRST_WORDS);
+    try { startRec(); } catch { finish(false); status('לא הצלחתי להפעיל את המיקרופון.', true); }
   };
 })();
 
