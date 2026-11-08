@@ -845,17 +845,32 @@ async function run(fromPrompt) {
     const G = await loadGraph(keys);
     if (!G.N) throw new Error('לא נמצאו שבילים באזור.');
 
-    const fac = factors(G, { ...p, avoid_military: resolveMilitary(p).avoid });
-    const s = nearestNode(G, sLL[0], sLL[1], fac, 4000);
-    if (s < 0) throw new Error('אין שביל מתאים ליד נקודת ההתחלה. נסו להזיז אותה או לשנות סוג רכב.');
-    const e = eLL ? nearestNode(G, eLL[0], eLL[1], fac, 4000) : -1;
-    if (eLL && e < 0) throw new Error('אין שביל מתאים ליד היעד.');
-    const vias = viaLL.map(v => nearestNode(G, v.ll[0], v.ll[1], fac, 3000));
-    if (vias.some(x => x < 0)) throw new Error('אחת מנקודות החובה רחוקה מכל שביל מתאים.');
-    const viaPois = viaLL.map((v, i) => ({ type: 'via', name: v.name, note: v.note, lat: G.lat[vias[i]], lon: G.lon[vias[i]] }));
-
-    await new Promise(r => setTimeout(r, 30));
-    const res = multi ? (vias.length ? planMultiVia(G, p, { s, e, vias, viaPois }, m => status(m)) : planMulti(G, p, { s, e, vias, viaPois }, m => status(m))) : plan(G, p, { s, e, vias, viaPois }, m => status(m));
+    // plan; if firing zones (avoided on this date) make it impossible, plan through them and say so clearly
+    const attempt = pm => {
+      const fac = factors(G, { ...pm, avoid_military: (pm.days || 1) > 1 ? multiMilitary(pm) : resolveMilitary(pm).avoid });
+      const s = nearestNode(G, sLL[0], sLL[1], fac, 4000);
+      if (s < 0) return { err: 'אין שביל מתאים ליד נקודת ההתחלה. נסו להזיז אותה או לשנות סוג רכב.' };
+      const e = eLL ? nearestNode(G, eLL[0], eLL[1], fac, 4000) : -1;
+      if (eLL && e < 0) return { err: 'אין שביל מתאים ליד היעד.' };
+      const vias = viaLL.map(v => nearestNode(G, v.ll[0], v.ll[1], fac, 3000));
+      const bad = vias.findIndex(x => x < 0);
+      if (bad >= 0) return { err: `אין שביל מתאים ליד "${viaLL[bad].name}".` };
+      const viaPois = viaLL.map((v, i) => ({ type: 'via', name: v.name, note: v.note, lat: G.lat[vias[i]], lon: G.lon[vias[i]] }));
+      const multi = (pm.days || 1) > 1;
+      const res = multi ? (vias.length ? planMultiVia(G, pm, { s, e, vias, viaPois }, m => status(m)) : planMulti(G, pm, { s, e, vias, viaPois }, m => status(m))) : plan(G, pm, { s, e, vias, viaPois }, m => status(m));
+      return { res };
+    };
+    let out = attempt(p);
+    const milBlocked = ((p.days || 1) > 1 ? multiMilitary(p) : resolveMilitary(p).avoid) && (p.military_mode || 'auto') === 'auto';
+    if ((out.err || !out.res.results.length) && milBlocked) {
+      const alt = attempt({ ...p, military_mode: 'allow' });
+      if (!alt.err && alt.res.results.length) {
+        out = alt; p.military_mode = 'allow'; $('pMil').value = 'allow'; milNote();
+        alt.res.note = '⚠ אי אפשר לתכנן את זה בלי לעבור בשטחי אש, אז המסלול עובר בהם. בתאריך שבחרתם (יש בו יום חול) הם כנראה סגורים: תכננו לסופ"ש או חג, או ודאו מול פרסומי צה"ל לשטחי אש. ' + (alt.res.note || '');
+      }
+    }
+    if (out.err) throw new Error(out.err);
+    const res = out.res;
     if (!res.results.length && res.reason) throw new Error(res.reason);
     if (!res.results.length) throw new Error('לא מצאתי מסלול שעומד בתנאים. נסו לקצר, לשנות רמת קושי/רכב, או לבטל הימנעות מכבישים / שטחי אש.');
     if (res.note) setTimeout(() => status(res.note), 0);
@@ -1170,6 +1185,7 @@ function render(i, day = null) {
   });
   if (r.unrated) $('legend').innerHTML = `<span><i style="--c:${DCOL('x')}"></i>מסלול מיובא: אין דירוג קושי לקטעים</span>`;
   const w = [];
+  if (!current.saved && current.res.note && /^⚠/.test(current.res.note)) w.push(current.res.note);
   if (r.unrated) w.push('המסלול יובא מקובץ. לא בדקתי לו קושי ושטחי אש, רק שטחי A. סעו בו בזהירות כמו במסלול לא מוכר.');
   if (!r.unrated && r.unk / r.len > 0.3) w.push(`ל-${Math.round(r.unk / r.len * 100)}% מהדרך אין דירוג קושי ב-OSM. ההערכה שם שמרנית (בינוני).`);
   const mr = D ? { avoid: multiMilitary(p), info: multiMilitary(p) ? null : { open: true, why: 'כל ימי הטיול בסופ"ש / חג' } } : resolveMilitary(p);

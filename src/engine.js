@@ -169,7 +169,9 @@ const AUTH_OPS = /רשות הטבע|רט"?ג|רטג|nature and parks|inpa|קק"?
 function campAuth(t) {
   const op = [t.operator, t.owner, t['operator:he'], t['operator:en']].filter(Boolean).join(' ');
   if (AUTH_OPS.test(op)) return /קק"?ל|קרן קיימת|kkl|jnf/i.test(op) ? 'קק"ל' : /מועצה/.test(op) ? 'מועצה אזורית' : 'רט"ג';
-  if (/חניון לילה/.test((t['name:he'] || '') + ' ' + (t.name || ''))) return 'חניון לילה מוסדר';
+  const nm = (t['name:he'] || '') + ' ' + (t.name || '');
+  if (/לא רשמי|לא מוסדר|פיראטי|פרטי|unofficial|private/i.test(nm) || t.access === 'private' || t.access === 'no') return null;
+  if (/חניון לילה/.test(nm)) return 'חניון לילה מוסדר';
   return null;
 }
 // Well-known authorized night camps (seed; merged with OSM, deduped within 1.2 km). Coordinates approximate.
@@ -196,9 +198,10 @@ function factors(G, p) {
   const tD = TARGET_D[p.difficulty] || 3;
   for (let e = 0; e < G.E; e++) {
     const d = G.eD[e];
-    if (G.eMil[e] === 2) { f[e] = Infinity; continue; }
     if (G.eAA[e] && !p.allow_area_a) { f[e] = Infinity; continue; }
-    if (G.eMil[e] === 1 && p.avoid_military) { f[e] = Infinity; continue; }
+    // paved public roads stay open through firing zones and military land (OSM base polygons often cover public roads)
+    if (G.eMil[e] === 2 && !G.eAsph[e]) { f[e] = Infinity; continue; }
+    if (G.eMil[e] === 1 && p.avoid_military && !G.eAsph[e]) { f[e] = Infinity; continue; }
     if (G.eAsph[e]) { f[e] = p.avoid_asphalt ? 4 : 1.6; continue; }
     if (d > maxD) { f[e] = Infinity; continue; }
     f[e] = 1 + 0.45 * Math.abs(d - tD) + (G.eUnk[e] ? 0.15 : 0);
@@ -266,18 +269,38 @@ function pathEdges(G, R, t) {
   return edges.reverse();
 }
 
+// Connected pieces of the network under the current restrictions (cached per fac array).
+function components(G, fac) {
+  if (G._compFac === fac) return G._comp;
+  const comp = new Int32Array(G.N).fill(-1), size = [];
+  const stack = new Int32Array(G.N);
+  for (let s = 0; s < G.N; s++) {
+    if (comp[s] >= 0) continue;
+    const id = size.length; let n = 0, sp = 0; stack[sp++] = s; comp[s] = id;
+    while (sp) { const u = stack[--sp]; n++; for (let j = G.start[u]; j < G.start[u + 1]; j++) { const e = G.adj[j]; if (fac[e] === Infinity) continue; const v = G.eA[e] === u ? G.eB[e] : G.eA[e]; if (comp[v] < 0) { comp[v] = id; stack[sp++] = v; } } }
+    size.push(n);
+  }
+  G._compFac = fac; G._comp = { comp, size };
+  return G._comp;
+}
+// Nearest usable node; prefers the connected network over small isolated fragments
+// (city centres have no residential streets in our data, so a nearby stub can be cut off).
 function nearestNode(G, la, lo, fac, maxM = 3000) {
-  let best = -1, bd = Infinity;
+  const { comp, size } = components(G, fac);
+  const big = Math.min(300, Math.max(...size.slice(0, 1000), 1) * 0.5);
+  let best = -1, bd = Infinity, bestAny = -1, bdAny = Infinity;
   for (let i = 0; i < G.N; i++) {
     const dl = (G.lat[i] - la) * 111000, dO = (G.lon[i] - lo) * 96000;
     const d2 = dl * dl + dO * dO;
-    if (d2 < bd) {
-      let ok = false;
-      for (let j = G.start[i]; j < G.start[i + 1]; j++) if (fac[G.adj[j]] !== Infinity) { ok = true; break; }
-      if (ok) { bd = d2; best = i; }
-    }
+    if (d2 >= bdAny && d2 >= bd) continue;
+    let ok = false;
+    for (let j = G.start[i]; j < G.start[i + 1]; j++) if (fac[G.adj[j]] !== Infinity) { ok = true; break; }
+    if (!ok) continue;
+    if (d2 < bdAny) { bdAny = d2; bestAny = i; }
+    if (d2 < bd && size[comp[i]] >= big) { bd = d2; best = i; }
   }
-  return Math.sqrt(bd) <= maxM ? best : -1;
+  if (best >= 0 && Math.sqrt(bd) <= maxM) return best;
+  return Math.sqrt(bdAny) <= maxM ? bestAny : -1;
 }
 
 function buildRoute(G, fac, stops, maxCost, used = new Uint8Array(G.E)) {
@@ -321,6 +344,7 @@ function snapPois(G, fac, types, R0, minL, maxL, authOnly = true) {
   for (const p of G.pois) {
     if (types.length && !types.includes(p.type)) continue;
     if (p.type === 'nightcamp' && !p.auth && authOnly) continue;
+    if (p.type !== 'nightcamp' && (!p.name || p.name === POI_TYPES[p.type]?.he)) continue; // unnamed stops are not worth a detour
     const n = nearestNode(G, p.lat, p.lon, fac, 500);
     if (n < 0 || R0.len[n] < minL || R0.len[n] > maxL) continue;
     if (out.some(o => o.node === n)) continue;
@@ -387,7 +411,7 @@ function plan(G, p, nodes, onProgress = () => {}) {
     const wantCamp = types.includes('nightcamp');
     let ends = snapPois(G, fac, types.filter(t => t !== 'nightcamp'), R0, L * 0.55, L * 1.15).map(c => ({ ...c, w: 0.35 }));
     if (wantCamp) ends.push(...snapPois(G, fac, ['nightcamp'], R0, L * 0.35, L * 1.5).map(c => ({ ...c, w: 0.9 })));
-    ends.push(...genericCands(G, s, R0, L * 0.9, 8).map(c => ({ ...c, w: 0 })));
+    ends.push(...genericCands(G, s, R0, L * 0.9, 8).map(c => ({ ...c, w: 0 })), ...genericCands(G, s, R0, L * 0.7, 6).map(c => ({ ...c, w: 0 })));
     const crowOk = c => hav(G.lat[s], G.lon[s], G.lat[c.node], G.lon[c.node]) > R0.len[c.node] * 0.35;
     ends = ends.filter(crowOk);
     if (!ends.length) { // small or fragmented network: aim for what is reachable
@@ -405,10 +429,10 @@ function plan(G, p, nodes, onProgress = () => {}) {
     }
     options.sort((x, y) => (Math.abs(x.est - L) / L - x.w) - (Math.abs(y.est - L) / L - y.w));
     const built = [];
-    for (const o of options.slice(0, 16)) {
+    for (const o of options.slice(0, 24)) {
       const r = mk(o.stops, o.pois);
       if (!r) continue;
-      r.score = 2 * Math.abs(r.len - L) / L + (r.reuse / r.len) * 1.2 - o.w;
+      r.score = 3 * Math.abs(r.len - L) / L + (r.reuse / r.len) * 1.2 - o.w;
       built.push(r);
     }
     built.sort((x, y) => x.score - y.score);
@@ -895,5 +919,5 @@ function parseLocal(text) {
   return p;
 }
 
-if (typeof module !== 'undefined') module.exports = { corridorTiles, planMultiVia, pathEdges, TILE, tileKey, tilesFor, tileBBox, splitToTiles, tilesToElements, planMulti, addDays, campAuth, KNOWN_CAMPS, AREA_A, inAreaA, lookupPlace, dayInfo, resolveMilitary, nextSaturday, buildGraph, plan, nearestNode, factors, toGPX, parseLocal, targetLengthM, wayInfo, POI_TYPES };
+if (typeof module !== 'undefined') module.exports = { dijkstra, multiMilitary, corridorTiles, planMultiVia, pathEdges, TILE, tileKey, tilesFor, tileBBox, splitToTiles, tilesToElements, planMulti, addDays, campAuth, KNOWN_CAMPS, AREA_A, inAreaA, lookupPlace, dayInfo, resolveMilitary, nextSaturday, buildGraph, plan, nearestNode, factors, toGPX, parseLocal, targetLengthM, wayInfo, POI_TYPES };
 // ===== END ENGINE =====
