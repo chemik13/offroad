@@ -870,7 +870,7 @@ ${trks}
 // Fallback Hebrew parser when no API key
 function parseLocal(text) {
   const t = text || '';
-  const p = { start: null, end: null, loop: false, duration_hours: null, distance_km: null, difficulty: 'medium', vehicle: 'raised', poi_types: [], via: [], avoid_asphalt: false, military_mode: 'auto', allow_area_a: false };
+  const p = { start: null, end: null, loop: false, duration_hours: null, distance_km: null, difficulty: 'medium', vehicle: null, poi_types: [], via: [], avoid_asphalt: false, military_mode: 'auto', allow_area_a: false };
   let m;
   if ((m = t.match(/(\d+(?:\.\d+)?)\s*שע/))) p.duration_hours = +m[1];
   else if (/שעתיים/.test(t)) p.duration_hours = 2;
