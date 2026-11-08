@@ -124,6 +124,17 @@ ul.pois li{margin-bottom:8px}
 .hbtns{display:flex;flex:none;gap:8px;margin-inline-start:auto;pointer-events:auto}
 .textbtn{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:10px;height:40px;padding:0 12px;font:500 14px var(--body);box-shadow:0 1px 6px rgba(20,30,25,.12);cursor:pointer}
 .saverow{display:flex;gap:8px;align-items:center}
+.wx{border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:8px}
+.wx h3{margin:0;padding:8px 10px;font-size:13px;font-weight:600;background:var(--stone);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.wx h3 small{font-weight:400;color:var(--muted)}
+.wxrow{display:grid;grid-template-columns:28px 1fr auto;gap:2px 10px;align-items:center;padding:8px 10px;border-top:1px solid var(--line)}
+.wxrow .wt{font-size:14px;font-weight:500}
+.wxrow .wd{grid-column:2/4;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.wxrow .wtemp{font-variant-numeric:tabular-nums;font-weight:600;font-size:15px;white-space:nowrap}
+.wxrow.night{background:#f6f7fb}
+.wxi{width:26px;height:26px}
+.wxpop{font-size:12px;line-height:1.5;margin-top:6px;min-width:200px}
+.wxpop b{font-weight:600}
 .daychips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-top:8px}
 .daychips button{flex:none;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:7px 12px;font:500 13px var(--body);cursor:pointer;font-variant-numeric:tabular-nums}
 .daychips button[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
@@ -214,6 +225,7 @@ ul.pois li{margin-bottom:8px}
           <label><input type="checkbox" id="pAsph"> להימנע מכבישים</label>
           </span></label>
         <label>תאריך יציאה<input type="date" id="pDate"></label>
+        <label>שעת יציאה<input type="time" id="pTime" value="08:00"></label>
         <label>שטחי אש<select id="pMil"><option value="auto">לפי התאריך (סופ"ש וחגים)</option><option value="avoid">תמיד להימנע</option><option value="allow">לכלול תמיד</option></select></label>
         <label class="full" id="milNote" style="color:var(--muted)"></label>
         <label class="full">שטחי A (רשות פלסטינית)<select id="pAA"><option value="0">חסום (ברירת מחדל)</option><option value="1">לאפשר מעבר</option></select></label>
@@ -228,6 +240,7 @@ ul.pois li{margin-bottom:8px}
       <div style="margin-top:8px"><div class="bar" id="bar"></div><div class="legend" id="legend"></div></div>
       <div id="warns" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
       <div id="dayPlan"></div>
+      <div id="wx"></div>
       <div id="poiList" style="margin-top:6px"></div>
       <div class="saverow" style="margin-top:10px" id="saveRow">
         <input type="text" id="routeName" aria-label="שם המסלול" placeholder="שם המסלול">
@@ -1143,10 +1156,11 @@ function setEnd(ll, label) { pickedEnd = ll; if (endMarker) endMarker.remove(); 
 map.on('click', ev => {
   const ll = [ev.latlng.lat, ev.latlng.lng];
   const div = document.createElement('div');
-  div.innerHTML = '<div class="popbtns"><button data-a="s">התחלה מכאן</button><button data-a="e">יעד כאן</button></div>';
+  div.innerHTML = '<div class="popbtns"><button data-a="s">התחלה מכאן</button><button data-a="e">יעד כאן</button><button data-a="w">מזג אוויר כאן</button></div><div class="wxpop"></div>';
   const pop = L.popup().setLatLng(ev.latlng).setContent(div).openOn(map);
   div.onclick = e => {
     const a = e.target.dataset.a; if (!a) return;
+    if (a === 'w') { pointForecast(ll, div.querySelector('.wxpop')).then(() => pop.update()); return; }
     if (a === 's') setStart(ll, '📍 נקודה על המפה'); else { setEnd(ll, '📍 נקודה על המפה'); $('pLoop').value = '0'; }
     map.closePopup(pop);
   };
@@ -1553,11 +1567,131 @@ function campSub(c) {
 }
 function placePopup(pt, title, sub) {
   const div = document.createElement('div');
-  div.innerHTML = `<div class="poptitle"></div><div class="popsub"></div><div class="thumbs"></div>`;
+  div.innerHTML = `<div class="poptitle"></div><div class="popsub"></div><div class="wxpop"></div><div class="thumbs"></div>`;
   div.querySelector('.poptitle').textContent = title; div.querySelector('.popsub').textContent = sub || '';
   let loaded = false;
-  return { div, load: () => { if (!loaded) { loaded = true; fillThumbs(div.querySelector('.thumbs'), pt); } } };
+  return { div, load: () => {
+    if (loaded) return; loaded = true; fillThumbs(div.querySelector('.thumbs'), pt);
+    if (pt.type === 'nightcamp') { const D = current?.res?.results?.[current.sel]?.days; const k = D ? D.findIndex(d => d.camp && Math.abs(d.camp.lat - pt.lat) < 1e-4 && Math.abs(d.camp.lon - pt.lon) < 1e-4) : -1;
+      campNightLine(pt, div.querySelector('.wxpop'), addDays($('pDate').value || isoToday(), Math.max(0, k))); }
+  } };
 }
+
+// ---------- weather (Open-Meteo, free, no key) ----------
+const WMO = c => c === 0 ? ['בהיר', 'sun'] : c <= 2 ? ['מעונן חלקית', 'part'] : c === 3 ? ['מעונן', 'cloud'] : c <= 48 ? ['ערפל', 'fog']
+  : c <= 57 ? ['טפטוף', 'rain'] : c <= 67 ? ['גשם', 'rain'] : c <= 77 ? ['שלג', 'snow'] : c <= 82 ? ['ממטרים', 'rain'] : ['סופת רעמים', 'storm'];
+const WXI = {
+  sun: '<circle cx="13" cy="13" r="5.5" fill="#f2b632"/><g stroke="#f2b632" stroke-width="2" stroke-linecap="round"><path d="M13 2v3M13 21v3M2 13h3M21 13h3M5.2 5.2l2.1 2.1M18.7 18.7l2.1 2.1M5.2 20.8l2.1-2.1M18.7 7.3l2.1-2.1"/></g>',
+  part: '<circle cx="9.5" cy="9.5" r="4.5" fill="#f2b632"/><path d="M8 20h11a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.4 1.8A3.2 3.2 0 0 0 8 20z" fill="#c9cfd6"/>',
+  cloud: '<path d="M6 20h13a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.4 2A3.6 3.6 0 0 0 6 20z" fill="#aab2bb"/>',
+  fog: '<path d="M4 9h18M2 13h20M5 17h16" stroke="#aab2bb" stroke-width="2.2" stroke-linecap="round"/>',
+  rain: '<path d="M6 15h13a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.4 1.8A3.2 3.2 0 0 0 6 15z" fill="#8e98a3"/><path d="M8 18l-1.5 3M13 18l-1.5 3M18 18l-1.5 3" stroke="#1f6fd6" stroke-width="2" stroke-linecap="round"/>',
+  snow: '<path d="M6 15h13a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.4 1.8A3.2 3.2 0 0 0 6 15z" fill="#aab2bb"/><g fill="#7fb0ea"><circle cx="8" cy="19.5" r="1.4"/><circle cx="13" cy="21" r="1.4"/><circle cx="18" cy="19.5" r="1.4"/></g>',
+  storm: '<path d="M6 14h13a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.4 1.8A3.2 3.2 0 0 0 6 14z" fill="#6f7882"/><path d="M13 14l-3 5h3l-2 5 5-7h-3l2-3z" fill="#f2b632"/>',
+  moon: '<path d="M17 3.5A9 9 0 1 0 22.5 17 7.2 7.2 0 0 1 17 3.5z" fill="#8a94b8"/>',
+};
+const wxIcon = k => `<svg class="wxi" viewBox="0 0 26 26" aria-hidden="true">${WXI[k] || WXI.cloud}</svg>`;
+const wxCache = new Map();
+async function fetchWx(points, from, to) {
+  const key = points.map(p => p.map(x => x.toFixed(2)).join(',')).join(';') + from + to;
+  const hit = wxCache.get(key); if (hit && Date.now() - hit.t < 30 * 60e3) return hit.v;
+  const u = 'https://api.open-meteo.com/v1/forecast?latitude=' + points.map(p => p[0].toFixed(3)).join(',') + '&longitude=' + points.map(p => p[1].toFixed(3)).join(',')
+    + '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,sunrise,sunset'
+    + '&hourly=temperature_2m,precipitation,precipitation_probability,wind_gusts_10m,weather_code&timezone=Asia%2FJerusalem&wind_speed_unit=kmh'
+    + `&start_date=${from}&end_date=${to}`;
+  const r = await fetch(u); if (!r.ok) throw new Error('weather ' + r.status);
+  let v = await r.json(); if (!Array.isArray(v)) v = [v];
+  wxCache.set(key, { t: Date.now(), v }); return v;
+}
+const isoToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+const daysBetween = (a, b) => Math.round((new Date(b + 'T12:00:00Z') - new Date(a + 'T12:00:00Z')) / 864e5);
+const hm = s => s ? s.slice(11, 16) : '';
+const heDay = iso => new Date(iso + 'T12:00:00Z').toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'numeric', timeZone: 'UTC' });
+function dayIdx(w, iso) { return w.daily.time.indexOf(iso); }
+function nightStats(w, iso) { // 20:00 that day -> 06:00 next morning
+  const t = w.hourly.time; const a = t.indexOf(iso + 'T20:00'); if (a < 0) return null;
+  const sl = (arr) => arr.slice(a, Math.min(a + 11, arr.length));
+  const temps = sl(w.hourly.temperature_2m), gust = sl(w.hourly.wind_gusts_10m), pr = sl(w.hourly.precipitation), pp = sl(w.hourly.precipitation_probability || []);
+  if (!temps.length) return null;
+  return { min: Math.min(...temps), gust: Math.max(...gust), rain: pr.reduce((s, x) => s + (x || 0), 0), pp: pp.length ? Math.max(...pp) : null, full: temps.length >= 10 };
+}
+async function pointForecast(ll, el) {
+  el.textContent = 'טוען תחזית…';
+  try {
+    const from = isoToday(), to = addDays(from, 2);
+    const [w] = await fetchWx([ll], from, to);
+    el.innerHTML = w.daily.time.map((d, i) => { const [t] = WMO(w.daily.weather_code[i]); return `<div><b>${heDay(d)}</b>: ${t}, ${Math.round(w.daily.temperature_2m_min[i])}°–${Math.round(w.daily.temperature_2m_max[i])}°, גשם ${w.daily.precipitation_probability_max[i] ?? 0}%, משבים עד ${Math.round(w.daily.wind_gusts_10m_max[i])} קמ״ש</div>`; }).join('')
+      + (() => { const n = nightStats(w, from); return n ? `<div><b>הלילה</b>: מינימום ${Math.round(n.min)}°, משבים עד ${Math.round(n.gust)} קמ״ש${n.rain > 0.2 ? `, גשם ${n.rain.toFixed(1)} מ״מ` : ''}</div>` : ''; })();
+  } catch { el.textContent = 'אין חיבור לשירות מזג האוויר.'; }
+}
+async function campNightLine(pt, el, iso) {
+  try {
+    const d = iso || $('pDate').value || isoToday();
+    const ahead = daysBetween(isoToday(), d);
+    if (ahead < 0 || ahead > 14) { el.textContent = ahead > 14 ? 'תחזית ללילה זמינה עד שבועיים קדימה.' : ''; return; }
+    const [w] = await fetchWx([[pt.lat, pt.lon]], d, addDays(d, 1));
+    const n = nightStats(w, d); if (!n) { el.textContent = ''; return; }
+    el.innerHTML = `<b>לילה ${heDay(d)}</b>: מינימום ${Math.round(n.min)}°, משבים עד ${Math.round(n.gust)} קמ״ש, ${n.rain > 0.2 ? `גשם ${n.rain.toFixed(1)} מ״מ` : 'יבש'}`;
+  } catch { el.textContent = ''; }
+}
+function timeToH(s) { const [h, m] = (s || '08:00').split(':').map(Number); return h + (m || 0) / 60; }
+const hToTime = h => { h = ((h % 24) + 24) % 24; const hh = Math.floor(h), mm = Math.round((h - hh) * 60); return `${String(hh).padStart(2, '0')}:${String(mm === 60 ? 0 : mm).padStart(2, '0')}`; };
+async function renderWeather(r, p, D) {
+  const box = $('wx'); const token = (renderWeather.tok = (renderWeather.tok || 0) + 1);
+  const date = p.date || $('pDate').value || isoToday();
+  const nDays = D ? D.length : 1;
+  const ahead = daysBetween(isoToday(), date);
+  box.innerHTML = '';
+  if (ahead + nDays - 1 < 0) return;
+  if (ahead > 15) { box.innerHTML = `<div class="wx"><h3>מזג אוויר<small>${heDay(date)}</small></h3><div class="wxrow"><span></span><span class="wd" style="grid-column:2/4">תחזית זמינה עד 16 יום קדימה. נסו שוב קרוב יותר לטיול.</span></div></div>`; return; }
+  box.innerHTML = '<div class="wx"><h3>מזג אוויר<small>טוען…</small></h3></div>';
+  // one point per day (mid of that day's track) + each camp
+  const days = D || [{ from: 0, to: r.coords.length - 1, len: r.len, hrs: r.hrs, camp: r.pois.find(x => x.type === 'nightcamp') || null }];
+  const pts = days.map(d => r.coords[Math.floor((d.from + d.to) / 2)]);
+  const camps = days.map(d => d.camp ? [d.camp.lat, d.camp.lon] : null);
+  const all = [...pts, ...camps.filter(Boolean), r.coords[0]];
+  let ws;
+  try { ws = await fetchWx(all, addDays(date, 0) < isoToday() ? isoToday() : date, addDays(date, nDays)); }
+  catch { if (token === renderWeather.tok) box.innerHTML = '<div class="wx"><h3>מזג אוויר<small>אין חיבור לשירות</small></h3></div>'; return; }
+  if (token !== renderWeather.tok) return;
+  const warn = [];
+  const cn = c => 'חניון ' + c.name.replace(/^חניון( לילה)?\s*/, '');
+  let html = `<div class="wx"><h3>מזג אוויר באזור הטיול<small>Open-Meteo</small></h3>`;
+  let ci = pts.length;
+  const startH = timeToH($('pTime').value);
+  days.forEach((d, k) => {
+    const iso = addDays(date, k), w = ws[k], i = dayIdx(w, iso);
+    if (i >= 0) {
+      const [txt, ic] = WMO(w.daily.weather_code[i]);
+      const tmin = Math.round(w.daily.temperature_2m_min[i]), tmax = Math.round(w.daily.temperature_2m_max[i]);
+      const pp = w.daily.precipitation_probability_max[i] ?? 0, rain = w.daily.precipitation_sum[i] || 0, gust = Math.round(w.daily.wind_gusts_10m_max[i]);
+      const sunset = hm(w.daily.sunset[i]), stops = (d.mid ? 0.25 : 0) + (!D ? r.pois.filter(x => x.type !== 'nightcamp').length * 0.25 : 0);
+      const finish = startH + d.hrs + stops, sunsetH = timeToH(sunset);
+      html += `<div class="wxrow">${wxIcon(ic)}<span class="wt">${D ? `יום ${k + 1} · ` : ''}${heDay(iso)} · ${txt}</span><span class="wtemp">${tmin}°–${tmax}°</span>
+        <span class="wd">גשם ${pp}%${rain > 0.1 ? ` (${rain.toFixed(1)} מ״מ)` : ''} · משבים עד ${gust} קמ״ש · זריחה ${hm(w.daily.sunrise[i])} · שקיעה ${sunset} · סיום משוער ${hToTime(finish)}</span></div>`;
+      if (finish > sunsetH - 0.25) warn.push(`${D ? `ביום ${k + 1} ` : ''}הסיום המשוער (${hToTime(finish)}) קרוב לשקיעה (${sunset}) או אחריה. צאו מוקדם יותר או קצרו.`);
+      if (rain >= 2 || pp >= 60) warn.push(`${D ? `ביום ${k + 1} ` : ''}צפוי גשם באזור (${pp}%${rain > 0.1 ? `, ${rain.toFixed(1)} מ״מ` : ''}). סכנת שיטפונות בנחלים, גם מגשם רחוק במעלה הנחל: אל תיכנסו לערוצים ואל תחנו בהם.`);
+      else if (i > 0 && (w.daily.precipitation_sum[i - 1] || 0) >= 3) warn.push(`${D ? `לפני יום ${k + 1} ` : 'יום לפני הטיול '}ירד גשם באזור. השבילים עלולים להיות בוציים או פגועים, והנחלים עוד יכולים לזרום.`);
+      if (tmax >= 35) warn.push(`${D ? `ביום ${k + 1} ` : ''}חם מאוד (${tmax}°). קחו הרבה מים, ועדיף לנסוע בבוקר.`);
+      if (gust >= 60) warn.push(`${D ? `ביום ${k + 1} ` : ''}רוחות חזקות (משבים עד ${gust} קמ״ש). צפו לאובך ולראות מוגבלת.`);
+    }
+    if (d.camp) {
+      const wc = ws[ci++]; const n = nightStats(wc, iso);
+      if (n) {
+        html += `<div class="wxrow night">${wxIcon('moon')}<span class="wt">לילה ב${cn(d.camp)}</span><span class="wtemp">${Math.round(n.min)}°</span>
+          <span class="wd">מינימום ${Math.round(n.min)}° · משבים עד ${Math.round(n.gust)} קמ״ש · ${n.rain > 0.2 ? `גשם ${n.rain.toFixed(1)} מ״מ` : 'יבש'}${n.pp != null ? ` (סיכוי ${n.pp}%)` : ''}</span></div>`;
+        if (n.gust >= 45) warn.push(`רוח חזקה בלילה ב${cn(d.camp)} (משבים עד ${Math.round(n.gust)} קמ״ש). לאוהל גג זה גבולי: חנו בכיוון הרוח, או מקום מוגן.`);
+        if (n.min <= 5) warn.push(`לילה קר ב${cn(d.camp)} (עד ${Math.round(n.min)}°). שק שינה חורפי.`);
+        if (n.rain > 1) warn.push(`גשם בלילה ב${cn(d.camp)}. בדקו שהחניון לא בערוץ נחל.`);
+      }
+    }
+  });
+  html += '</div>';
+  box.innerHTML = html;
+  if (warn.length) $('warns').insertAdjacentHTML('afterbegin', [...new Set(warn)].map(t => `<div class="warn">${t}</div>`).join(''));
+}
+$('pDate').addEventListener('change', () => { if (current && !$('results').hidden) render(current.sel, current.day); });
+$('pTime').addEventListener('change', () => { if (current && !$('results').hidden) render(current.sel, current.day); });
 
 const fmtH = h => { const hh = Math.floor(h), mm = Math.round((h - hh) * 60 / 5) * 5; return mm === 60 ? `${hh + 1}:00` : `${hh}:${String(mm).padStart(2, '0')}`; };
 // keep the route clear of the panel, wherever the panel sits (bottom sheet / side panel)
@@ -1655,7 +1789,7 @@ function render(i, day = null) {
   const w = [];
   if (r.unrated) w.push('המסלול יובא מקובץ. לא בדקתי לו קושי ושטחי אש, רק שטחי A. סעו בו בזהירות כמו במסלול לא מוכר.');
   if (!r.unrated && r.unk / r.len > 0.3) w.push(`ל-${Math.round(r.unk / r.len * 100)}% מהדרך אין דירוג קושי ב-OSM. ההערכה שם שמרנית (בינוני).`);
-  const mr = D ? { avoid: multiMilitary(p), info: { open: !multiMilitary(p), why: 'כל ימי הטיול בסופ"ש / חג' } } : resolveMilitary(p);
+  const mr = D ? { avoid: multiMilitary(p), info: multiMilitary(p) ? null : { open: true, why: 'כל ימי הטיול בסופ"ש / חג' } } : resolveMilitary(p);
   if (D && mr.avoid && (p.military_mode || 'auto') === 'auto') w.push('אחד מימי הטיול הוא יום חול, אז שטחי אש לא נכללו בכל הטיול.');
   if (r.aa > 0) w.push(`⚠ ${(r.aa / 1000).toFixed(1)} ק"מ עוברים בשטח A. הכניסה לשטחי A אסורה על אזרחים ישראלים בצו אלוף ומסוכנת. פתחתם את זה ידנית: ודאו שיש לכם היתר.`);
   else if (r.js > 0) w.push(`${(r.js / 1000).toFixed(1)} ק"מ עוברים ביהודה ושומרון. שטחי A המרכזיים חסומים, אבל המיפוי גס: שימו לב לשלטים האדומים בכניסה לשטחי A ולכפרים.`);
@@ -1665,6 +1799,7 @@ function render(i, day = null) {
   if (!current.saved && current.res.L && (p.duration_hours || p.distance_km) && Math.abs(r.len - current.res.L) / current.res.L > 0.35) w.push('לא מצאתי מסלול באורך המבוקש בדיוק. זה הקרוב ביותר.');
   w.push('המסלול מבוסס על נתוני OSM. מצב השטח בפועל (שיטפונות, חסימות, סגירת שמורות) יכול להשתנות: בדקו לפני יציאה.');
   $('warns').innerHTML = w.map(t => `<div class="warn">${t}</div>`).join('');
+  renderWeather(r, { ...p, date: $('pDate').value || p.date }, D);
   $('dayPlan').innerHTML = '';
   if (D) {
     const box = document.createElement('div'); box.className = 'dayplan';
