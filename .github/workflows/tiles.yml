@@ -1,0 +1,36 @@
+# Weekly: build the app's trail-data tiles from the Geofabrik OSM extract and publish them on the
+# orphan branch "tiles" (served by raw.githubusercontent.com). This removes the dependency on the
+# busy public Overpass servers; the app falls back to Overpass only for areas missing here.
+name: Build trail tiles
+on:
+  schedule:
+    - cron: "17 2 * * 0"   # Sundays 02:17 UTC
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["tools/build_tiles.py", ".github/workflows/tiles.yml"]
+permissions:
+  contents: write
+concurrency: { group: tiles, cancel-in-progress: true }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install osmium==3.7.0
+      - name: Download OSM extract (Israel and Palestine)
+        run: curl -fsSL --retry 3 -o extract.osm.pbf https://download.geofabrik.de/asia/israel-and-palestine-latest.osm.pbf && ls -lh extract.osm.pbf
+      - name: Build tiles
+        run: python tools/build_tiles.py extract.osm.pbf out
+      - name: Publish to branch "tiles" (history not kept)
+        run: |
+          cd out
+          git init -q -b tiles
+          git config user.name "tiles-bot"
+          git config user.email "tiles-bot@users.noreply.github.com"
+          git add -A
+          git commit -qm "Trail tiles $(date -u +%Y-%m-%d)"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" tiles

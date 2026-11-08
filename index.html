@@ -288,7 +288,7 @@ ul.pois li{margin-bottom:8px}
       <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off"></details>
   </div>
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.15 · 08.11.2026 15:20</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.17 · 08.11.2026 15:26</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -1474,6 +1474,17 @@ const idb = (() => {
 const canGzip = typeof CompressionStream !== 'undefined' && typeof DecompressionStream !== 'undefined';
 async function gz(obj) { return new Uint8Array(await new Response(new Blob([JSON.stringify(obj)]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer()); }
 async function ungz(buf) { return JSON.parse(await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).text()); }
+// Weekly-built tiles from the full OSM extract (GitHub Actions -> branch "tiles"). No key needed.
+const STATIC_TILES = 'https://raw.githubusercontent.com/chemik13/offroad/tiles/';
+async function staticTile(key) {
+  if (!canGzip) return null;
+  try {
+    const r = await fetch(STATIC_TILES + key + '.json.gz', { cache: 'no-cache' });
+    if (!r.ok) return null;
+    const t = await ungz(await r.arrayBuffer());
+    return t && t.at && Date.now() - t.at < TILE_TTL ? t : null;
+  } catch { return null; }
+}
 async function serverTile(key) {
   if (!hasGroup() || !canGzip) return null;
   try {
@@ -1533,6 +1544,11 @@ async function ensureTiles(keys, { bg = false, say = () => {} } = {}) {
   let need = keys.filter(k => !got[k] && !inflight.has(k));
   await Promise.all(need.map(async k => { const t = await idb.get(k); if (fresh(t)) { got[k] = t; memTiles.set(k, t); stat.phone++; } }));
   need = need.filter(k => !got[k] && !inflight.has(k));
+  if (need.length) {
+    if (!bg) say(`טוען שבילים מוכנים מראש ל-${need.length} אזורים…`);
+    await Promise.all(need.map(async k => { const t = await staticTile(k); if (t) { got[k] = t; memTiles.set(k, t); idb.set(k, t); stat.shared++; } }));
+    need = need.filter(k => !got[k] && !inflight.has(k));
+  }
   if (need.length && hasGroup()) {
     if (!bg) say(`בודק ${need.length} אזורים במטמון המשותף…`);
     await Promise.all(need.map(async k => { const t = await serverTile(k); if (t) { got[k] = t; memTiles.set(k, t); idb.set(k, t); stat.shared++; } }));
