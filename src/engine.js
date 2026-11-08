@@ -545,8 +545,9 @@ function resolveMilitary(p) {
   const mode = p.military_mode || (p.avoid_military === false ? 'allow' : 'auto');
   if (mode === 'avoid') return { avoid: true, info: null };
   if (mode === 'allow') return { avoid: false, info: null };
-  const info = p.date ? dayInfo(p.date) : null;
-  return { avoid: !(info && info.open), info };
+  if (!p.date) return { avoid: false, info: null, unknownDate: true }; // no date yet: include them, the app warns
+  const info = dayInfo(p.date);
+  return { avoid: !info.open, info };
 }
 function nextSaturday(from = new Date()) {
   const d = new Date(from); const wd = d.getDay();
@@ -668,8 +669,8 @@ function addDays(iso, k) { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(
 function multiMilitary(p) {
   const mode = p.military_mode || 'auto';
   if (mode !== 'auto') return resolveMilitary(p).avoid;
-  const base = p.date || nextSaturday();
-  for (let k = 0; k < (p.days || 1); k++) if (!dayInfo(addDays(base, k)).open) return true;
+  if (!p.date) return false; // no date yet: include them, the app warns
+  for (let k = 0; k < (p.days || 1); k++) if (!dayInfo(addDays(p.date, k)).open) return true;
   return false;
 }
 function planMulti(G, p, nodes, onProgress = () => {}) {
@@ -921,7 +922,7 @@ function parseLocal(text) {
   if (/היום/.test(t)) p.date = iso(today);
   else if (/מחר/.test(t)) { const d = new Date(today); d.setDate(d.getDate() + 1); p.date = iso(d); }
   else if (/שישי/.test(t)) { const d = new Date(today); d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7)); p.date = iso(d); }
-  else p.date = nextSaturday(today);
+
   if (/כולל שטחי? אש|גם בשטח אש/.test(t)) p.military_mode = 'allow';
   if (/בלי שטחי? אש|לא בשטח אש/.test(t)) p.military_mode = 'avoid';
   if (/(כולל|לפתוח|לאפשר|גם ב|מותר)\s*(את\s*)?שטח(י)?\s*(A|א'|א׳)(?![a-z\u0590-\u05FF])/i.test(t)) p.allow_area_a = true;

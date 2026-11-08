@@ -58,7 +58,7 @@ header button{pointer-events:auto;margin-inline-start:auto}
 .grip{width:40px;height:4px;border-radius:2px;background:var(--stone-2);margin:4px auto 10px;cursor:pointer;border:0;display:block}
 #body{overflow-y:auto;display:flex;flex-direction:column;gap:12px;min-height:0}
 .promptrow{display:flex;gap:8px;align-items:stretch}
-textarea{flex:1;min-width:0;resize:none;font:inherit;font-size:16px;color:var(--ink);background:var(--stone);border:1px solid transparent;border-radius:10px;padding:10px 12px;line-height:1.45}
+textarea{flex:1;min-width:0;resize:none;min-height:76px;max-height:40vh;overflow-y:auto;font:inherit;font-size:16px;color:var(--ink);background:var(--stone);border:1px solid transparent;border-radius:10px;padding:10px 12px;line-height:1.45}
 textarea:focus{background:#fff;border-color:var(--accent)}
 textarea:focus,select:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .go{background:var(--accent);color:var(--accent-ink);border:0;border-radius:10px;font:600 15px var(--body);padding:10px 16px;cursor:pointer;white-space:nowrap}
@@ -163,6 +163,23 @@ ul.pois li{margin-bottom:8px}
 .lg.open{background:#e9f6ee}.lg.hol{background:#2e9b4f}.lg.sel{background:#fff;outline:2px solid var(--accent);outline-offset:-2px}
 .calnext{font-size:13px;margin-top:8px;display:flex;flex-direction:column;gap:3px}
 .calnext button{background:none;border:0;padding:0;color:var(--accent);font:inherit;cursor:pointer;text-align:start}
+.daydot{width:22px;height:22px;border-radius:50%;background:var(--c);color:#fff;font:700 12px var(--body);display:grid;place-items:center;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.milsw{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px}
+.milsw button{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:5px 10px;font:500 13px var(--body);cursor:pointer}
+.milsw button[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.milsw button.cal{border-style:dashed}
+.stops{border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:8px}
+.stops h3{margin:0;padding:8px 10px;font-size:13px;font-weight:600;background:var(--stone);display:flex;justify-content:space-between;align-items:center}
+.stop{display:grid;grid-template-columns:22px 1fr auto;gap:2px 8px;align-items:center;padding:7px 10px;border-top:1px solid var(--line)}
+.stop .sn{width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center}
+.stop .sn.st{background:#2e9b4f}.stop .sn.en{background:#1d2320}
+.stop .tx{font-size:14px;min-width:0}
+.stop .tx small{display:block;font-size:12px;color:var(--muted)}
+.stop .bt{display:flex;gap:2px}
+.stop .bt button{border:0;background:none;color:var(--muted);font-size:15px;width:28px;height:28px;border-radius:6px;cursor:pointer}
+.stop .bt button:hover{background:var(--stone);color:var(--ink)}
+.refine{display:flex;gap:8px;margin-top:8px}
+.refine input{flex:1;min-width:0;font:inherit;font-size:15px;color:var(--ink);background:var(--stone);border:1px solid transparent;border-radius:8px;padding:9px 10px}
 .daychips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-top:8px}
 .daychips button{flex:none;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:7px 12px;font:500 13px var(--body);cursor:pointer;font-variant-numeric:tabular-nums}
 .daychips button[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
@@ -227,7 +244,7 @@ ul.pois li{margin-bottom:8px}
   <button class="grip" id="grip" aria-label="כווץ / הרחב"></button>
   <div id="body">
     <div class="promptrow">
-      <div class="pwrap"><textarea id="prompt" rows="2" placeholder="למשל: חצי יום בגולן מקצרין, בינוני, עם מעיין ותצפית"></textarea>
+      <div class="pwrap"> <textarea id="prompt" rows="3" placeholder="למשל: חצי יום בגולן מקצרין, בינוני, עם מעיין ותצפית"></textarea>
         <button class="mic" id="micBtn" type="button" aria-label="דברו במקום להקליד" title="דברו במקום להקליד"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg></button></div>
       <button class="go" id="goBtn">בנה מסלול</button>
     </div>
@@ -269,6 +286,8 @@ ul.pois li{margin-bottom:8px}
       <div style="margin-top:8px"><div class="bar" id="bar"></div><div class="legend" id="legend"></div></div>
       <div id="warns" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
       <div id="dayPlan"></div>
+      <div id="stopsBox"></div>
+      <div class="refine" id="refineRow"><input type="text" id="refineIn" placeholder="שיפור במילים: &quot;תסיים באילת&quot;, &quot;תוסיף עצירה בעין עבדת&quot;, &quot;פחות כביש&quot;"><button class="ghost" id="refineBtn">עדכון</button></div>
       <div id="wx"></div>
       <div id="poiList" style="margin-top:6px"></div>
       <div class="saverow" style="margin-top:10px" id="saveRow">
@@ -380,11 +399,12 @@ function setEnd(ll, label) { pickedEnd = ll; if (endMarker) endMarker.remove(); 
 map.on('click', ev => {
   const ll = [ev.latlng.lat, ev.latlng.lng];
   const div = document.createElement('div');
-  div.innerHTML = '<div class="popbtns"><button data-a="s">התחלה מכאן</button><button data-a="e">יעד כאן</button><button data-a="w">מזג אוויר כאן</button></div><div class="wxpop"></div>';
+  div.innerHTML = '<div class="popbtns"><button data-a="s">התחלה מכאן</button><button data-a="e">יעד כאן</button><button data-a="v">תחנה בדרך</button><button data-a="w">מזג אוויר כאן</button></div><div class="wxpop"></div>';
   const pop = L.popup().setLatLng(ev.latlng).setContent(div).openOn(map);
   div.onclick = e => {
     const a = e.target.dataset.a; if (!a) return;
     if (a === 'w') { pointForecast(ll, div.querySelector('.wxpop')).then(() => pop.update()); return; }
+    if (a === 'v') { map.closePopup(pop); addStopAt(ll); return; }
     if (a === 's') setStart(ll, '📍 נקודה על המפה'); else { setEnd(ll, '📍 נקודה על המפה'); $('pLoop').value = '0'; }
     map.closePopup(pop);
   };
@@ -405,6 +425,9 @@ for (const [k, v] of Object.entries(POI_TYPES)) {
   const l = document.createElement('label'); l.innerHTML = `<input type="checkbox" value="${k}"> ${v.he}`; $('pPois').append(l);
 }
 // grip: normal → full → collapsed → normal
+// prompt grows with its text
+const growPrompt = () => { const t = $('prompt'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight + 2, innerHeight * 0.4) + 'px'; };
+$('prompt').addEventListener('input', growPrompt); setTimeout(growPrompt, 0);
 $('grip').onclick = () => {
   const s = $('sheet').classList;
   if (s.contains('min')) s.remove('min');
@@ -457,7 +480,7 @@ function fillForm(p) {
   $('pMil').value = p.military_mode || (p.avoid_military === false ? 'allow' : 'auto');
   $('pAA').value = p.allow_area_a ? '1' : '0';
   $('pDays').value = p.days || 1; $('pHpd').value = p.hours_per_day || '';
-  $('pDate').value = p.date || nextSaturday();
+  $('pDate').value = p.date || '';
   milNote();
 }
 function readForm(prev = {}) {
@@ -472,7 +495,7 @@ function readForm(prev = {}) {
     difficulty: $('pDiff').value, vehicle: $('pVeh').value,
     poi_types: [...$('pPois').querySelectorAll('input:checked')].map(i => i.value),
     via: viaNames.map(n => (prev.via || []).find(v => v.name === n) || { name: n }),
-    avoid_asphalt: $('pAsph').checked, military_mode: $('pMil').value, allow_area_a: $('pAA').value === '1', days: Math.max(1, +$('pDays').value || 1), hours_per_day: +$('pHpd').value || null, date: $('pDate').value || nextSaturday(),
+    avoid_asphalt: $('pAsph').checked, military_mode: $('pMil').value, allow_area_a: $('pAA').value === '1', days: Math.max(1, +$('pDays').value || 1), hours_per_day: +$('pHpd').value || null, date: $('pDate').value || null,
     summary_he: prev.summary_he,
   };
 }
@@ -499,7 +522,7 @@ const TOOL = {
       from_my_location: { type: 'boolean', description: 'True if the user says to start from their current location (מהמיקום שלי / מכאן)' },
       avoid_asphalt: { type: 'boolean' },
       sunset: { type: 'boolean', description: 'True if the user wants a sunset stop (a viewpoint late in the day)' },
-      date: { type: 'string', description: 'Trip date YYYY-MM-DD. Resolve relative words (מחר, שבת, בחג) against today. If not stated, the coming Saturday.' },
+      date: { type: 'string', description: 'Trip start date YYYY-MM-DD, only if the user states or implies one (מחר, בשבת, בחול המועד פסח). Omit if unknown.' },
       allow_area_a: { type: 'boolean', description: 'True ONLY if the user explicitly asks to allow passing through Area A (Palestinian Authority areas). Default false.' },
       military_mode: { type: 'string', enum: ['auto', 'avoid', 'allow'], description: 'Firing zones: auto (default: allowed only on weekends/holidays), avoid, or allow if the user explicitly wants them' },
       summary_he: { type: 'string', description: 'One short Hebrew sentence restating what was understood' },
@@ -509,7 +532,8 @@ const TOOL = {
 };
 const SYSTEM = () => `Today is ${new Date().toISOString().slice(0, 10)} (${new Date().toLocaleDateString('en-US', { weekday: 'long' })}). You plan 4x4 jeep trips in Israel for a group of friends and convert each request into structured parameters by calling route_request exactly once at the end.
 - Include lat/lon for every place (Israel only). Use web_search when you are not sure of a place's location or when the request is themed.
-- Themed requests (a historical event or military operation, a book, a person, a named trail, "in the footsteps of", "בעקבות"): research the theme, then choose the real sites in order as start, via and end. Prefer points reachable by 4x4 (trailheads, memorial sites, viewpoints, ruins) over city centers, and skip sites that are now inside military bases or Area A. Add a short Hebrew note per via and a 2-4 sentence Hebrew story_he. Keep at most 8 vias.
+- Themed requests (a historical event or military operation, a book, a person, a named trail, "in the footsteps of", "בעקבות"): research the theme, then choose the real sites in order as start, via and end. Prefer points reachable by 4x4 (trailheads, memorial sites, viewpoints, ruins) over city centers, and skip sites that are now inside military bases or Area A. Add a short Hebrew note per via and a 2-4 sentence Hebrew story_he. Keep at most 8 vias. The theme's final destination MUST be "end" (with lat/lon), never left out or put only in via.
+- Refinement requests come with the current parameters as JSON: return the full updated parameters, changing only what was asked.
 - If the user did not say where to start: for themed trips start at the theme's natural starting point; otherwise omit start. If they say "from my location", set from_my_location.
 - Defaults: vehicle raised, difficulty medium, point-to-point (loop=false). For several days set days, and include nightcamp in poi_types.`;
 const PARSE_MODEL = 'claude-sonnet-5-5';
@@ -544,7 +568,7 @@ async function parseSmart(text) {
     tu = (r.content || []).find(c => c.type === 'tool_use' && c.name === 'route_request');
   }
   if (!tu) throw Object.assign(new Error('לא התקבל פענוח'), { detail: 'Claude לא החזיר פרמטרים' });
-  const out = { allow_area_a: false, military_mode: 'auto', date: nextSaturday(), via: [], ...tu.input, _searched: searched };
+  const out = { allow_area_a: false, military_mode: 'auto', via: [], ...tu.input, _searched: searched };
   for (const pl of [out.start, out.end, ...(out.via || [])]) if (pl && pl.lat && pl.lon) pl.researched = true;
   return out;
 }
@@ -844,7 +868,7 @@ async function run(fromPrompt) {
       $('understood').hidden = !und; $('understood').textContent = und; $('understood').style.whiteSpace = 'pre-line';
     } else {
       p = readForm(current?.p || {});
-      $('understood').hidden = true;
+      p.story_he = current?.p?.story_he; p._startNote = current?.p?._startNote;
     }
 
     status('מאתר מקומות…');
@@ -1175,6 +1199,65 @@ $('calClose').onclick = () => $('calDlg').close();
 $('pDate').addEventListener('change', () => { if (current && !$('results').hidden) render(current.sel, current.day); });
 $('pTime').addEventListener('change', () => { if (current && !$('results').hidden) render(current.sel, current.day); });
 
+// ---------- editing the plan: stops list + refine in words ----------
+function stopName(x) { return x?.name || 'נקודה על המפה'; }
+function renderStops(p, r) {
+  const box = $('stopsBox'); box.innerHTML = '';
+  $('refineRow').hidden = !!current.saved;
+  if (current.saved) return;
+  const vias = p.via || [];
+  const el = document.createElement('div'); el.className = 'stops';
+  el.innerHTML = `<h3>תחנות המסלול<button class="ghost" type="button" id="addStopBtn" style="padding:3px 9px;font-size:12px">+ תחנה מהמפה</button></h3>`;
+  const row = (cls, label, name, note, btns) => {
+    const d = document.createElement('div'); d.className = 'stop';
+    d.innerHTML = `<span class="sn ${cls}"></span><span class="tx"></span><span class="bt"></span>`;
+    d.querySelector('.sn').textContent = label; d.querySelector('.tx').textContent = name;
+    if (note) { const s = document.createElement('small'); s.textContent = note; d.querySelector('.tx').append(s); }
+    for (const [t, title, fn] of btns) { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.title = title; b.setAttribute('aria-label', title); b.onclick = fn; d.querySelector('.bt').append(b); }
+    el.append(d);
+  };
+  row('st', '▶', stopName(p.start), p._startNote || 'התחלה', []);
+  vias.forEach((v, i) => row('', String(i + 1), stopName(v), v.note || '', [
+    ['↑', 'להקדים', () => moveStop(i, -1)], ['↓', 'לאחר', () => moveStop(i, 1)], ['✕', 'להסיר', () => removeStop(i)],
+  ].filter(([t]) => !(t === '↑' && i === 0) && !(t === '↓' && i === vias.length - 1))));
+  row('en', '■', p.loop ? stopName(p.start) + ' (לופ)' : p.end ? stopName(p.end) : 'נבחר אוטומטית', p.loop ? 'חזרה להתחלה' : p.end ? 'סיום' : 'אין יעד: המערכת בחרה סיום', []);
+  box.append(el);
+  $('addStopBtn').onclick = () => status('לחצו על המפה במקום הרצוי ובחרו "תחנה בדרך".');
+}
+function syncViaField() { $('pVia').value = (current.p.via || []).map(v => v.name).join(', '); }
+function moveStop(i, d) { const v = current.p.via; [v[i], v[i + d]] = [v[i + d], v[i]]; syncViaField(); run(false); }
+function removeStop(i) { current.p.via.splice(i, 1); syncViaField(); run(false); }
+function addStopAt(ll) {
+  if (!current) { status('קודם בנו מסלול, ואז אפשר להוסיף לו תחנות.'); return; }
+  const n = (current.p.via || []).filter(v => v.name.startsWith('📍')).length + 1;
+  const v = { name: `📍 תחנה ${n}`, latlng: ll };
+  // insert where it fits best: before the stop it is closest to along the way
+  const pts = [current.p.start, ...(current.p.via || []), current.p.end].filter(Boolean).map(x => x.latlng || (x.lat ? [x.lat, x.lon] : null));
+  let at = (current.p.via || []).length;
+  if (pts.every(Boolean) && pts.length > 1) { let best = Infinity; for (let i = 0; i + 1 < pts.length; i++) { const c = hav(pts[i][0], pts[i][1], ll[0], ll[1]) + hav(ll[0], ll[1], pts[i + 1][0], pts[i + 1][1]) - hav(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1]); if (c < best) { best = c; at = i; } } }
+  (current.p.via ||= []).splice(Math.min(at, current.p.via.length), 0, v);
+  syncViaField(); run(false);
+}
+$('refineBtn').onclick = async () => {
+  const ask = $('refineIn').value.trim(); if (!ask || !current) return;
+  if (!hasGroup() && !store.get('apiKey')) { status('שיפור במילים צריך את הפענוח החכם: הכניסו קוד קבוצה ב-⚙. בינתיים אפשר לערוך תחנות ידנית או בהגדרות המסלול.', true); return; }
+  const slim = JSON.parse(JSON.stringify(current.p, (k, v) => k.startsWith('_') || k === 'researched' ? undefined : v));
+  $('refineBtn').disabled = true; status('מעדכן את הטיול לפי הבקשה…');
+  try {
+    const np = await parseSmart(`הפרמטרים הנוכחיים של הטיול (JSON):\n${JSON.stringify(slim)}\n\nבקשת שינוי: ${ask}\n\nהחזר את כל הפרמטרים המעודכנים ב-route_request.`);
+    for (const k of ['start', 'end']) if (np[k] && current.p[k] && np[k].name === current.p[k].name && current.p[k].latlng) np[k].latlng = current.p[k].latlng;
+    np.via = (np.via || []).map(v => ({ ...((current.p.via || []).find(o => o.name === v.name) || {}), ...v }));
+    if (!np.date && current.p.date) np.date = current.p.date;
+    current.p = { ...np, story_he: np.story_he || current.p.story_he };
+    fillForm(current.p); $('refineIn').value = '';
+    await run(false);
+    const und = [np.summary_he ? 'עודכן: ' + np.summary_he : null, current.p.story_he || null].filter(Boolean).join('\n');
+    if (und) { $('understood').hidden = false; $('understood').textContent = und; }
+  } catch (e) { status('העדכון נכשל: ' + (e.detail || e.message), true); }
+  finally { $('refineBtn').disabled = false; }
+};
+$('refineIn').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('refineBtn').click(); } });
+
 const fmtH = h => { const hh = Math.floor(h), mm = Math.round((h - hh) * 60 / 5) * 5; return mm === 60 ? `${hh + 1}:00` : `${hh}:${String(mm).padStart(2, '0')}`; };
 // keep the route clear of the panel, wherever the panel sits (bottom sheet / side panel)
 function mapPad() {
@@ -1183,6 +1266,7 @@ function mapPad() {
   const target = Math.min(sh.height, parseFloat(getComputedStyle($('sheet')).maxHeight) || sh.height); // sheet may still be animating
   return { paddingTopLeft: [20, 70], paddingBottomRight: [20, Math.max(40, target + 16)] };
 }
+const DAYC = ['#1f6fd6', '#d2691e', '#7a3fc2', '#0e9a8a', '#c2185b', '#5d7a1f', '#b8860b'];
 function segsInRange(r, from, to) {
   const out = []; let idx = 0;
   for (const sg of r.segs) {
@@ -1208,7 +1292,13 @@ function render(i, day = null) {
   routeLayer.clearLayers(); markLayer.clearLayers();
   res.results.forEach((x, k) => { if (k !== i) L.polyline(x.coords, { color: '#646b66', weight: 3, opacity: .5, dashArray: '4 6' }).addTo(routeLayer).on('click', () => render(k)); });
   L.polyline(r.coords, { color: '#fff', weight: 9, opacity: dv ? .6 : 1 }).addTo(routeLayer);
-  for (const sg of r.segs) L.polyline(sg.pts, { color: DCOL(sg.d < 0 ? 'x' : sg.d), weight: 5, opacity: dv ? .25 : 1 }).addTo(routeLayer);
+  if (D && !dv) { // whole trip: one colour per day, numbered dot where each day starts
+    D.forEach((d, k) => {
+      L.polyline(r.coords.slice(d.from, d.to + 1), { color: DAYC[k % DAYC.length], weight: 5, dashArray: k % 2 ? '10 6' : null }).addTo(routeLayer);
+      const c = r.coords[d.from];
+      L.marker(c, { icon: L.divIcon({ className: '', html: `<div class="daydot" style="--c:${DAYC[k % DAYC.length]}">${k + 1}</div>`, iconSize: [22, 22], iconAnchor: [11, 11] }), zIndexOffset: 800 }).addTo(markLayer).bindTooltip('תחילת יום ' + (k + 1));
+    });
+  } else for (const sg of r.segs) L.polyline(sg.pts, { color: DCOL(sg.d < 0 ? 'x' : sg.d), weight: 5, opacity: dv ? .25 : 1 }).addTo(routeLayer);
   if (dv) {
     L.polyline(r.coords.slice(dv.from, dv.to + 1), { color: '#fff', weight: 11 }).addTo(routeLayer);
     for (const sg of segsInRange(r, dv.from, dv.to)) L.polyline(sg.pts, { color: DCOL(sg.d < 0 ? 'x' : sg.d), weight: 6 }).addTo(routeLayer);
@@ -1218,6 +1308,7 @@ function render(i, day = null) {
     const mk = (label, k) => { const b = document.createElement('button'); b.textContent = label; b.setAttribute('aria-pressed', k === day); b.onclick = () => render(i, k); $('dayChips').append(b); };
     mk(`כל הטיול · ${D.length} ימים`, null);
     D.forEach((d, k) => mk(`יום ${k + 1} · ${(d.len / 1000).toFixed(0)} ק"מ`, k));
+    [...$('dayChips').children].slice(1).forEach((b, k) => { b.style.borderInlineStart = `4px solid ${DAYC[k % DAYC.length]}`; });
   }
   if (startMarker) { startMarker.remove(); startMarker = null; }
   if (endMarker) { endMarker.remove(); endMarker = null; }
@@ -1276,15 +1367,23 @@ function render(i, day = null) {
   if (D && mr.avoid && (p.military_mode || 'auto') === 'auto') w.push('אחד מימי הטיול הוא יום חול, אז שטחי אש לא נכללו בכל הטיול.');
   if (r.aa > 0) w.push(`⚠ ${(r.aa / 1000).toFixed(1)} ק"מ עוברים בשטח A. הכניסה לשטחי A אסורה על אזרחים ישראלים בצו אלוף ומסוכנת. פתחתם את זה ידנית: ודאו שיש לכם היתר.`);
   else if (r.js > 0) w.push(`${(r.js / 1000).toFixed(1)} ק"מ עוברים ביהודה ושומרון. שטחי A המרכזיים חסומים, אבל המיפוי גס: שימו לב לשלטים האדומים בכניסה לשטחי A ולכפרים.`);
-  if (!r.unrated && r.mil > 0) w.push(`${(r.mil / 1000).toFixed(1)} ק"מ עוברים בשטח אש${mr.info?.open ? ` (${mr.info.why})` : ''}. בדרך כלל פתוח בסופ"ש ובחגים, אבל הפתיחה משתנה: ודאו מול פרסומי צה"ל לשטחי אש לתאריך הספציפי לפני יציאה.`);
+  if (!r.unrated && r.mil > 0) w.push(`${(r.mil / 1000).toFixed(1)} ק"מ עוברים בשטח אש${mr.info?.open ? ` (${mr.info.why})` : ''}.${!p.date && (p.military_mode || 'auto') === 'auto' ? ' עוד לא נבחר תאריך, אז הם נכללו.' : ''} בדרך כלל פתוחים בסופ"ש ובחגים, אבל הפתיחה משתנה: ודאו מול פרסומי צה"ל לשטחי אש לתאריך הספציפי לפני יציאה.`);
   else if (!current.saved && mr.avoid && mr.info && !mr.info.open) w.push(`התאריך הוא ${mr.info.why}, אז שטחי אש לא נכללו. בסופ"ש יהיו יותר אפשרויות.`);
   if (r.reuse / r.len > 0.15) w.push(`${(r.reuse / 1000).toFixed(1)} ק"מ נוסעים פעמיים באותו קטע (הלוך-חזור).`);
   if (!current.saved && current.res.L && (p.duration_hours || p.distance_km) && Math.abs(r.len - current.res.L) / current.res.L > 0.35) w.push('לא מצאתי מסלול באורך המבוקש בדיוק. זה הקרוב ביותר.');
   w.push('המסלול מבוסס על נתוני OSM. מצב השטח בפועל (שיטפונות, חסימות, סגירת שמורות) יכול להשתנות: בדקו לפני יציאה.');
   $('warns').innerHTML = w.map(t => `<div class="warn">${t}</div>`).join('');
-  if (w.some(t => /שטח(י)? אש/.test(t))) {
-    const b = document.createElement('button'); b.className = 'ghost'; b.style.alignSelf = 'flex-start'; b.textContent = 'לוח שטחי אש: בחירת תאריך פתוח'; b.onclick = openCalendar;
-    $('warns').append(b);
+  if (!current.saved) { // quick firing-zone switch, works without a date
+    const row = document.createElement('div'); row.className = 'milsw';
+    row.innerHTML = '<span>שטחי אש:</span>';
+    const cur = p.military_mode || 'auto';
+    for (const [v, t] of [['auto', p.date ? 'לפי התאריך' : 'לפי התאריך (לא נבחר)'], ['allow', 'לכלול'], ['avoid', 'להימנע']]) {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.setAttribute('aria-pressed', cur === v);
+      b.onclick = () => { if (cur === v) return; $('pMil').value = v; milNote(); run(false); };
+      row.append(b);
+    }
+    const c = document.createElement('button'); c.type = 'button'; c.className = 'cal'; c.textContent = 'לוח'; c.onclick = openCalendar; row.append(c);
+    $('warns').append(row);
   }
   renderWeather(r, { ...p, date: $('pDate').value || p.date }, D);
   $('dayPlan').innerHTML = '';
@@ -1293,7 +1392,7 @@ function render(i, day = null) {
     D.forEach((d, k) => {
       const b = document.createElement('button'); b.className = 'dayrow';
       b.innerHTML = `<span class="dn"></span><span class="dt"></span><span class="dm"></span><span class="ds"></span>`;
-      b.querySelector('.dn').textContent = `יום ${k + 1}`;
+      b.querySelector('.dn').textContent = `יום ${k + 1}`; b.querySelector('.dn').style.cssText = `background:${DAYC[k % DAYC.length]};color:#fff`;
       b.querySelector('.dt').textContent = d.camp ? `לינה: ${d.camp.name}` : 'סיום הטיול';
       b.querySelector('.dm').textContent = `${(d.len / 1000).toFixed(0)} ק"מ · ${fmtH(d.hrs)}`;
       b.querySelector('.ds').textContent = [d.mid ? 'עצירה: ' + d.mid.name : null, d.camp ? (d.camp.type === 'dayend' ? 'אין חניון לילה מורשה קרוב. בדקו חלופה לפני היציאה.' : campSub(d.camp)) : null].filter(Boolean).join(' · ');
@@ -1302,6 +1401,7 @@ function render(i, day = null) {
     });
     $('dayPlan').append(box);
   }
+  renderStops(p, r);
   $('poiList').innerHTML = '';
   if (r.pois.length) {
     const ul = document.createElement('ul'); ul.className = 'pois';
