@@ -37,6 +37,6 @@ const CASES = [
     console.log(`\n# ${c.name}  [${keys.length} tiles, N=${G.N}, load ${t1 - t0}ms, plan ${Date.now() - t1}ms, target ${((res.L || 0) / 1000).toFixed(0)}km]`);
     if (!res.results.length) console.log('  NO ROUTE:', res.reason);
     if (res.note) console.log('  note:', res.note);
-    for (const r of res.results) console.log('  ', fmt(r));
+    for (const r of res.results) { console.log('  ', fmt(r)); const S = E.safetyInfo(G, r.edges, r.stops[0]); console.log('      safety: bail', S.bail ? (S.bail.m / 1000).toFixed(1) + 'km' : '-', 'fuel', S.fuel.length, 'gap', S.fuelGap.toFixed(0) + 'km', 'water', S.water.length, 'reserve', (r.res / 1000).toFixed(1) + 'km'); }
   }
 })();

@@ -539,11 +539,12 @@ function readForm(prev = {}) {
 // ---------- LLM ----------
 const TOOL = {
   name: 'route_request',
-  description: 'Structured off-road (4x4 jeep) route request in Israel, extracted from a Hebrew or English prompt.',
+  description: 'Structured off-road (4x4 jeep) route request in Israel or Europe, extracted from a Hebrew or English prompt.',
   input_schema: {
     type: 'object',
     properties: {
-      start: { type: 'object', properties: { name: { type: 'string', description: 'Place name in Hebrew as it would appear on a map' }, lat: { type: 'number' }, lon: { type: 'number' } }, description: 'Start point. Omit if not stated.' },
+      country: { type: 'string', description: 'ISO 3166-1 alpha-2 code of the trip country (IL for Israel, FR, IT, RO…)' },
+      start: { type: 'object', properties: { name: { type: 'string', description: 'Place name: Hebrew as on an Israeli map; abroad, the local/English name' }, lat: { type: 'number' }, lon: { type: 'number' } }, description: 'Start point. Omit if not stated.' },
       end: { type: 'object', properties: { name: { type: 'string' }, lat: { type: 'number' }, lon: { type: 'number' } }, description: 'Destination for point-to-point routes. Omit for loops.' },
       loop: { type: 'boolean', description: 'True ONLY if the user asks for a loop / circular route / to return to the start. Default false (point-to-point). If no destination is given, leave end empty and the planner picks one.' },
       duration_hours: { type: 'number', description: 'Total trip duration in hours, if stated (single-day trips only)' },
@@ -566,8 +567,9 @@ const TOOL = {
     required: ['loop', 'difficulty', 'vehicle', 'poi_types', 'summary_he'],
   },
 };
-const SYSTEM = () => `Today is ${new Date().toISOString().slice(0, 10)} (${new Date().toLocaleDateString('en-US', { weekday: 'long' })}). You plan 4x4 jeep trips in Israel for a group of friends and convert each request into structured parameters by calling route_request exactly once at the end.
-- Include lat/lon for every place (Israel only). Use web_search when you are not sure of a place's location or when the request is themed.
+const SYSTEM = () => `Today is ${new Date().toISOString().slice(0, 10)} (${new Date().toLocaleDateString('en-US', { weekday: 'long' })}). You plan 4x4 jeep trips in Israel and in Europe for a group of Israeli friends and convert each request into structured parameters by calling route_request exactly once at the end.
+- Include lat/lon for every place and set country.
+- Europe: names in the local/English form. Prefer regions and routes where driving unpaved public roads is legal (e.g. known overland/4x4 routes, TET sections), start at a town, and for several days rely on official campsites (nightcamp). Israeli rules (firing zones, Area A) do not apply abroad. Use web_search when you are not sure of a place's location or when the request is themed.
 - Themed requests (a historical event or military operation, a book, a person, a named trail, "in the footsteps of", "בעקבות"): research the theme, then choose the real sites in order as start, via and end. Prefer points reachable by 4x4 (trailheads, memorial sites, viewpoints, ruins) over city centers, and skip sites that are now inside military bases or Area A. Add a short Hebrew note per via and a 2-4 sentence Hebrew story_he. Keep at most 8 vias. The theme's final destination MUST be "end" (with lat/lon), never left out or put only in via.
 - Refinement requests come with the current parameters as JSON: return the full updated parameters, changing only what was asked.
 - If the user did not say where to start: for themed trips start at the theme's natural starting point; otherwise omit start. If they say "from my location", set from_my_location.
@@ -622,15 +624,17 @@ async function geocode(place) {
   if (place.latlng) return place.latlng;
   const name = place.name;
   if (geoCache[name]) return geoCache[name];
-  const local = lookupPlace(name);
+  const abroad = (place.country && place.country !== 'IL') || (place.lat && place.lon && !inIsrael(place.lat, place.lon));
+  const local = abroad ? null : lookupPlace(name);
   if (place.lat && place.lon && place.researched) { // coordinates Claude looked up win, unless our list agrees with them
     return local && hav(local[0], local[1], place.lat, place.lon) < 15000 ? local : [place.lat, place.lon];
   }
   if (local) return local;
   let ll = null;
   try {
-    const u = 'https://nominatim.openstreetmap.org/search?format=json&limit=3&viewbox=34.2,33.45,35.95,29.4&bounded=1&accept-language=he&q=' + encodeURIComponent(name);
-    const j = await (await fetch(u)).json();
+    const NOM = 'https://nominatim.openstreetmap.org/search?format=json&limit=3&accept-language=he,en&q=' + encodeURIComponent(name);
+    let j = abroad ? [] : await (await fetch(NOM + '&viewbox=34.2,33.45,35.95,29.4&bounded=1')).json();
+    if (!j.length) j = await (await fetch(NOM + (place.country && place.country !== 'IL' ? '&countrycodes=' + place.country.toLowerCase() : ''))).json(); // Europe & anywhere else
     if (j.length) {
       let best = j[0];
       if (place.lat) best = j.reduce((a, b) => hav(+a.lat, +a.lon, place.lat, place.lon) < hav(+b.lat, +b.lon, place.lat, place.lon) ? a : b);
@@ -672,6 +676,7 @@ async function ungz(buf) { return JSON.parse(await new Response(new Blob([buf]).
 const STATIC_TILES = 'https://raw.githubusercontent.com/chemik13/offroad/tiles/';
 async function staticTile(key) {
   if (!canGzip) return null;
+  { const b = tileBBox(key); if (!inIsrael((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) && !inIsrael(b[0], b[1]) && !inIsrael(b[2], b[3])) return null; } // weekly tiles cover Israel only
   try {
     const r = await fetch(STATIC_TILES + key + '.json.gz', { cache: 'no-cache' });
     if (!r.ok) return null;
@@ -1007,6 +1012,37 @@ async function renderElevation(r) {
   }
 }
 
+// ---------- abroad: legality differs a lot by country ----------
+const COUNTRY_RULES = {
+  FR: 'צרפת: דרכי עפר ציבוריות (chemins ruraux) פתוחות בדרך כלל לרכב, אלא אם יש שלט איסור או צו של הכפר. לרדת מהדרך אסור.',
+  ES: 'ספרד: הכללים לפי מחוז. הרבה דרכי יער ושמורות סגורות או דורשות היתר; שימו לב לשלטי "prohibido el paso".',
+  PT: 'פורטוגל: יחסית ידידותית ל-4x4 בדרכי עפר ציבוריות, חוץ משמורות וימי סכנת שריפה בקיץ.',
+  IT: 'איטליה: הרבה דרכי עפר ויער סגורות לרכב לפי חוק אזורי. נוסעים רק כשאין שלט איסור.',
+  DE: 'גרמניה: דרכי יער ושדות כמעט תמיד סגורות לרכב פרטי. נהיגת שטח חוקית בעיקר בפארקי 4x4.',
+  AT: 'אוסטריה: דרכי יער ושדות סגורות לרכב פרטי ברוב המקרים.', CH: 'שווייץ: נהיגה בדרכי עפר מוגבלת מאוד; רוב דרכי היער והאלפים סגורות לרכב פרטי.',
+  NO: 'נורווגיה: נסיעת שטח אסורה בחוק. דרכים פרטיות רבות פתוחות בתשלום (bomvei).', SE: 'שבדיה: נסיעת שטח אסורה בחוק; דרכי יער פרטיות פתוחות לפעמים, לפי שילוט.', FI: 'פינלנד: נסיעת שטח אסורה בחוק; נוסעים רק בדרכים פתוחות לרכב.',
+  IS: 'איסלנד: נסיעה מחוץ לדרך אסורה וקנסות כבדים. דרכי F פתוחות רק בקיץ: בדקו ב-road.is.',
+  GB: 'בריטניה: מותר רק ב-green lanes / BOATs (אפשר לבדוק ב-TrailWise). כל השאר אסור.',
+  RO: 'רומניה: ידידותית יחסית ל-4x4 בדרכי עפר, אבל פארקים לאומיים ושמורות סגורים.', BG: 'בולגריה: ידידותית יחסית לדרכי עפר, חוץ מפארקים לאומיים.',
+  AL: 'אלבניה: ידידותית מאוד ל-4x4; מצב הדרכים משתנה מאוד אחרי חורף.', GR: 'יוון: דרכי עפר רבות פתוחות; שמורות ויערות מוגנים לא.',
+  ME: 'מונטנגרו: הרבה דרכי עפר פתוחות; בפארקים לאומיים יש הגבלות.', BA: 'בוסניה: היזהרו ממוקשים! לא יורדים מדרכים מוכרות ומסומנות.', HR: 'קרואטיה: היזהרו משרידי מוקשים באזורי הגבול הישנים; נוסעים רק בדרכים מוכרות.',
+};
+const countryCache = {};
+async function countryOf(lat, lon) {
+  const k = lat.toFixed(1) + ',' + lon.toFixed(1);
+  if (countryCache[k] !== undefined) return countryCache[k];
+  try { const j = await (await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&zoom=3&lat=${lat}&lon=${lon}`)).json(); countryCache[k] = (j.address?.country_code || '').toUpperCase() || null; }
+  catch { countryCache[k] = null; }
+  return countryCache[k];
+}
+function abroadNote(r) {
+  const c0 = r.coords[0], id = 'abroad' + Math.random().toString(36).slice(2, 7);
+  const fill = cc => { const el = document.getElementById(id); if (el) el.textContent = (COUNTRY_RULES[cc] || 'בדקו את חוקי נהיגת השטח של המדינה: הם שונים מאוד בין מדינות באירופה.'); };
+  const cc = current?.p?.country && current.p.country !== 'IL' ? current.p.country : null;
+  setTimeout(() => cc ? fill(cc) : countryOf(c0[0], c0[1]).then(fill), 0);
+  return `מחוץ לישראל: המסלול עובר רק בדרכים שלא מסומנות ב-OSM כסגורות לרכב (כולל "לחקלאות/ייעור בלבד"). השילוט בשטח קובע. לינה רק בקמפינג רשמי: קמפינג פראי עם רכב אסור ברוב אירופה. <b id="${id}"></b>`;
+}
+
 // ---------- safety: bail-out to asphalt, fuel, drinking water ----------
 const isIL = r => { const c = r.coords[0]; return inIsrael(c[0], c[1]); };
 let safeLayer = null;
@@ -1022,12 +1058,12 @@ function renderSafety(r, dv) {
   const ic = (k, t) => L.divIcon({ className: '', html: `<div class="safeic ${k}">${t}</div>`, iconSize: [20, 20], iconAnchor: [10, 10] });
   for (const f of S.fuel) L.marker([f.lat, f.lon], { icon: ic('fuel', '⛽') }).addTo(safeLayer).bindTooltip(`${f.name} · ק"מ ${f.km.toFixed(0)}`);
   for (const f of S.water) L.marker([f.lat, f.lon], { icon: ic('water', '💧') }).addTo(safeLayer).bindTooltip(`מי שתייה · ק"מ ${f.km.toFixed(0)}`);
-  if (S.bail.m > 3000) L.marker([S.bail.lat, S.bail.lon], { icon: L.divIcon({ className: '', html: `<div class="steepic" style="border-color:#8a5a00;color:#8a5a00">${(S.bail.m / 1000).toFixed(0)} ק"מ מכביש</div>`, iconSize: null, iconAnchor: [0, 0] }) }).addTo(safeLayer).bindTooltip('הנקודה הכי מרוחקת מכביש סלול לאורך המסלול');
+  if (S.bail && S.bail.m > 3000) L.marker([S.bail.lat, S.bail.lon], { icon: L.divIcon({ className: '', html: `<div class="steepic" style="border-color:#8a5a00;color:#8a5a00">${(S.bail.m / 1000).toFixed(0)} ק"מ מכביש</div>`, iconSize: null, iconAnchor: [0, 0] }) }).addTo(safeLayer).bindTooltip('הנקודה הכי מרוחקת מכביש סלול לאורך המסלול');
   const km = x => x.toFixed(0);
   const fuelTxt = S.fuel.length ? S.fuel.slice(0, 6).map(f => `ק"מ ${km(f.km)}`).join(', ') + (S.fuel.length > 6 ? '…' : '') : 'אין תחנות ליד המסלול (עד 2.5 ק"מ)';
   const waterTxt = S.water.length ? S.water.slice(0, 6).map(f => `ק"מ ${km(f.km)}`).join(', ') : 'אין ברזיות מסומנות ליד המסלול. קחו לפחות 5 ליטר לאדם ליום, יותר בקיץ.';
   box.innerHTML = `<div class="wx"><h3>בטיחות בדרך<small>לפי OSM</small></h3>
-    <div class="wxrow" style="grid-template-columns:1fr 1fr 1fr;text-align:center"><span><b>${(S.bail.m / 1000).toFixed(1)}</b><br><small>ק"מ מקסימום מכביש</small></span><span><b>${S.fuel.length}</b><br><small>תחנות דלק בדרך</small></span><span><b>${S.water.length}</b><br><small>נקודות מי שתייה</small></span></div>
+    <div class="wxrow" style="grid-template-columns:1fr 1fr 1fr;text-align:center"><span><b>${S.bail ? (S.bail.m / 1000).toFixed(1) : '?'}</b><br><small>ק"מ מקסימום מכביש</small></span><span><b>${S.fuel.length}</b><br><small>תחנות דלק בדרך</small></span><span><b>${S.water.length}</b><br><small>נקודות מי שתייה</small></span></div>
     <div class="safelist">⛽ ${fuelTxt}<br>💧 ${waterTxt}</div></div>`;
 }
 
@@ -1153,6 +1189,7 @@ async function run(fromPrompt, preset = null) {
     }
 
     status('מאתר מקומות…');
+    if (p.country) for (const pl of [p.start, p.end, ...(p.via || [])]) if (pl && !pl.country) pl.country = p.country;
     const sLL = await geocode(p.start);
     if (!sLL) throw new Error(p._basic && !hasGroup()
       ? `לא מצאתי את "${p.start?.name}". הפענוח החכם לא פעיל: הכניסו קוד קבוצה ב-⚙ כדי שאבין בקשות כמו "בעקבות מבצע…" ואחפש ברשת.`
@@ -1289,7 +1326,8 @@ async function fillThumbs(el, pt) {
 const tentSVG = auth => `<svg width="26" height="26" viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))"><rect x="1" y="1" width="24" height="24" rx="6" fill="${auth ? '#2e9b4f' : '#ffffff'}" stroke="${auth ? '#ffffff' : '#9aa09b'}" stroke-width="1.5"/><path d="M13 6 L5 20 H21 Z" fill="none" stroke="${auth ? '#ffffff' : '#646b66'}" stroke-width="1.8" stroke-linejoin="round"/><path d="M13 13 L10.5 20 H15.5 Z" fill="${auth ? '#ffffff' : '#646b66'}"/></svg>`;
 const tentIcon = auth => L.divIcon({ className: '', html: tentSVG(auth), iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -12] });
 function campSub(c) {
-  const bits = [c.auth ? 'חניון לילה מורשה · ' + c.auth : 'אתר קמפינג לא מאומת: ייתכן שהלינה בו אסורה'];
+  const abroad = !inIsrael(c.lat, c.lon);
+  const bits = [c.auth ? (abroad ? c.auth : 'חניון לילה מורשה · ' + c.auth) : 'אתר קמפינג לא מאומת: ייתכן שהלינה בו אסורה'];
   if (c.fee === 'yes') bits.push('בתשלום'); else if (c.fee === 'no') bits.push('ללא תשלום');
   if (c.water === 'yes') bits.push('מים'); if (c.toilets === 'yes') bits.push('שירותים');
   return bits.join(' · ');
@@ -1648,21 +1686,24 @@ function render(i, day = null) {
   if (current.G?.eRep && r.edges) { const hit = r.edges.filter(e => current.G.eRep[e]).length; if (hit) w.push(`המסלול עובר ליד דיווחים מהשטח של החבורה (קושי שונה מהמפה). לחצו על הסימנים במפה לפרטים.`); }
   if (r.unrated) w.push('המסלול יובא מקובץ. לא בדקתי לו קושי ושטחי אש, רק שטחי A. סעו בו בזהירות כמו במסלול לא מוכר.');
   if (!r.unrated && r.unk / r.len > 0.3) w.push(`ל-${Math.round(r.unk / r.len * 100)}% מהדרך אין דירוג קושי ב-OSM. ההערכה שם שמרנית (בינוני).`);
+  const IL = isIL(r);
+  if (!IL && !r.unrated) w.push(abroadNote(r));
   const mr = D ? { avoid: multiMilitary(p), info: multiMilitary(p) ? null : { open: true, why: 'כל ימי הטיול בסופ"ש / חג' } } : resolveMilitary(p);
-  if (D && mr.avoid && (p.military_mode || 'auto') === 'auto') w.push('אחד מימי הטיול הוא יום חול, אז שטחי אש לא נכללו בכל הטיול.');
+  if (IL && D && mr.avoid && (p.military_mode || 'auto') === 'auto') w.push('אחד מימי הטיול הוא יום חול, אז שטחי אש לא נכללו בכל הטיול.');
   if (r.aa > 0) w.push(`⚠ ${(r.aa / 1000).toFixed(1)} ק"מ עוברים בשטח A. הכניסה לשטחי A אסורה על אזרחים ישראלים בצו אלוף ומסוכנת. פתחתם את זה ידנית: ודאו שיש לכם היתר.`);
   else if (r.js > 0) w.push(`${(r.js / 1000).toFixed(1)} ק"מ עוברים ביהודה ושומרון. שטחי A המרכזיים חסומים, אבל המיפוי גס: שימו לב לשלטים האדומים בכניסה לשטחי A ולכפרים.`);
-  if (!r.unrated && r.mil > 0) w.push(`${(r.mil / 1000).toFixed(1)} ק"מ עוברים בשטח אש${mr.info?.open ? ` (${mr.info.why})` : ''}.${!p.date && (p.military_mode || 'auto') === 'auto' ? ' עוד לא נבחר תאריך, אז הם נכללו.' : ''} בדרך כלל פתוחים בסופ"ש ובחגים, אבל הפתיחה משתנה: ודאו מול פרסומי צה"ל לשטחי אש לתאריך הספציפי לפני יציאה.`);
+  if (!IL) { /* firing-zone rules are Israeli; abroad all military land is simply closed */ }
+  else if (!r.unrated && r.mil > 0) w.push(`${(r.mil / 1000).toFixed(1)} ק"מ עוברים בשטח אש${mr.info?.open ? ` (${mr.info.why})` : ''}.${!p.date && (p.military_mode || 'auto') === 'auto' ? ' עוד לא נבחר תאריך, אז הם נכללו.' : ''} בדרך כלל פתוחים בסופ"ש ובחגים, אבל הפתיחה משתנה: ודאו מול פרסומי צה"ל לשטחי אש לתאריך הספציפי לפני יציאה.`);
   else if (!current.saved && mr.avoid && mr.info && !mr.info.open) w.push(`התאריך הוא ${mr.info.why}, אז שטחי אש לא נכללו. בסופ"ש יהיו יותר אפשרויות.`);
   if (r.reuse / r.len > 0.15) w.push(`${(r.reuse / 1000).toFixed(1)} ק"מ נוסעים פעמיים באותו קטע (הלוך-חזור).`);
   if (!current.saved && current.res.L && (p.duration_hours || p.distance_km) && Math.abs(r.len - current.res.L) / current.res.L > 0.35) w.push('לא מצאתי מסלול באורך המבוקש בדיוק. זה הקרוב ביותר.');
   if (r.res > 300 && !r.unrated) w.push(isIL(r) ? `${(r.res / 1000).toFixed(1)} ק"מ עוברים בתוך שמורת טבע / גן לאומי. בשמורות מותר לנסוע רק בדרכים המסומנות לרכב (סימון שבילים בצבע + שלט "דרך לרכב"), ו-OSM לא תמיד יודע איזו דרך מסומנת. אם אין סימון בשטח, לא נכנסים.` : `${(r.res / 1000).toFixed(1)} ק"מ עוברים בתוך שמורת טבע / פארק לאומי. ברוב אירופה נסיעה ברכב שם מותרת רק בדרכים ציבוריות פתוחות לרכב, וקנסות גבוהים. בדקו את השילוט בכניסה.`);
   const SF = safetyFor(r, dv);
-  if (SF && SF.bail.m > 20000) w.push(`הנקודה הכי מרוחקת מכביש: כ-${(SF.bail.m / 1000).toFixed(0)} ק"מ שטח (בק"מ ${SF.bail.km.toFixed(0)}). אם משהו נשבר שם, החילוץ ארוך: צאו לפחות בשני רכבים, עם מים, מדחס, רצועת גרירה וקליטה/מכשיר קשר.`);
+  if (SF && SF.bail && SF.bail.m > 20000) w.push(`הנקודה הכי מרוחקת מכביש: כ-${(SF.bail.m / 1000).toFixed(0)} ק"מ שטח (בק"מ ${SF.bail.km.toFixed(0)}). אם משהו נשבר שם, החילוץ ארוך: צאו לפחות בשני רכבים, עם מים, מדחס, רצועת גרירה וקליטה/מכשיר קשר.`);
   if (SF && SF.fuelGap > 200 && (D || r.len > 150000)) w.push(`הקטע הארוך ביותר בלי תחנת דלק ליד המסלול: כ-${SF.fuelGap.toFixed(0)} ק"מ. בשטח רכב צורך פי 1.5–2 מבכביש: מלאו מיכל לפני, ושקלו ג'ריקן.`);
   w.push('המסלול מבוסס על נתוני OSM. מצב השטח בפועל (שיטפונות, חסימות, סגירת שמורות) יכול להשתנות: בדקו לפני יציאה.');
   $('warns').innerHTML = w.map(t => `<div class="warn">${t}</div>`).join('');
-  if (!current.saved) { // quick firing-zone switch, works without a date
+  if (!current.saved && IL) { // quick firing-zone switch, works without a date
     const row = document.createElement('div'); row.className = 'milsw';
     row.innerHTML = '<span>שטחי אש:</span>';
     const cur = p.military_mode || 'auto';

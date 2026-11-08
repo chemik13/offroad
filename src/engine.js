@@ -99,7 +99,7 @@ function buildGraph(elements) {
         if (matchPoi(k, el.tags)) {
           const t = el.tags;
           const poi = { type: k, lat: plat, lon: plon, name: t['name:he'] || t.name || def.he, img: t.image, commons: t.wikimedia_commons, wd: t.wikidata };
-          if (k === 'nightcamp') { poi.auth = campAuth(t, plat, plon); poi.fee = t.fee; poi.water = t.drinking_water; poi.toilets = t.toilets; if (!t.name && !t['name:he']) poi.name = poi.auth ? 'חניון לילה' : 'אתר קמפינג'; }
+          if (k === 'nightcamp') { poi.auth = campAuth(t, plat, plon); poi.fee = t.fee; poi.water = t.drinking_water; poi.toilets = t.toilets; if (!t.name && !t['name:he']) poi.name = !inIsrael(plat, plon) ? (t.tourism === 'caravan_site' ? 'חניון קרוואנים' : 'קמפינג') : poi.auth ? 'חניון לילה' : 'אתר קמפינג'; }
           pois.push(poi); break;
         }
       }
@@ -121,7 +121,8 @@ function buildGraph(elements) {
         const t = el.tags, nm = (t.name || '') + ' ' + (t['name:en'] || '');
         const firing = ['danger_area', 'training_area', 'range'].includes(t.military) || /שטח אש|firing/i.test(nm);
         const base = ['base', 'barracks', 'airfield', 'naval_base'].includes(t.military) || (!firing && km2 < 4);
-        mil.push({ r, s, n, w, e, kind: base ? 2 : 1, name: t.name || (base ? 'בסיס צבאי' : 'שטח אש') });
+        // outside Israel there is no weekend opening rule: any military land is closed
+        mil.push({ r, s, n, w, e, kind: base || !inIsrael((s + n) / 2, (w + e) / 2) ? 2 : 1, name: t.name || (base ? 'בסיס צבאי' : 'שטח אש') });
       }
     }
   }
@@ -195,7 +196,7 @@ function safetyInfo(G, edges, startNode) {
     const e0 = edges[0], e1 = edges[1];
     startNode = e1 == null ? G.eA[e0] : (G.eA[e0] === G.eA[e1] || G.eA[e0] === G.eB[e1] ? G.eB[e0] : G.eA[e0]);
   }
-  let u = startNode, km = 0, worst = { m: bd[u] || 0, km: 0, lat: G.lat[u], lon: G.lon[u] };
+  let u = startNode, km = 0, worst = { m: isFinite(bd[u]) ? bd[u] : -1, km: 0, lat: G.lat[u], lon: G.lon[u] };
   const samp = [[G.lat[u], G.lon[u], 0]]; let lastS = 0;
   for (const e of edges) {
     const v = G.eA[e] === u ? G.eB[e] : G.eA[e]; km += G.eLen[e] / 1000; u = v;
@@ -216,7 +217,7 @@ function safetyInfo(G, edges, startNode) {
   const fuel = near('fuel', 2500), water = near('drinkwater', 800);
   const marks = [0, ...fuel.map(f => f.km), km];
   let fuelGap = 0; for (let i = 1; i < marks.length; i++) fuelGap = Math.max(fuelGap, marks[i] - marks[i - 1]);
-  return { bail: worst, fuel, water, fuelGap, total: km };
+  return { bail: worst.m >= 0 ? worst : null, fuel, water, fuelGap, total: km }; // bail null: no paved road in the loaded area
 }
 
 // Authorized night camps: operated by INPA (רט"ג) or KKL, or explicitly named "חניון לילה".
@@ -650,6 +651,11 @@ function nextSaturday(from = new Date()) {
 
 // Offline gazetteer: common jeep-trip anchors (approximate; routing snaps to the nearest track)
 const PLACES = {
+  // --- אירופה (מרכזי אזורים; Claude/Nominatim מדייקים) ---
+  'רומניה': [45.6, 24.9], 'טרנסילבניה': [46.3, 24.6], 'הקרפטים': [45.5, 25.3], 'אלבניה': [41.0, 20.0], 'מונטנגרו': [42.8, 19.3], 'בוסניה': [43.9, 17.8],
+  'יוון': [39.6, 21.8], 'בולגריה': [42.6, 25.0], 'פורטוגל': [39.6, -8.0], 'ספרד': [40.3, -3.7], 'אנדלוסיה': [37.4, -4.6], 'הפירנאים': [42.6, 0.8], 'פירנאים': [42.6, 0.8],
+  'פרובאנס': [43.9, 5.8], 'קורסיקה': [42.15, 9.1], 'סרדיניה': [40.1, 9.0], 'טוסקנה': [43.35, 11.1], 'דולומיטים': [46.5, 11.9], 'האלפים': [46.4, 9.5],
+  'איסלנד': [64.9, -18.6], 'נורווגיה': [61.5, 9.0], 'גאורגיה': [42.1, 43.6], 'קפריסין': [34.95, 33.0], 'מרוקו': [31.5, -6.5],
   // --- צפון וגולן ---
   'הר חרמון': [33.31, 35.78], 'חרמון': [33.31, 35.78], 'מגדל שמס': [33.27, 35.77], 'מסעדה': [33.23, 35.75], 'ברכת רם': [33.23, 35.77], 'בריכת רם': [33.23, 35.77],
   'מבצר נמרוד': [33.25, 35.71], 'נמרוד': [33.25, 35.71], 'בניאס': [33.25, 35.69], 'תל דן': [33.25, 35.65], 'מטולה': [33.28, 35.58], 'קריית שמונה': [33.21, 35.57],
