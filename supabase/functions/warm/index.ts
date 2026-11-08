@@ -59,19 +59,33 @@ Deno.serve(async (req) => {
   const row = rows?.[0];
   if (!row) return Response.json({ ok: true, idle: true });
 
+  // an app may already have uploaded this area recently: just record it
+  const { data: objs } = await db.storage.from("osm-tiles").list("", { search: row.key + ".json.gz", limit: 1 });
+  const existing = objs?.find((o: any) => o.name === row.key + ".json.gz");
+  const age = existing ? Date.now() - new Date(existing.updated_at || existing.created_at).getTime() : Infinity;
+  if (age < REFRESH_DAYS * 864e5) {
+    await db.from("tile_queue").update({ last_ok: new Date(Date.now() - age).toISOString(), fails: 0, bytes: existing?.metadata?.size ?? null }).eq("key", row.key);
+    return Response.json({ ok: true, key: row.key, already: true });
+  }
+
   const box = [row.i * TILE, row.j * TILE, (row.i + 1) * TILE, (row.j + 1) * TILE];
   const q = overpassQuery(box.map((x) => +x.toFixed(4)).join(","));
-  let elements: any[] | null = null, used = "", err = "";
-  for (const m of MIRRORS) {
-    if (Date.now() - t0 > 60_000) break;
+  // time budget ~130s across mirrors (edge limit 150s): first gets 60s, the rest share what is left
+  let elements: any[] | null = null, used = "";
+  const errs: string[] = [];
+  for (const [n, m] of MIRRORS.entries()) {
+    const left = 130_000 - (Date.now() - t0);
+    if (left < 15_000) break;
+    const budget = n === 0 ? Math.min(60_000, left) : Math.floor(left / (MIRRORS.length - n));
     try {
-      const r = await fetch(m, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "content-type": "application/x-www-form-urlencoded", "user-agent": "offroad-planner/1.0 (background cache, 1 req / 3 min)" }, signal: AbortSignal.timeout(80_000) });
-      if (!r.ok) { err = `${m} ${r.status}`; continue; }
+      const r = await fetch(m, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "content-type": "application/x-www-form-urlencoded", "user-agent": "offroad-planner/1.0 (background cache, 1 req / 3 min)" }, signal: AbortSignal.timeout(budget) });
+      if (!r.ok) { errs.push(`${new URL(m).host} ${r.status}`); continue; }
       const j = await r.json();
-      if (j.remark && /runtime error|timed out|out of memory/i.test(j.remark)) { err = `${m} ${j.remark}`.slice(0, 200); continue; }
+      if (j.remark && /runtime error|timed out|out of memory/i.test(j.remark)) { errs.push(`${new URL(m).host} ${j.remark}`.slice(0, 120)); continue; }
       elements = j.elements; used = m; break;
-    } catch (e) { err = `${m} ${(e as Error).message}`.slice(0, 200); }
+    } catch (e) { errs.push(`${new URL(m).host} ${(e as Error).message}`.slice(0, 120)); }
   }
+  const err = errs.join(" | ");
   if (!elements) {
     await db.from("tile_queue").update({ fails: row.fails + 1 }).eq("key", row.key);
     console.error("warm fail", row.key, err);
