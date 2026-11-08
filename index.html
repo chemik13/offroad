@@ -282,7 +282,7 @@ ul.pois li{margin-bottom:8px}
     <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">קוד קבוצה<input id="groupCode" type="password" autocomplete="off"></label>
     <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">השם שלך (מופיע ליד מסלולים ששמרת)<input id="nick" type="text" autocomplete="nickname" style="direction:rtl"></label>
     <details><summary style="font-size:13px;cursor:pointer">מתקדם: מפתח Claude אישי</summary>
-      <p style="margin:6px 0">רק אם אין קוד קבוצה. נשמר בדפדפן הזה בלבד.</p>
+      <p style="margin:6px 0">רק אם אין קוד קבוצה. נשמר בדפדפן הזה בלבד. מאפשר טיולים לפי נושא ("בעקבות…") עם חיפוש ברשת.</p>
       <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off"></details>
   </div>
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
@@ -882,6 +882,20 @@ function tilesFor(bbox) { // bbox [s,w,n,e]
     for (let j = Math.floor(bbox[1] / TILE); j <= Math.floor(bbox[3] / TILE); j++) keys.push(tileKey(i, j));
   return keys;
 }
+// tiles along an ordered list of points (a corridor), instead of the whole bounding box
+function corridorTiles(points, radiusM) {
+  const keys = new Set(); const dLat = radiusM / 111000, dLon = radiusM / 96000;
+  const add = (a, o) => { for (const k of tilesFor([a - dLat, o - dLon, a + dLat, o + dLon])) keys.add(k); };
+  for (let i = 0; i < points.length; i++) {
+    add(points[i][0], points[i][1]);
+    if (i + 1 < points.length) {
+      const [a1, o1] = points[i], [a2, o2] = points[i + 1];
+      const steps = Math.ceil(hav(a1, o1, a2, o2) / 8000);
+      for (let s = 1; s < steps; s++) add(a1 + (a2 - a1) * s / steps, o1 + (o2 - o1) * s / steps);
+    }
+  }
+  return [...keys];
+}
 function tileBBox(key) { const [, i, j] = key.split('_').map(Number); return [i * TILE, j * TILE, (i + 1) * TILE, (j + 1) * TILE]; }
 const WAY_TAGS = ['highway', 'tracktype', 'surface', 'smoothness', '4wd_only', 'access', 'motor_vehicle', 'motorcar', 'vehicle', 'oneway', 'name', 'name:he', 'ref'];
 const POI_TAGS = ['tourism', 'natural', 'historic', 'name', 'name:he', 'image', 'wikimedia_commons', 'wikidata', 'operator', 'owner', 'operator:he', 'operator:en', 'fee', 'drinking_water', 'toilets'];
@@ -943,7 +957,7 @@ function planMulti(G, p, nodes, onProgress = () => {}) {
   const maxCost = dayL * 6;
   const s = nodes.s, end = p.loop ? s : nodes.e;
   const types = (p.poi_types || []).filter(t => t !== 'nightcamp');
-  const camps = G.pois.filter(c => c.type === 'nightcamp' && c.auth).map(c => ({ ...c, node: nearestNode(G, c.lat, c.lon, fac, 800) })).filter(c => c.node >= 0);
+  const camps = G.pois.filter(c => c.type === 'nightcamp' && c.auth).map(c => ({ ...c, node: nearestNode(G, c.lat, c.lon, fac, 2500) })).filter(c => c.node >= 0);
   const Rend = end >= 0 ? dijkstra(G, end, fac, null, Infinity) : null;
   const totalDirect = Rend ? Rend.len[s] : null;
   onProgress(`מצאתי ${camps.length} חניוני לילה מורשים באזור. מתכנן ${N} ימים…`);
@@ -1034,6 +1048,70 @@ function planMulti(G, p, nodes, onProgress = () => {}) {
   const out = [];
   for (const r of results) { if (out.length >= 3) break; if (out.every(q => overlapRatio(q.edges, r.edges) < 0.75)) out.push(r); }
   return { results: out, L: dayL * N, dayL, totalDirect };
+}
+
+// Multi-day trip that must pass ordered stops (a theme / "in the footsteps of"):
+// build the whole route through the stops, then end each day at an authorized night camp
+// near the day's share of the distance, and rebuild through the camps.
+function planMultiVia(G, p, nodes, onProgress = () => {}) {
+  const N = Math.max(2, Math.min(7, p.days | 0));
+  const fac = factors(G, { ...p, avoid_military: multiMilitary(p) });
+  const s = nodes.s, vias = nodes.vias.filter(v => v >= 0);
+  const end = p.loop ? s : (nodes.e >= 0 ? nodes.e : vias[vias.length - 1]);
+  const stops0 = [s, ...vias.filter(v => v !== end), end].filter((v, i, a) => i === 0 || v !== a[i - 1]);
+  const legs0 = [];
+  onProgress('מחשב מסלול דרך כל התחנות…');
+  for (let i = 0; i + 1 < stops0.length; i++) {
+    const R = dijkstra(G, stops0[i], fac, null, Infinity, stops0[i + 1]);
+    const path = pathEdges(G, R, stops0[i + 1]);
+    if (!path) return { results: [], reason: `אין דרך מתאימה בין התחנות ${i + 1} ל-${i + 2} לפי התנאים (רמת רכב, שטחי אש, שטחי A). נסו לאפשר יותר, או לוותר על אחת התחנות.` };
+    legs0.push(path);
+  }
+  const all0 = legs0.flat(); const total = all0.reduce((t, e) => t + G.eLen[e], 0);
+  // node sequence with cumulative distance
+  const seq = [s]; const cum = [0]; let u = s;
+  for (const e of all0) { const v = G.eA[e] === u ? G.eB[e] : G.eA[e]; seq.push(v); cum.push(cum[cum.length - 1] + G.eLen[e]); u = v; }
+  // which leg each position belongs to
+  const legEnd = []; let acc = 0; for (const l of legs0) { acc += l.length; legEnd.push(acc); }
+  const camps = G.pois.filter(c => c.type === 'nightcamp' && c.auth).map(c => ({ ...c, node: nearestNode(G, c.lat, c.lon, fac, 2500) })).filter(c => c.node >= 0);
+  const nights = []; const notes = [];
+  for (let k = 1; k < N; k++) {
+    const target = total * k / N;
+    let idx = cum.findIndex(x => x >= target); if (idx < 0) idx = cum.length - 1;
+    const [la, lo] = [G.lat[seq[idx]], G.lon[seq[idx]]];
+    let best = null, bd = Infinity;
+    for (const c of camps) { if (nights.some(n => n.camp.node === c.node)) continue; const d = hav(la, lo, c.lat, c.lon); if (d < bd && d < 15000) { bd = d; best = c; } }
+    let pos = 0; while (pos < legEnd.length && legEnd[pos] < idx) pos++;
+    if (best) nights.push({ camp: best, leg: pos, idx });
+    else { notes.push(`אין חניון לילה מורשה במרחק סביר מסוף יום ${k}. היום מסתיים בשטח.`); nights.push({ camp: { name: 'סוף יום ' + k + ' (בלי חניון מורשה)', lat: la, lon: lo, node: seq[idx], type: 'dayend', auth: null }, leg: pos, idx }); }
+  }
+  nights.sort((a, b) => a.idx - b.idx);
+  // stops with camps inserted after the stop that starts their leg
+  const stops = [stops0[0]]; const isCamp = [false];
+  for (let i = 1; i < stops0.length; i++) {
+    for (const n of nights.filter(n => n.leg === i - 1)) { stops.push(n.camp.node); isCamp.push(n); }
+    stops.push(stops0[i]); isCamp.push(false);
+  }
+  onProgress('מחלק לימים עם חניוני לילה…');
+  const used = new Uint8Array(G.E); const allEdges = []; const days = []; const pois = [];
+  let dayStart = 0, dayLen = 0, dayHrs = 0, dayFrom = 0;
+  const viaInfo = nodes.viaPois || [];
+  for (let i = 0; i + 1 < stops.length; i++) {
+    const leg = stops[i] === stops[i + 1] ? [] : buildRoute(G, fac, [stops[i], stops[i + 1]], Infinity, used);
+    if (!leg) return { results: [], reason: 'לא הצלחתי לחבר את אחד החניונים למסלול.' };
+    for (const e of leg) { dayLen += G.eLen[e]; dayHrs += G.eLen[e] / 1000 / DIFF[G.eD[e]].speed; }
+    allEdges.push(...leg);
+    const n = isCamp[i + 1];
+    if (n) { days.push({ from: dayFrom, to: allEdges.length, len: dayLen, hrs: dayHrs, camp: n.camp }); if (n.camp.type === 'nightcamp') pois.push({ ...n.camp, day: days.length }); dayFrom = allEdges.length; dayLen = 0; dayHrs = 0; }
+  }
+  days.push({ from: dayFrom, to: allEdges.length, len: dayLen, hrs: dayHrs, camp: null });
+  vias.forEach((v, k) => { const vi = viaInfo[k]; if (vi) pois.push({ ...vi, lat: G.lat[v], lon: G.lon[v] }); });
+  const st = routeStats(G, allEdges, s);
+  const r = { edges: allEdges, stops, pois, ...st, days };
+  const dayL = total / N;
+  const longDay = days.find(d => d.hrs > (p.hours_per_day || 8) * 1.3);
+  if (longDay) notes.push(`יש ימים ארוכים (עד ${longDay.hrs.toFixed(1)} שעות נסיעה). שקלו להוסיף יום.`);
+  return { results: [r], L: total, dayL, note: notes.join(' ') || null };
 }
 
 function targetLengthM(p) {
@@ -1128,7 +1206,7 @@ function parseLocal(text) {
   return p;
 }
 
-if (typeof module !== 'undefined') module.exports = { TILE, tileKey, tilesFor, tileBBox, splitToTiles, tilesToElements, planMulti, addDays, campAuth, KNOWN_CAMPS, AREA_A, inAreaA, lookupPlace, dayInfo, resolveMilitary, nextSaturday, buildGraph, plan, nearestNode, factors, toGPX, parseLocal, targetLengthM, wayInfo, POI_TYPES };
+if (typeof module !== 'undefined') module.exports = { corridorTiles, planMultiVia, pathEdges, TILE, tileKey, tilesFor, tileBBox, splitToTiles, tilesToElements, planMulti, addDays, campAuth, KNOWN_CAMPS, AREA_A, inAreaA, lookupPlace, dayInfo, resolveMilitary, nextSaturday, buildGraph, plan, nearestNode, factors, toGPX, parseLocal, targetLengthM, wayInfo, POI_TYPES };
 // ===== END ENGINE =====
 
 </script>
@@ -1285,7 +1363,9 @@ const TOOL = {
       difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'] },
       vehicle: { type: 'string', enum: ['stock', 'raised', 'lockers'], description: 'stock = standard SUV, raised = lifted / AT tires, lockers = diff lockers / built' },
       poi_types: { type: 'array', items: { type: 'string', enum: Object.keys(POI_TYPES) }, description: 'Kinds of stops wanted along the way. nightcamp = overnight camping site (חניון לילה); camp = day picnic site only.' },
-      via: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, lat: { type: 'number' }, lon: { type: 'number' } } }, description: 'Specific named places that must be on the route, in order' },
+      via: { type: 'array', items: { type: 'object', properties: { name: { type: 'string', description: 'Hebrew name as on a map' }, lat: { type: 'number' }, lon: { type: 'number' }, note: { type: 'string', description: 'One short Hebrew line: why this stop (what happened here / what to see)' } }, required: ['name', 'lat', 'lon'] }, description: 'Ordered stops the route must pass (max 8). For themed trips these are the theme sites.' },
+      story_he: { type: 'string', description: 'For themed trips: 2-4 Hebrew sentences telling the story the trip follows. Omit otherwise.' },
+      from_my_location: { type: 'boolean', description: 'True if the user says to start from their current location (מהמיקום שלי / מכאן)' },
       avoid_asphalt: { type: 'boolean' },
       sunset: { type: 'boolean', description: 'True if the user wants a sunset stop (a viewpoint late in the day)' },
       date: { type: 'string', description: 'Trip date YYYY-MM-DD. Resolve relative words (מחר, שבת, בחג) against today. If not stated, the coming Saturday.' },
@@ -1296,27 +1376,42 @@ const TOOL = {
     required: ['loop', 'difficulty', 'vehicle', 'poi_types', 'summary_he'],
   },
 };
-const SYSTEM = () => 'Today is ' + new Date().toISOString().slice(0, 10) + ' (' + new Date().toLocaleDateString('en-US', { weekday: 'long' }) + '). You convert jeep trip requests in Israel into structured parameters. Include approximate lat/lon for every named place you are confident about (Israel only). Default vehicle: raised. Default difficulty: medium. Default is point-to-point (loop=false). If no start is given, omit start.';
-async function parseServer(text) {
-  const j = await api('/parse', { method: 'POST', body: JSON.stringify({ prompt: text, system: SYSTEM(), tool: TOOL }) });
-  if (!j.input) throw new Error('לא התקבל פענוח');
-  return { allow_area_a: false, military_mode: 'auto', date: nextSaturday(), via: [], ...j.input };
-}
-async function parseLLM(text, key) {
+const SYSTEM = () => `Today is ${new Date().toISOString().slice(0, 10)} (${new Date().toLocaleDateString('en-US', { weekday: 'long' })}). You plan 4x4 jeep trips in Israel for a group of friends and convert each request into structured parameters by calling route_request exactly once at the end.
+- Include lat/lon for every place (Israel only). Use web_search when you are not sure of a place's location or when the request is themed.
+- Themed requests (a historical event or military operation, a book, a person, a named trail, "in the footsteps of", "בעקבות"): research the theme, then choose the real sites in order as start, via and end. Prefer points reachable by 4x4 (trailheads, memorial sites, viewpoints, ruins) over city centers, and skip sites that are now inside military bases or Area A. Add a short Hebrew note per via and a 2-4 sentence Hebrew story_he. Keep at most 8 vias.
+- If the user did not say where to start: for themed trips start at the theme's natural starting point; otherwise omit start. If they say "from my location", set from_my_location.
+- Defaults: vehicle raised, difficulty medium, point-to-point (loop=false). For several days set days, and include nightcamp in poi_types.`;
+const PARSE_MODEL = 'claude-sonnet-5-5';
+const WEB_SEARCH = { type: 'web_search_20250305', name: 'web_search', max_uses: 3 };
+async function claudeCall(body) {
+  if (hasGroup()) return api('/claude', { method: 'POST', body: JSON.stringify(body) });
+  const key = store.get('apiKey'); if (!key) throw Object.assign(new Error('no key'), { status: 0 });
   const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-    body: JSON.stringify({
-      model: MODEL, max_tokens: 800,
-      system: 'Today is ' + new Date().toISOString().slice(0, 10) + ' (' + new Date().toLocaleDateString('en-US', { weekday: 'long' }) + '). You convert jeep trip requests in Israel into structured parameters. Include approximate lat/lon for every named place you are confident about (Israel only). Default vehicle: raised. Default difficulty: medium. If no start is given, omit start.',
-      tools: [TOOL], tool_choice: { type: 'tool', name: 'route_request' },
-      messages: [{ role: 'user', content: text }],
-    }),
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+    body: JSON.stringify({ model: PARSE_MODEL, ...body }),
   });
-  if (!r.ok) throw new Error(r.status === 401 ? 'מפתח ה-API לא תקין' : 'שגיאה מ-Claude API (' + r.status + ')');
-  const j = await r.json();
-  const tu = j.content.find(c => c.type === 'tool_use');
-  return { allow_area_a: false, military_mode: 'auto', date: nextSaturday(), via: [], ...tu.input };
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(r.status === 401 ? 'מפתח ה-API לא תקין' : 'שגיאה מ-Claude (' + r.status + ')'), { status: r.status });
+  return j;
+}
+// Claude may search the web first (themes, unknown places), then must call route_request.
+async function parseSmart(text) {
+  const messages = [{ role: 'user', content: text }];
+  let tools = [WEB_SEARCH, TOOL];
+  let r;
+  try { r = await claudeCall({ system: SYSTEM(), messages, tools, tool_choice: { type: 'auto' }, max_tokens: 2000 }); }
+  catch (e) { if (e.status === 400) { tools = [TOOL]; r = await claudeCall({ system: SYSTEM(), messages, tools, tool_choice: { type: 'tool', name: 'route_request' }, max_tokens: 1500 }); } else throw e; }
+  let tu = (r.content || []).find(c => c.type === 'tool_use' && c.name === 'route_request');
+  if (!tu) {
+    messages.push({ role: 'assistant', content: r.content }, { role: 'user', content: 'עכשיו קרא ל-route_request עם הפרמטרים של הטיול.' });
+    r = await claudeCall({ system: SYSTEM(), messages, tools, tool_choice: { type: 'tool', name: 'route_request' }, max_tokens: 1500 });
+    tu = (r.content || []).find(c => c.type === 'tool_use' && c.name === 'route_request');
+  }
+  if (!tu) throw new Error('לא התקבל פענוח');
+  const searched = (r.content || []).some(c => c.type === 'server_tool_use') || messages.length > 1;
+  const out = { allow_area_a: false, military_mode: 'auto', date: nextSaturday(), via: [], ...tu.input, _searched: searched };
+  for (const pl of [out.start, out.end, ...(out.via || [])]) if (pl && pl.lat && pl.lon) pl.researched = true;
+  return out;
 }
 
 // ---------- geocode ----------
@@ -1327,6 +1422,9 @@ async function geocode(place) {
   const name = place.name;
   if (geoCache[name]) return geoCache[name];
   const local = lookupPlace(name);
+  if (place.lat && place.lon && place.researched) { // coordinates Claude looked up win, unless our list agrees with them
+    return local && hav(local[0], local[1], place.lat, place.lon) < 15000 ? local : [place.lat, place.lon];
+  }
   if (local) return local;
   let ll = null;
   try {
@@ -1458,8 +1556,8 @@ async function ensureTiles(keys, { bg = false, say = () => {} } = {}) {
   }
   return { tiles: got, stat };
 }
-async function loadGraph(bbox) {
-  const keys = tilesFor(bbox);
+async function loadGraph(bboxOrKeys) {
+  const keys = typeof bboxOrKeys[0] === 'string' ? bboxOrKeys : tilesFor(bboxOrKeys);
   if (gcache && keys.every(k => gcache.keys.has(k))) return gcache.G;
   const { tiles, stat } = await ensureTiles(keys, { say: status });
   if (keys.some(k => !tiles[k])) throw new Error('חלק מנתוני השבילים לא ירדו. נסו שוב.');
@@ -1553,16 +1651,29 @@ async function run(fromPrompt) {
       store.set('lastPrompt', text);
       const key = store.get('apiKey');
       p = null;
-      if (hasGroup()) { status('מפענח את הבקשה…'); try { p = await parseServer(text); } catch (e) { if (e.status === 401) status('קוד הקבוצה לא נכון. משתמש בפענוח בסיסי.'); } }
-      if (!p && key) { status('מפענח את הבקשה…'); p = await parseLLM(text, key); }
-      if (!p) p = parseLocal(text);
+      if (hasGroup() || key) {
+        status('מבין את הבקשה (ואם צריך, מחפש ברשת)…');
+        try { p = await parseSmart(text); }
+        catch (e) { status(e.status === 401 ? 'קוד הקבוצה או המפתח לא נכונים. משתמש בפענוח בסיסי.' : e.status === 503 ? 'מפתח Claude לא הוגדר בשרת. משתמש בפענוח בסיסי.' : 'הפענוח החכם נכשל. משתמש בפענוח בסיסי.'); }
+      }
+      if (!p) { p = parseLocal(text); p._basic = true; }
+      if (!p.start && (p.from_my_location || /מהמיקום שלי|מאיפה שאני|מהמקום שלי/.test(text))) {
+        status('מאתר את המיקום שלך…');
+        const pos = await new Promise((res, rej) => navigator.geolocation ? navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: false, timeout: 12000, maximumAge: 300000 }) : rej(new Error('no geo'))).catch(() => null);
+        if (pos) p.start = { name: '📍 המיקום שלי', latlng: [pos.coords.latitude, pos.coords.longitude] };
+        else throw new Error('לא הצלחתי לקבל את המיקום שלך. אשרו גישה למיקום, או כתבו מאיפה יוצאים.');
+      }
+      if (!p.start && (p.via || []).length) { const v = p.via.shift(); p.start = { ...v }; p._startNote = v.note; }
       if (!p.start) {
         if (pickedStart) p.start = { name: $('pStart').value || '📍 נקודה על המפה', latlng: pickedStart };
         else if (map.getZoom() >= 10) { const c = map.getCenter(); p.start = { name: '📍 מרכז המפה', latlng: [c.lat, c.lng] }; }
-        else throw new Error('לא כתבתם מאיפה יוצאים. כתבו מקום בפרומפט, או לחצו על המפה ובחרו "התחלה מכאן".');
+        else throw new Error(p._basic
+          ? 'לא הבנתי מאיפה יוצאים. הפענוח הבסיסי לא מכיר נושאים כמו "בעקבות מבצע…". הגדירו מפתח Claude (⚙) כדי שאחפש ואתכנן לבד, או כתבו מקום, "מהמיקום שלי", או לחצו על המפה.'
+          : 'לא כתבתם מאיפה יוצאים. כתבו מקום, "מהמיקום שלי", או עשו זום לאזור במפה.');
       }
       fillForm(p);
-      $('understood').hidden = !p.summary_he; $('understood').textContent = p.summary_he ? 'הבנתי: ' + p.summary_he : '';
+      const und = [p.summary_he ? 'הבנתי: ' + p.summary_he : null, p.story_he || null, p._searched ? '(חיפשתי ברשת כדי לתכנן)' : null].filter(Boolean).join('\n');
+      $('understood').hidden = !und; $('understood').textContent = und; $('understood').style.whiteSpace = 'pre-line';
     } else {
       p = readForm(current?.p || {});
       $('understood').hidden = true;
@@ -1576,7 +1687,7 @@ async function run(fromPrompt) {
     if (!p.loop && p.end) { eLL = await geocode(p.end); if (!eLL) throw new Error(`לא מצאתי את היעד "${p.end.name}".`); setEnd(eLL); }
     else if (endMarker) { endMarker.remove(); endMarker = null; }
     const viaLL = [];
-    for (const v of p.via || []) { const ll = await geocode(v); if (!ll) throw new Error(`לא מצאתי את "${v.name}".`); viaLL.push({ ll, name: v.name }); }
+    for (const v of p.via || []) { const ll = await geocode(v); if (!ll) throw new Error(`לא מצאתי את "${v.name}".`); viaLL.push({ ll, name: v.name, note: v.note }); }
 
     const multi = (p.days || 1) > 1;
     if (multi && !(p.poi_types || []).includes('nightcamp')) p.poi_types = [...(p.poi_types || []), 'nightcamp'];
@@ -1584,9 +1695,11 @@ async function run(fromPrompt) {
     const pts = [sLL, ...(eLL ? [eLL] : []), ...viaLL.map(v => v.ll)];
     const radius = multi ? Math.min(50000, Math.max(15000, eLL ? 15000 : p.loop ? L0 / 3.2 : L0 * 0.45)) : Math.min(40000, Math.max(6000, p.loop ? L0 / 2.6 : !eLL ? L0 * 0.75 : 5000));
     if (multi) status('מוריד שבילים לאזור גדול (טיול של כמה ימים), זה יכול לקחת חצי דקה…');
-    const bbox = bboxFor(pts, radius);
+    const ordered = [sLL, ...viaLL.map(v => v.ll), ...(eLL ? [eLL] : [])];
+    const spread = ordered.length > 1 && ordered.some((q, i) => i && hav(q[0], q[1], ordered[i - 1][0], ordered[i - 1][1]) > 25000);
+    const keys = spread ? corridorTiles(ordered, multi ? 14000 : 10000) : tilesFor(bboxFor(pts, radius));
     status('מוריד שבילים מ-OpenStreetMap (בפעם הראשונה זה לוקח כמה שניות)…');
-    const G = await loadGraph(bbox);
+    const G = await loadGraph(keys);
     if (!G.N) throw new Error('לא נמצאו שבילים באזור.');
 
     const fac = factors(G, { ...p, avoid_military: resolveMilitary(p).avoid });
@@ -1596,10 +1709,10 @@ async function run(fromPrompt) {
     if (eLL && e < 0) throw new Error('אין שביל מתאים ליד היעד.');
     const vias = viaLL.map(v => nearestNode(G, v.ll[0], v.ll[1], fac, 3000));
     if (vias.some(x => x < 0)) throw new Error('אחת מנקודות החובה רחוקה מכל שביל מתאים.');
-    const viaPois = viaLL.map((v, i) => ({ type: 'via', name: v.name, lat: G.lat[vias[i]], lon: G.lon[vias[i]] }));
+    const viaPois = viaLL.map((v, i) => ({ type: 'via', name: v.name, note: v.note, lat: G.lat[vias[i]], lon: G.lon[vias[i]] }));
 
     await new Promise(r => setTimeout(r, 30));
-    const res = multi ? planMulti(G, p, { s, e, vias, viaPois }, m => status(m)) : plan(G, p, { s, e, vias, viaPois }, m => status(m));
+    const res = multi ? (vias.length ? planMultiVia(G, p, { s, e, vias, viaPois }, m => status(m)) : planMulti(G, p, { s, e, vias, viaPois }, m => status(m))) : plan(G, p, { s, e, vias, viaPois }, m => status(m));
     if (!res.results.length && res.reason) throw new Error(res.reason);
     if (!res.results.length) throw new Error('לא מצאתי מסלול שעומד בתנאים. נסו לקצר, לשנות רמת קושי/רכב, או לבטל הימנעות מכבישים / שטחי אש.');
     if (res.note) setTimeout(() => status(res.note), 0);
@@ -1887,7 +2000,7 @@ function render(i, day = null) {
     const ic = L.divIcon({ className: '', html: `<div class="poi-ic"></div>`, iconSize: null, iconAnchor: [0, 0] });
     const m = L.marker([pt.lat, pt.lon], { icon: ic }).addTo(markLayer);
     m.getElement()?.querySelector('.poi-ic')?.append(document.createTextNode((D && pt.type === 'nightcamp' && pt.day ? `לילה ${pt.day}: ` : '') + pt.name));
-    const pp = placePopup(pt, pt.name, pt.type === 'nightcamp' ? campSub(pt) : (POI_TYPES[pt.type]?.he || 'נקודת חובה'));
+    const pp = placePopup(pt, pt.name, pt.type === 'nightcamp' ? campSub(pt) : (pt.note || POI_TYPES[pt.type]?.he || 'נקודת חובה'));
     m.bindPopup(pp.div, { maxWidth: 320, minWidth: 220 }).on('popupopen', pp.load);
   });
   const fitB = L.latLngBounds(dv ? r.coords.slice(dv.from, dv.to + 1) : r.coords);
@@ -1936,7 +2049,7 @@ function render(i, day = null) {
       b.querySelector('.dn').textContent = `יום ${k + 1}`;
       b.querySelector('.dt').textContent = d.camp ? `לינה: ${d.camp.name}` : 'סיום הטיול';
       b.querySelector('.dm').textContent = `${(d.len / 1000).toFixed(0)} ק"מ · ${fmtH(d.hrs)}`;
-      b.querySelector('.ds').textContent = [d.mid ? 'עצירה: ' + d.mid.name : null, d.camp ? campSub(d.camp) : null].filter(Boolean).join(' · ');
+      b.querySelector('.ds').textContent = [d.mid ? 'עצירה: ' + d.mid.name : null, d.camp ? (d.camp.type === 'dayend' ? 'אין חניון לילה מורשה קרוב. בדקו חלופה לפני היציאה.' : campSub(d.camp)) : null].filter(Boolean).join(' · ');
       b.onclick = () => render(i, k);
       box.append(b);
     });
@@ -1948,7 +2061,7 @@ function render(i, day = null) {
     for (const x of r.pois) {
       const li = document.createElement('li');
       li.innerHTML = `<span></span> <span style="color:var(--muted)"></span><div class="thumbs"></div>`;
-      li.children[0].textContent = x.name; li.children[1].textContent = '· ' + (x.type === 'nightcamp' ? campSub(x) : (x.sunset ? 'תצפית לשקיעה' : (POI_TYPES[x.type]?.he || 'נקודת חובה')));
+      li.children[0].textContent = x.name; li.children[1].textContent = '· ' + (x.type === 'nightcamp' ? campSub(x) : (x.sunset ? 'תצפית לשקיעה' : (x.note || POI_TYPES[x.type]?.he || 'נקודת חובה')));
       ul.append(li); fillThumbs(li.querySelector('.thumbs'), x);
     }
     $('poiList').append(ul);

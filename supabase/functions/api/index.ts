@@ -3,7 +3,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
-const MODEL = "claude-haiku-5-5";
+const MODEL = "claude-sonnet-5-5"; // trip parsing needs world knowledge (history, trails) + web search
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "content-type, x-group-code, authorization, apikey",
@@ -56,6 +56,24 @@ Deno.serve(async (req) => {
       if (!r.ok) return json({ error: "שגיאה מ-Claude", detail: j?.error?.message }, 502);
       const tu = (j.content || []).find((c: { type: string }) => c.type === "tool_use");
       return json({ input: tu?.input ?? null });
+    }
+
+    // ---- thin Claude proxy: the client runs the tool loop; model, size and tool types are fixed here ----
+    if (path === "/claude" && req.method === "POST") {
+      const key = Deno.env.get("ANTHROPIC_API_KEY");
+      if (!key) return json({ error: "מפתח Claude לא הוגדר בשרת" }, 503);
+      const b = await req.json();
+      const tools = (Array.isArray(b.tools) ? b.tools : []).filter((t: any) => t && (t.input_schema || (t.type && /^web_search_\d+$/.test(t.type))))
+        .map((t: any) => t.type ? { type: t.type, name: "web_search", max_uses: Math.min(4, t.max_uses || 3), user_location: { type: "approximate", country: "IL", timezone: "Asia/Jerusalem" } } : t);
+      if (!Array.isArray(b.messages) || !b.messages.length || JSON.stringify(b.messages).length > 200_000) return json({ error: "בקשה לא תקינה" }, 400);
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({ model: MODEL, max_tokens: Math.min(2500, b.max_tokens || 1500), system: String(b.system || "").slice(0, 6000), messages: b.messages, tools, ...(b.tool_choice ? { tool_choice: b.tool_choice } : {}) }),
+      });
+      const j = await r.json();
+      if (!r.ok) return json({ error: "שגיאה מ-Claude", status: r.status, detail: j?.error?.message }, r.status === 400 ? 400 : 502);
+      return json(j);
     }
 
     // ---- import proxy (fetch GPX/KML from a link, avoiding CORS) ----

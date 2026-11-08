@@ -571,6 +571,20 @@ function tilesFor(bbox) { // bbox [s,w,n,e]
     for (let j = Math.floor(bbox[1] / TILE); j <= Math.floor(bbox[3] / TILE); j++) keys.push(tileKey(i, j));
   return keys;
 }
+// tiles along an ordered list of points (a corridor), instead of the whole bounding box
+function corridorTiles(points, radiusM) {
+  const keys = new Set(); const dLat = radiusM / 111000, dLon = radiusM / 96000;
+  const add = (a, o) => { for (const k of tilesFor([a - dLat, o - dLon, a + dLat, o + dLon])) keys.add(k); };
+  for (let i = 0; i < points.length; i++) {
+    add(points[i][0], points[i][1]);
+    if (i + 1 < points.length) {
+      const [a1, o1] = points[i], [a2, o2] = points[i + 1];
+      const steps = Math.ceil(hav(a1, o1, a2, o2) / 8000);
+      for (let s = 1; s < steps; s++) add(a1 + (a2 - a1) * s / steps, o1 + (o2 - o1) * s / steps);
+    }
+  }
+  return [...keys];
+}
 function tileBBox(key) { const [, i, j] = key.split('_').map(Number); return [i * TILE, j * TILE, (i + 1) * TILE, (j + 1) * TILE]; }
 const WAY_TAGS = ['highway', 'tracktype', 'surface', 'smoothness', '4wd_only', 'access', 'motor_vehicle', 'motorcar', 'vehicle', 'oneway', 'name', 'name:he', 'ref'];
 const POI_TAGS = ['tourism', 'natural', 'historic', 'name', 'name:he', 'image', 'wikimedia_commons', 'wikidata', 'operator', 'owner', 'operator:he', 'operator:en', 'fee', 'drinking_water', 'toilets'];
@@ -632,7 +646,7 @@ function planMulti(G, p, nodes, onProgress = () => {}) {
   const maxCost = dayL * 6;
   const s = nodes.s, end = p.loop ? s : nodes.e;
   const types = (p.poi_types || []).filter(t => t !== 'nightcamp');
-  const camps = G.pois.filter(c => c.type === 'nightcamp' && c.auth).map(c => ({ ...c, node: nearestNode(G, c.lat, c.lon, fac, 800) })).filter(c => c.node >= 0);
+  const camps = G.pois.filter(c => c.type === 'nightcamp' && c.auth).map(c => ({ ...c, node: nearestNode(G, c.lat, c.lon, fac, 2500) })).filter(c => c.node >= 0);
   const Rend = end >= 0 ? dijkstra(G, end, fac, null, Infinity) : null;
   const totalDirect = Rend ? Rend.len[s] : null;
   onProgress(`מצאתי ${camps.length} חניוני לילה מורשים באזור. מתכנן ${N} ימים…`);
@@ -723,6 +737,70 @@ function planMulti(G, p, nodes, onProgress = () => {}) {
   const out = [];
   for (const r of results) { if (out.length >= 3) break; if (out.every(q => overlapRatio(q.edges, r.edges) < 0.75)) out.push(r); }
   return { results: out, L: dayL * N, dayL, totalDirect };
+}
+
+// Multi-day trip that must pass ordered stops (a theme / "in the footsteps of"):
+// build the whole route through the stops, then end each day at an authorized night camp
+// near the day's share of the distance, and rebuild through the camps.
+function planMultiVia(G, p, nodes, onProgress = () => {}) {
+  const N = Math.max(2, Math.min(7, p.days | 0));
+  const fac = factors(G, { ...p, avoid_military: multiMilitary(p) });
+  const s = nodes.s, vias = nodes.vias.filter(v => v >= 0);
+  const end = p.loop ? s : (nodes.e >= 0 ? nodes.e : vias[vias.length - 1]);
+  const stops0 = [s, ...vias.filter(v => v !== end), end].filter((v, i, a) => i === 0 || v !== a[i - 1]);
+  const legs0 = [];
+  onProgress('מחשב מסלול דרך כל התחנות…');
+  for (let i = 0; i + 1 < stops0.length; i++) {
+    const R = dijkstra(G, stops0[i], fac, null, Infinity, stops0[i + 1]);
+    const path = pathEdges(G, R, stops0[i + 1]);
+    if (!path) return { results: [], reason: `אין דרך מתאימה בין התחנות ${i + 1} ל-${i + 2} לפי התנאים (רמת רכב, שטחי אש, שטחי A). נסו לאפשר יותר, או לוותר על אחת התחנות.` };
+    legs0.push(path);
+  }
+  const all0 = legs0.flat(); const total = all0.reduce((t, e) => t + G.eLen[e], 0);
+  // node sequence with cumulative distance
+  const seq = [s]; const cum = [0]; let u = s;
+  for (const e of all0) { const v = G.eA[e] === u ? G.eB[e] : G.eA[e]; seq.push(v); cum.push(cum[cum.length - 1] + G.eLen[e]); u = v; }
+  // which leg each position belongs to
+  const legEnd = []; let acc = 0; for (const l of legs0) { acc += l.length; legEnd.push(acc); }
+  const camps = G.pois.filter(c => c.type === 'nightcamp' && c.auth).map(c => ({ ...c, node: nearestNode(G, c.lat, c.lon, fac, 2500) })).filter(c => c.node >= 0);
+  const nights = []; const notes = [];
+  for (let k = 1; k < N; k++) {
+    const target = total * k / N;
+    let idx = cum.findIndex(x => x >= target); if (idx < 0) idx = cum.length - 1;
+    const [la, lo] = [G.lat[seq[idx]], G.lon[seq[idx]]];
+    let best = null, bd = Infinity;
+    for (const c of camps) { if (nights.some(n => n.camp.node === c.node)) continue; const d = hav(la, lo, c.lat, c.lon); if (d < bd && d < 15000) { bd = d; best = c; } }
+    let pos = 0; while (pos < legEnd.length && legEnd[pos] < idx) pos++;
+    if (best) nights.push({ camp: best, leg: pos, idx });
+    else { notes.push(`אין חניון לילה מורשה במרחק סביר מסוף יום ${k}. היום מסתיים בשטח.`); nights.push({ camp: { name: 'סוף יום ' + k + ' (בלי חניון מורשה)', lat: la, lon: lo, node: seq[idx], type: 'dayend', auth: null }, leg: pos, idx }); }
+  }
+  nights.sort((a, b) => a.idx - b.idx);
+  // stops with camps inserted after the stop that starts their leg
+  const stops = [stops0[0]]; const isCamp = [false];
+  for (let i = 1; i < stops0.length; i++) {
+    for (const n of nights.filter(n => n.leg === i - 1)) { stops.push(n.camp.node); isCamp.push(n); }
+    stops.push(stops0[i]); isCamp.push(false);
+  }
+  onProgress('מחלק לימים עם חניוני לילה…');
+  const used = new Uint8Array(G.E); const allEdges = []; const days = []; const pois = [];
+  let dayStart = 0, dayLen = 0, dayHrs = 0, dayFrom = 0;
+  const viaInfo = nodes.viaPois || [];
+  for (let i = 0; i + 1 < stops.length; i++) {
+    const leg = stops[i] === stops[i + 1] ? [] : buildRoute(G, fac, [stops[i], stops[i + 1]], Infinity, used);
+    if (!leg) return { results: [], reason: 'לא הצלחתי לחבר את אחד החניונים למסלול.' };
+    for (const e of leg) { dayLen += G.eLen[e]; dayHrs += G.eLen[e] / 1000 / DIFF[G.eD[e]].speed; }
+    allEdges.push(...leg);
+    const n = isCamp[i + 1];
+    if (n) { days.push({ from: dayFrom, to: allEdges.length, len: dayLen, hrs: dayHrs, camp: n.camp }); if (n.camp.type === 'nightcamp') pois.push({ ...n.camp, day: days.length }); dayFrom = allEdges.length; dayLen = 0; dayHrs = 0; }
+  }
+  days.push({ from: dayFrom, to: allEdges.length, len: dayLen, hrs: dayHrs, camp: null });
+  vias.forEach((v, k) => { const vi = viaInfo[k]; if (vi) pois.push({ ...vi, lat: G.lat[v], lon: G.lon[v] }); });
+  const st = routeStats(G, allEdges, s);
+  const r = { edges: allEdges, stops, pois, ...st, days };
+  const dayL = total / N;
+  const longDay = days.find(d => d.hrs > (p.hours_per_day || 8) * 1.3);
+  if (longDay) notes.push(`יש ימים ארוכים (עד ${longDay.hrs.toFixed(1)} שעות נסיעה). שקלו להוסיף יום.`);
+  return { results: [r], L: total, dayL, note: notes.join(' ') || null };
 }
 
 function targetLengthM(p) {
@@ -817,5 +895,5 @@ function parseLocal(text) {
   return p;
 }
 
-if (typeof module !== 'undefined') module.exports = { TILE, tileKey, tilesFor, tileBBox, splitToTiles, tilesToElements, planMulti, addDays, campAuth, KNOWN_CAMPS, AREA_A, inAreaA, lookupPlace, dayInfo, resolveMilitary, nextSaturday, buildGraph, plan, nearestNode, factors, toGPX, parseLocal, targetLengthM, wayInfo, POI_TYPES };
+if (typeof module !== 'undefined') module.exports = { corridorTiles, planMultiVia, pathEdges, TILE, tileKey, tilesFor, tileBBox, splitToTiles, tilesToElements, planMulti, addDays, campAuth, KNOWN_CAMPS, AREA_A, inAreaA, lookupPlace, dayInfo, resolveMilitary, nextSaturday, buildGraph, plan, nearestNode, factors, toGPX, parseLocal, targetLengthM, wayInfo, POI_TYPES };
 // ===== END ENGINE =====
