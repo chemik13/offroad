@@ -17,8 +17,8 @@ const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SE
   auth: { persistSession: false },
 });
 
-const LIST_FIELDS = "id,created_at,name,created_by,source,region,tags,notes,driven,stats";
-const EDITABLE = ["name", "tags", "notes", "driven", "region"];
+const LIST_FIELDS = "id,created_at,name,created_by,source,region,tags,notes,driven,stats,offroad_url";
+const EDITABLE = ["name", "tags", "notes", "driven", "region", "offroad_url"];
 
 function privateHost(h: string) {
   return /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.|\[?::1\]?|.*\.internal$|.*\.local$)/i.test(h);
@@ -124,6 +124,7 @@ Deno.serve(async (req) => {
         const b = await req.json();
         const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
         for (const k of EDITABLE) if (k in b) patch[k] = b[k];
+        if ("offroad_url" in patch && patch.offroad_url !== null && !/^https:\/\/off-road\.io\/track\/\d{6,24}$/.test(String(patch.offroad_url))) return json({ error: "קישור Off-Road לא תקין" }, 400);
         const { data, error } = await db.from("routes").update(patch).eq("id", id).select(LIST_FIELDS).single();
         if (error) throw error;
         return json({ route: data });

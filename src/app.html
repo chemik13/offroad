@@ -261,6 +261,10 @@ ul.pois li{margin-bottom:8px}
         <button class="ghost" id="gpxBtn" title="הורדת קובץ GPX">GPX</button>
       </div>
       <div class="orhint" id="orHint" hidden></div>
+      <div class="saverow" id="orLinkRow" style="margin-top:8px" hidden>
+        <input type="url" id="orLink" aria-label="קישור Off-Road" placeholder="https://off-road.io/track/… (קישור מ-Off-Road)" style="direction:ltr">
+        <button class="ghost" id="orLinkSave">שמירה</button>
+      </div>
       <div class="actions" id="savedActions" style="margin-top:8px" hidden>
         <button class="ghost" id="drivenBtn">סמן: נסענו בזה</button>
         <button class="danger" id="delBtn">מחיקה</button>
@@ -1133,6 +1137,8 @@ function render(i, day = null) {
   $('routeName').value = sv ? sv.name : routeTitle(r, p);
   $('saveRow').hidden = !!sv || !hasGroup();
   $('savedActions').hidden = !sv; $('delConfirm').hidden = true; $('orHint').hidden = true;
+  $('orLinkRow').hidden = !sv; $('orLink').value = sv?.offroad_url || '';
+  $('offroadBtn').lastChild.textContent = sv?.offroad_url ? 'פתיחה ב-Off-Road (ישיר)' : 'פתיחה ב-Off-Road';
   $('savedTag').hidden = !sv;
   if (sv) {
     $('savedTag').textContent = `${sv.source === 'imported' ? 'יובא' : 'נשמר'} ע״י ${sv.created_by || 'מישהו'} · ${new Date(sv.created_at).toLocaleDateString('he-IL')}${sv.driven ? ' · נסענו בזה ✓' : ''}`;
@@ -1320,6 +1326,8 @@ function downloadFile(file) {
 const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 // Off-Road has no public deep link, so we hand the GPX to it through the phone's share sheet.
 $('offroadBtn').onclick = async () => {
+  // saved route that already lives in Off-Road: open it directly (universal link opens the app)
+  if (current?.saved?.offroad_url) { location.href = current.saved.offroad_url; return; }
   const { file, title } = gpxFile();
   const canShareFile = navigator.canShare && (() => { try { return navigator.canShare({ files: [file] }); } catch { return false; } })();
   if (canShareFile) {
@@ -1328,7 +1336,7 @@ $('offroadBtn').onclick = async () => {
       ? 'אם Off-Road לא מופיעה בשורת האפליקציות: לחצו "Save to Files", ואז באפליקציית Files לחצו על הקובץ והוא ייפתח ב-Off-Road. (אפשר גם לגלול את שורת האפליקציות עד "More" ולהפעיל שם את Off-Road, ואז היא תופיע תמיד.)'
       : 'במסך השיתוף בחרו Off-Road. לא מופיעה? שמרו את הקובץ ופתחו אותו מההורדות.';
     $('orHint').textContent = howTo;
-    try { await navigator.share({ files: [file], title }); }
+    try { await navigator.share({ files: [file], title }); if (current?.saved) $('orHint').textContent = howTo + ' אחרי שהמסלול נכנס ל-Off-Road: שתפו אותו משם, העתיקו את הקישור והדביקו למטה. מאז הכפתור יפתח אותו ישר ב-Off-Road, לכל החבורה.'; }
     catch (e) { if (e.name !== 'AbortError') { downloadFile(file); $('orHint').textContent = 'השיתוף לא נפתח, אז הקובץ ירד. פתחו אותו מהורדות ובחרו Off-Road.'; } else $('orHint').hidden = true; }
     return;
   }
@@ -1337,6 +1345,12 @@ $('offroadBtn').onclick = async () => {
   $('orHint').textContent = isIOS
     ? 'הקובץ ירד. פתחו את אפליקציית קבצים ← הורדות ← לחיצה על הקובץ ← שיתוף ← Off-Road. ב-Safari זה עובד ישירות מהכפתור.'
     : 'הקובץ ירד. פתחו אותו מההורדות ובחרו Off-Road, או ב-Off-Road: ייבוא GPX.';
+};
+$('orLinkSave').onclick = async () => {
+  const v = $('orLink').value.trim(); const m = v.match(/https:\/\/off-road\.io\/track\/\d{6,24}/);
+  if (v && !m) { status('זה לא קישור של Off-Road. הוא נראה כך: https://off-road.io/track/…', true); return; }
+  try { const j = await api('/routes/' + current.saved.id, { method: 'PATCH', body: JSON.stringify({ offroad_url: m ? m[0] : null }) }); Object.assign(current.saved, j.route); libCache = null; render(0); status(m ? 'נשמר. מעכשיו "פתיחה ב-Off-Road" פותח את המסלול ישר באפליקציה.' : 'הקישור הוסר.'); }
+  catch (e) { status(e.message, true); }
 };
 $('gpxBtn').onclick = () => { const { file } = gpxFile(); downloadFile(file); status('קובץ ה-GPX ירד.'); };
 </script>
