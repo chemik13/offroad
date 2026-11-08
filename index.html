@@ -199,6 +199,9 @@ ul.pois li{margin-bottom:8px}
 .repbtns button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 8px;font:500 12px var(--body);cursor:pointer;color:var(--ink)}
 .repnote{width:100%;box-sizing:border-box;margin-top:6px;font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px}
 .elevax{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.safeic{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font:700 11px var(--body);color:#fff;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.35)}
+.safeic.fuel{background:#333}.safeic.water{background:#1f6fd6}
+.safelist{padding:2px 12px 10px;font-size:13px;line-height:1.6;color:var(--ink2,#444)}
 .steepic{background:#fff;border:1.5px solid #d23a2a;color:#d23a2a;border-radius:4px;font:700 10px var(--body);padding:0 4px;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.25)}
 .daychips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-top:8px}
 .daychips button{flex:none;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:7px 12px;font:500 13px var(--body);cursor:pointer;font-variant-numeric:tabular-nums}
@@ -308,6 +311,7 @@ ul.pois li{margin-bottom:8px}
       <div id="dayPlan"></div>
       <div id="stopsBox"></div>
       <div class="refine" id="refineRow"><input type="text" id="refineIn" placeholder="שיפור במילים: &quot;תסיים באילת&quot;, &quot;תוסיף עצירה בעין עבדת&quot;, &quot;פחות כביש&quot;"><button class="ghost" id="refineBtn">עדכון</button></div>
+      <div id="safe"></div>
       <div id="elev"></div>
       <div id="wx"></div>
       <div id="poiList" style="margin-top:6px"></div>
@@ -347,7 +351,7 @@ ul.pois li{margin-bottom:8px}
       <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off"></details>
   </div>
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.24 · 08.11.2026 21:12</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.25 · 08.11.2026 21:16</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -390,12 +394,16 @@ ul.pois li{margin-bottom:8px}
 const POI_TYPES = {
   viewpoint: { he: 'תצפית', q: 'node["tourism"="viewpoint"]' },
   spring:    { he: 'מעיין', q: 'node["natural"="spring"]' },
-  nightcamp: { he: 'חניון לילה', q: 'nwr["tourism"="camp_site"]' },
+  nightcamp: { he: 'חניון לילה', q: 'nwr["tourism"~"^(camp_site|caravan_site)$"]' },
   camp:      { he: 'חניון יום / פיקניק', q: 'node["tourism"="picnic_site"]' },
   peak:      { he: 'פסגה',  q: 'node["natural"="peak"]["name"]' },
   historic:  { he: 'אתר היסטורי', q: 'node["historic"]["name"]' },
   water:     { he: 'גב / בור מים', q: 'node["natural"="water"]["name"]' },
+  // safety points: shown and measured along the route, never picked as a sightseeing stop
+  fuel:      { he: 'תחנת דלק', q: 'node["amenity"="fuel"]', safety: true },
+  drinkwater:{ he: 'מי שתייה', q: 'node["amenity"="drinking_water"]', safety: true },
 };
+const SAFETY_TYPES = ['fuel', 'drinkwater'];
 const DIFF = {
   0: { he: 'כביש', speed: 55 },
   1: { he: 'קל מאוד (ירוק)', speed: 35 },
@@ -438,6 +446,8 @@ function wayInfo(t) {
   if (!hw) return null;
   const no = v => v === 'no' || v === 'private';
   if (no(t.access) || no(t.motor_vehicle) || no(t.motorcar) || no(t.vehicle)) return null;
+  const work = v => v === 'agricultural' || v === 'forestry' || v === 'agricultural;forestry';
+  if (work(t.access) || work(t.motor_vehicle) || work(t.motorcar)) return null; // farm/forest vehicles only (common in Europe)
   if (t.smoothness === 'impassable') return null;
   if (hw === 'path') {
     const ok = t['4wd_only'] === 'yes' || t.motorcar === 'yes' || t.motor_vehicle === 'yes';
@@ -471,7 +481,7 @@ function buildGraph(elements) {
   const idx = new Map();
   const lat = [], lon = [];
   const eA = [], eB = [], eLen = [], eD = [], eAsph = [], eMil = [], eAA = [], eJS = [], eUnk = [], eOne = [], eName = [];
-  const mil = [];
+  const mil = [], res = [], eRes = [];
   const pois = [];
   const ways = [];
   for (const el of elements) {
@@ -481,14 +491,15 @@ function buildGraph(elements) {
         if (matchPoi(k, el.tags)) {
           const t = el.tags;
           const poi = { type: k, lat: plat, lon: plon, name: t['name:he'] || t.name || def.he, img: t.image, commons: t.wikimedia_commons, wd: t.wikidata };
-          if (k === 'nightcamp') { poi.auth = campAuth(t); poi.fee = t.fee; poi.water = t.drinking_water; poi.toilets = t.toilets; if (!t.name && !t['name:he']) poi.name = poi.auth ? 'חניון לילה' : 'אתר קמפינג'; }
+          if (k === 'nightcamp') { poi.auth = campAuth(t, plat, plon); poi.fee = t.fee; poi.water = t.drinking_water; poi.toilets = t.toilets; if (!t.name && !t['name:he']) poi.name = poi.auth ? 'חניון לילה' : 'אתר קמפינג'; }
           pois.push(poi); break;
         }
       }
       continue;
     } else if (el.type === 'way' && el.tags && el.tags.highway) {
       ways.push(el);
-    } else if (el.tags && (el.tags.landuse === 'military' || el.tags.military)) {
+    } else if (el.tags && (el.tags.landuse === 'military' || el.tags.military || isReserve(el.tags))) {
+      const reserve = !(el.tags.landuse === 'military' || el.tags.military);
       const rings = [];
       if (el.type === 'way' && el.geometry) rings.push(el.geometry.map(g => [g.lat, g.lon]));
       if (el.type === 'relation' && el.members) {
@@ -498,6 +509,7 @@ function buildGraph(elements) {
         let s = 90, n = -90, w = 180, e = -180;
         for (const [a, o] of r) { s = Math.min(s, a); n = Math.max(n, a); w = Math.min(w, o); e = Math.max(e, o); }
         const km2 = (n - s) * 111 * (e - w) * 96;
+        if (reserve) { res.push({ r, s, n, w, e, name: el.tags['name:he'] || el.tags.name || 'שמורת טבע' }); continue; }
         const t = el.tags, nm = (t.name || '') + ' ' + (t['name:en'] || '');
         const firing = ['danger_area', 'training_area', 'range'].includes(t.military) || /שטח אש|firing/i.test(nm);
         const base = ['base', 'barracks', 'airfield', 'naval_base'].includes(t.military) || (!firing && km2 < 4);
@@ -515,6 +527,7 @@ function buildGraph(elements) {
       else pois.push({ type: 'nightcamp', lat: la, lon: lo, name: nm, auth: op });
     }
   }
+  const inRes = (a, o) => { for (const m of res) if (a >= m.s && a <= m.n && o >= m.w && o <= m.e && pointInRing(a, o, m.r)) return 1; return 0; };
   const inMil = (a, o) => { let k = 0; for (const m of mil) if (a >= m.s && a <= m.n && o >= m.w && o <= m.e && pointInRing(a, o, m.r)) k = Math.max(k, m.kind); return k; };
   const nid = (id, g) => {
     let i = idx.get(id);
@@ -529,11 +542,12 @@ function buildGraph(elements) {
     const g = w.geometry;
     const mid = g[g.length >> 1];
     const m = mil.length ? inMil(mid.lat, mid.lon) : 0;
+    const rv = res.length ? inRes(mid.lat, mid.lon) : 0;
     for (let i = 0; i + 1 < w.nodes.length; i++) {
       if (!g[i] || !g[i + 1]) continue;
       const a = nid(w.nodes[i], g[i]), b = nid(w.nodes[i + 1], g[i + 1]);
       eA.push(a); eB.push(b); eLen.push(hav(g[i].lat, g[i].lon, g[i + 1].lat, g[i + 1].lon));
-      eD.push(info.d); eAsph.push(info.asph ? 1 : 0); eMil.push(m); { const ma = (g[i].lat + g[i + 1].lat) / 2, mo = (g[i].lon + g[i + 1].lon) / 2; eAA.push(inAreaA(ma, mo) ? 1 : 0); eJS.push(ma > 31.3 && ma < 32.6 && mo > 34.85 && pointInRing(ma, mo, JS_RING) ? 1 : 0); } eUnk.push(info.unk ? 1 : 0); eOne.push(one ? 1 : 0); eName.push(name);
+      eD.push(info.d); eAsph.push(info.asph ? 1 : 0); eMil.push(m); { const ma = (g[i].lat + g[i + 1].lat) / 2, mo = (g[i].lon + g[i + 1].lon) / 2; eAA.push(inAreaA(ma, mo) ? 1 : 0); eJS.push(ma > 31.3 && ma < 32.6 && mo > 34.85 && pointInRing(ma, mo, JS_RING) ? 1 : 0); } eUnk.push(info.unk ? 1 : 0); eRes.push(rv); eOne.push(one ? 1 : 0); eName.push(name);
     }
   }
   const N = lat.length, E = eA.length;
@@ -547,14 +561,68 @@ function buildGraph(elements) {
   return {
     N, E, lat: Float64Array.from(lat), lon: Float64Array.from(lon), start, adj,
     eA: Int32Array.from(eA), eB: Int32Array.from(eB), eLen: Float64Array.from(eLen),
-    eD: Uint8Array.from(eD), eAsph: Uint8Array.from(eAsph), eMil: Uint8Array.from(eMil), eAA: Uint8Array.from(eAA), eJS: Uint8Array.from(eJS),
+    eD: Uint8Array.from(eD), eAsph: Uint8Array.from(eAsph), eMil: Uint8Array.from(eMil), eAA: Uint8Array.from(eAA), eJS: Uint8Array.from(eJS), eRes: Uint8Array.from(eRes), res,
     eUnk: Uint8Array.from(eUnk), eOne: Uint8Array.from(eOne), eName, pois, mil,
   };
 }
 
+// ---------- safety along a route: distance to asphalt (bail-out), fuel and drinking water ----------
+function bailDist(G) { // metres from every node to the nearest paved road, over any drivable track
+  if (G._bail) return G._bail;
+  const d = new Float64Array(G.N).fill(Infinity), h = new Heap();
+  for (let e = 0; e < G.E; e++) if (G.eAsph[e]) { for (const n of [G.eA[e], G.eB[e]]) if (d[n]) { d[n] = 0; h.push(0, n); } }
+  while (h.size) {
+    const [k, u] = h.pop(); if (k > d[u]) continue;
+    for (let j = G.start[u]; j < G.start[u + 1]; j++) {
+      const e = G.adj[j]; if (G.eClosed && G.eClosed[e]) continue;
+      const v = G.eA[e] === u ? G.eB[e] : G.eA[e], nd = k + G.eLen[e];
+      if (nd < d[v]) { d[v] = nd; h.push(nd, v); }
+    }
+  }
+  return (G._bail = d);
+}
+function safetyInfo(G, edges, startNode) {
+  const bd = bailDist(G);
+  if (startNode == null) { // infer: the end of the first edge not shared with the second
+    const e0 = edges[0], e1 = edges[1];
+    startNode = e1 == null ? G.eA[e0] : (G.eA[e0] === G.eA[e1] || G.eA[e0] === G.eB[e1] ? G.eB[e0] : G.eA[e0]);
+  }
+  let u = startNode, km = 0, worst = { m: bd[u] || 0, km: 0, lat: G.lat[u], lon: G.lon[u] };
+  const samp = [[G.lat[u], G.lon[u], 0]]; let lastS = 0;
+  for (const e of edges) {
+    const v = G.eA[e] === u ? G.eB[e] : G.eA[e]; km += G.eLen[e] / 1000; u = v;
+    if (isFinite(bd[v]) && bd[v] > worst.m) worst = { m: bd[v], km, lat: G.lat[v], lon: G.lon[v] };
+    if (km - lastS > 0.25) { samp.push([G.lat[v], G.lon[v], km]); lastS = km; }
+  }
+  samp.push([G.lat[u], G.lon[u], km]);
+  const near = (type, maxM) => {
+    const out = [];
+    for (const p of G.pois) {
+      if (p.type !== type) continue;
+      let best = Infinity, at = 0;
+      for (const [a, o, k] of samp) { if (Math.abs(a - p.lat) > 0.05) continue; const dd = hav(a, o, p.lat, p.lon); if (dd < best) { best = dd; at = k; } }
+      if (best <= maxM) out.push({ name: p.name, lat: p.lat, lon: p.lon, km: at, off: best });
+    }
+    return out.sort((a, b) => a.km - b.km).filter((x, i, A) => !i || x.km - A[i - 1].km > 1);
+  };
+  const fuel = near('fuel', 2500), water = near('drinkwater', 800);
+  const marks = [0, ...fuel.map(f => f.km), km];
+  let fuelGap = 0; for (let i = 1; i < marks.length; i++) fuelGap = Math.max(fuelGap, marks[i] - marks[i - 1]);
+  return { bail: worst, fuel, water, fuelGap, total: km };
+}
+
 // Authorized night camps: operated by INPA (רט"ג) or KKL, or explicitly named "חניון לילה".
 const AUTH_OPS = /רשות הטבע|רט"?ג|רטג|nature and parks|inpa|קק"?ל|קרן קיימת|kkl|jnf|מועצה אזורית/i;
-function campAuth(t) {
+// rough box: Israeli rules (firing zones, Area A, INPA camps, the gazetteer) apply only inside it
+function inIsrael(a, o) { return a > 29.45 && a < 33.35 && o > 34.2 && o < 35.92; }
+const isReserve = t => t.leisure === 'nature_reserve' || t.boundary === 'national_park' || (t.boundary === 'protected_area' && /^(1a|1b|1|2)$/.test(t.protect_class || ''));
+const RESERVE_Q = bb => `way["leisure"="nature_reserve"](${bb});relation["leisure"="nature_reserve"](${bb});relation["boundary"="national_park"](${bb});relation["boundary"="protected_area"]["protect_class"~"^(1a|1b|1|2)$"](${bb});`;
+function campAuth(t, la, lo) {
+  if (la != null && !inIsrael(la, lo)) { // Europe & elsewhere: an official campsite / caravan site is a legal night stop
+    if (t.access === 'private' || t.access === 'no' || t.backcountry === 'yes' || t.group_only === 'yes') return null;
+    if (t.tourism === 'caravan_site') return 'חניון קרוואנים';
+    return t.name || t.operator || t.fee || t.website ? 'קמפינג רשמי' : null;
+  }
   const op = [t.operator, t.owner, t['operator:he'], t['operator:en']].filter(Boolean).join(' ');
   if (AUTH_OPS.test(op)) return /קק"?ל|קרן קיימת|kkl|jnf/i.test(op) ? 'קק"ל' : /מועצה/.test(op) ? 'מועצה אזורית' : 'רט"ג';
   const nm = (t['name:he'] || '') + ' ' + (t.name || '');
@@ -571,11 +639,13 @@ function matchPoi(k, t) {
   switch (k) {
     case 'viewpoint': return t.tourism === 'viewpoint';
     case 'spring': return t.natural === 'spring';
-    case 'nightcamp': return t.tourism === 'camp_site';
+    case 'nightcamp': return t.tourism === 'camp_site' || t.tourism === 'caravan_site';
     case 'camp': return t.tourism === 'picnic_site';
     case 'peak': return t.natural === 'peak' && !!t.name;
     case 'historic': return !!t.historic && !!t.name;
     case 'water': return t.natural === 'water' && !!t.name;
+    case 'fuel': return t.amenity === 'fuel';
+    case 'drinkwater': return t.amenity === 'drinking_water';
   }
   return false;
 }
@@ -619,7 +689,7 @@ function factors(G, p) {
     if (G.eMil[e] === 1 && p.avoid_military && !G.eAsph[e]) { f[e] = Infinity; continue; }
     if (G.eAsph[e]) { f[e] = p.avoid_asphalt ? 4 : 1.6; continue; }
     if (d > maxD) { f[e] = Infinity; continue; }
-    f[e] = 1 + 0.45 * Math.abs(d - tD) + (G.eUnk[e] ? 0.15 : 0);
+    f[e] = 1 + 0.45 * Math.abs(d - tD) + (G.eUnk[e] ? 0.15 : 0) + (G.eRes && G.eRes[e] ? 0.35 : 0); // reserves: prefer going around
   }
   return f;
 }
@@ -731,7 +801,7 @@ function buildRoute(G, fac, stops, maxCost, used = new Uint8Array(G.E)) {
 }
 
 function routeStats(G, edges, startNode) {
-  let len = 0, hrs = 0, asph = 0, mil = 0, unk = 0, maxD = 0, reuse = 0, aa = 0, js = 0;
+  let len = 0, hrs = 0, asph = 0, mil = 0, unk = 0, maxD = 0, reuse = 0, aa = 0, js = 0, res = 0;
   const byD = [0, 0, 0, 0, 0, 0];
   const seen = new Uint8Array(G.E);
   const coords = [];
@@ -742,7 +812,7 @@ function routeStats(G, edges, startNode) {
     const L = G.eLen[e], d = G.eD[e];
     len += L; hrs += L / 1000 / DIFF[d].speed; byD[d] += L;
     if (G.eAsph[e]) asph += L; else maxD = Math.max(maxD, d);
-    if (G.eMil[e]) mil += L; if (G.eUnk[e]) unk += L; if (G.eAA[e]) aa += L; if (G.eJS[e]) js += L;
+    if (G.eMil[e]) mil += L; if (G.eUnk[e]) unk += L; if (G.eAA[e]) aa += L; if (G.eJS[e]) js += L; if (G.eRes && G.eRes[e]) res += L;
     if (seen[e]) reuse += L; seen[e] = 1;
     const v = G.eA[e] === u ? G.eB[e] : G.eA[e];
     coords.push([G.lat[v], G.lon[v]]);
@@ -751,13 +821,13 @@ function routeStats(G, edges, startNode) {
     else segs.push({ d, pts: [[G.lat[u], G.lon[u]], [G.lat[v], G.lon[v]]] });
     u = v;
   }
-  return { len, hrs, asph, mil, unk, aa, js, maxD, reuse, byD, coords, segs };
+  return { len, hrs, asph, mil, unk, aa, js, res, maxD, reuse, byD, coords, segs };
 }
 
 function snapPois(G, fac, types, R0, minL, maxL, authOnly = true) {
   const out = [];
   for (const p of G.pois) {
-    if (types.length && !types.includes(p.type)) continue;
+    if (types.length ? !types.includes(p.type) : SAFETY_TYPES.includes(p.type)) continue;
     if (p.type === 'nightcamp' && !p.auth && authOnly) continue;
     if (p.type !== 'nightcamp' && (!p.name || p.name === POI_TYPES[p.type]?.he)) continue; // unnamed stops are not worth a detour
     const n = nearestNode(G, p.lat, p.lon, fac, 500);
@@ -1012,7 +1082,7 @@ function lookupPlace(name) {
 }
 
 // ---------- OSM tile cache: compact format + splitting ----------
-const TILE = 0.25, TILE_VER = 'v2';
+const TILE = 0.25, TILE_VER = 'v3'; // v3: + fuel, drinking water, caravan sites, nature reserves
 const tileKey = (i, j) => `${TILE_VER}_${i}_${j}`;
 function tilesFor(bbox) { // bbox [s,w,n,e]
   const keys = [];
@@ -1036,8 +1106,8 @@ function corridorTiles(points, radiusM) {
 }
 function tileBBox(key) { const [, i, j] = key.split('_').map(Number); return [i * TILE, j * TILE, (i + 1) * TILE, (j + 1) * TILE]; }
 const WAY_TAGS = ['highway', 'tracktype', 'surface', 'smoothness', '4wd_only', 'access', 'motor_vehicle', 'motorcar', 'vehicle', 'oneway', 'name', 'name:he', 'ref'];
-const POI_TAGS = ['tourism', 'natural', 'historic', 'name', 'name:he', 'image', 'wikimedia_commons', 'wikidata', 'operator', 'owner', 'operator:he', 'operator:en', 'fee', 'drinking_water', 'toilets'];
-const MIL_TAGS = ['landuse', 'military', 'name', 'name:en'];
+const POI_TAGS = ['amenity', 'brand', 'backcountry', 'group_only', 'website', 'access', 'tourism', 'natural', 'historic', 'name', 'name:he', 'image', 'wikimedia_commons', 'wikidata', 'operator', 'owner', 'operator:he', 'operator:en', 'fee', 'drinking_water', 'toilets'];
+const MIL_TAGS = ['landuse', 'military', 'leisure', 'boundary', 'protect_class', 'name', 'name:he', 'name:en'];
 const pick = (t, keys) => { const o = {}; for (const k of keys) if (t[k] != null) o[k] = t[k]; return o; };
 const r6 = x => Math.round(x * 1e6) / 1e6;
 const flatGeom = g => { const f = []; for (const p of g || []) if (p) f.push(r6(p.lat), r6(p.lon)); return f; };
@@ -1048,7 +1118,7 @@ const boxHit = (a, b) => a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >=
 function splitToTiles(elements, keys) {
   const out = {}; const boxes = {};
   for (const k of keys) { out[k] = { w: [], p: [], m: [] }; boxes[k] = tileBBox(k); }
-  const isMil = t => t && (t.landuse === 'military' || t.military);
+  const isMil = t => t && (t.landuse === 'military' || t.military || isReserve(t));
   for (const el of elements) {
     const t = el.tags || {};
     if (el.type === 'way' && t.highway && el.geometry) {
@@ -1377,7 +1447,7 @@ function parseLocal(text) {
   return p;
 }
 
-if (typeof module !== 'undefined') module.exports = { sampleRoute, analyzeElevation, applyReports, dijkstra, multiMilitary, corridorTiles, planMultiVia, pathEdges, TILE, tileKey, tilesFor, tileBBox, splitToTiles, tilesToElements, planMulti, addDays, campAuth, KNOWN_CAMPS, AREA_A, inAreaA, lookupPlace, dayInfo, resolveMilitary, nextSaturday, buildGraph, plan, nearestNode, factors, toGPX, parseLocal, targetLengthM, wayInfo, POI_TYPES };
+if (typeof module !== 'undefined') module.exports = { safetyInfo, bailDist, inIsrael, isReserve, SAFETY_TYPES, sampleRoute, analyzeElevation, applyReports, dijkstra, multiMilitary, corridorTiles, planMultiVia, pathEdges, TILE, tileKey, tilesFor, tileBBox, splitToTiles, tilesToElements, planMulti, addDays, campAuth, KNOWN_CAMPS, AREA_A, inAreaA, lookupPlace, dayInfo, resolveMilitary, nextSaturday, buildGraph, plan, nearestNode, factors, toGPX, parseLocal, targetLengthM, wayInfo, POI_TYPES };
 // ===== END ENGINE =====
 
 </script>
@@ -1685,7 +1755,7 @@ function overpassQuery(bb) {
   return `[out:json][timeout:120];
 (way["highway"~"^(track|unclassified|tertiary|secondary|primary|trunk|tertiary_link|secondary_link|primary_link|trunk_link)$"](${bb});way["highway"~"^(path|service)$"]["motor_vehicle"!~"no|private"]["surface"~"^(unpaved|gravel|fine_gravel|dirt|ground|sand|compacted|rock|pebblestone|earth|mud)$"](${bb});way["highway"="path"]["4wd_only"="yes"](${bb}););out geom qt;
 (${Object.values(POI_TYPES).map(p => p.q + `(${bb});`).join('')});out center qt;
-(way["landuse"="military"](${bb});relation["landuse"="military"](${bb});way["military"~"^(danger_area|training_area|range)$"](${bb});relation["military"~"^(danger_area|training_area|range)$"](${bb}););out geom qt;`;
+(way["landuse"="military"](${bb});relation["landuse"="military"](${bb});way["military"~"^(danger_area|training_area|range)$"](${bb});relation["military"~"^(danger_area|training_area|range)$"](${bb});${RESERVE_Q(bb)});out geom qt;`;
 }
 // One area at a time is light enough for busy public servers. Each request races two servers;
 // on failure it retries with the others, backing off (1s, 3s, 7s), as the servers ask.
@@ -1994,6 +2064,30 @@ async function renderElevation(r) {
     for (const s of A.steep) L.marker([s.lat, s.lon], { icon: L.divIcon({ className: '', html: `<div class="steepic">${s.grade > 0 ? '⬈' : '⬊'} ${Math.abs(Math.round(s.grade))}%</div>`, iconSize: null, iconAnchor: [0, 0] }) }).addTo(elevLayer).bindTooltip(`${s.grade > 0 ? 'עלייה' : 'ירידה'} תלולה של ${Math.abs(Math.round(s.grade))}% לאורך כ-${Math.round(s.to - s.from)} מ׳, בק"מ ${(s.from / 1000).toFixed(1)}`);
     if (worst && Math.abs(worst.grade) >= 25) $('warns').insertAdjacentHTML('afterbegin', `<div class="warn">${worst.grade > 0 ? 'עלייה' : 'ירידה'} תלולה מאוד (${Math.abs(Math.round(worst.grade))}%) בק"מ ${(worst.from / 1000).toFixed(1)}. בהילוך כוח, ועדיף שמישהו ייצא לכוון. ייתכן שזו טעות במודל הגובה בקצה מצוק: הסתכלו בשטח.</div>`);
   }
+}
+
+// ---------- safety: bail-out to asphalt, fuel, drinking water ----------
+const isIL = r => { const c = r.coords[0]; return inIsrael(c[0], c[1]); };
+let safeLayer = null;
+function safetyFor(r, dv) {
+  const G = current?.G; if (!G || !r.edges?.length || r.unrated || current.saved) return null;
+  try { return dv ? safetyInfo(G, r.edges.slice(dv.from, dv.to), null) : safetyInfo(G, r.edges, r.stops?.[0]); } catch { return null; }
+}
+function renderSafety(r, dv) {
+  const box = $('safe'); box.innerHTML = '';
+  if (safeLayer) { safeLayer.remove(); safeLayer = null; }
+  const S = safetyFor(r, dv); if (!S) return;
+  safeLayer = L.layerGroup().addTo(map);
+  const ic = (k, t) => L.divIcon({ className: '', html: `<div class="safeic ${k}">${t}</div>`, iconSize: [20, 20], iconAnchor: [10, 10] });
+  for (const f of S.fuel) L.marker([f.lat, f.lon], { icon: ic('fuel', '⛽') }).addTo(safeLayer).bindTooltip(`${f.name} · ק"מ ${f.km.toFixed(0)}`);
+  for (const f of S.water) L.marker([f.lat, f.lon], { icon: ic('water', '💧') }).addTo(safeLayer).bindTooltip(`מי שתייה · ק"מ ${f.km.toFixed(0)}`);
+  if (S.bail.m > 3000) L.marker([S.bail.lat, S.bail.lon], { icon: L.divIcon({ className: '', html: `<div class="steepic" style="border-color:#8a5a00;color:#8a5a00">${(S.bail.m / 1000).toFixed(0)} ק"מ מכביש</div>`, iconSize: null, iconAnchor: [0, 0] }) }).addTo(safeLayer).bindTooltip('הנקודה הכי מרוחקת מכביש סלול לאורך המסלול');
+  const km = x => x.toFixed(0);
+  const fuelTxt = S.fuel.length ? S.fuel.slice(0, 6).map(f => `ק"מ ${km(f.km)}`).join(', ') + (S.fuel.length > 6 ? '…' : '') : 'אין תחנות ליד המסלול (עד 2.5 ק"מ)';
+  const waterTxt = S.water.length ? S.water.slice(0, 6).map(f => `ק"מ ${km(f.km)}`).join(', ') : 'אין ברזיות מסומנות ליד המסלול. קחו לפחות 5 ליטר לאדם ליום, יותר בקיץ.';
+  box.innerHTML = `<div class="wx"><h3>בטיחות בדרך<small>לפי OSM</small></h3>
+    <div class="wxrow" style="grid-template-columns:1fr 1fr 1fr;text-align:center"><span><b>${(S.bail.m / 1000).toFixed(1)}</b><br><small>ק"מ מקסימום מכביש</small></span><span><b>${S.fuel.length}</b><br><small>תחנות דלק בדרך</small></span><span><b>${S.water.length}</b><br><small>נקודות מי שתייה</small></span></div>
+    <div class="safelist">⛽ ${fuelTxt}<br>💧 ${waterTxt}</div></div>`;
 }
 
 // ---------- field reports ----------
@@ -2621,6 +2715,10 @@ function render(i, day = null) {
   else if (!current.saved && mr.avoid && mr.info && !mr.info.open) w.push(`התאריך הוא ${mr.info.why}, אז שטחי אש לא נכללו. בסופ"ש יהיו יותר אפשרויות.`);
   if (r.reuse / r.len > 0.15) w.push(`${(r.reuse / 1000).toFixed(1)} ק"מ נוסעים פעמיים באותו קטע (הלוך-חזור).`);
   if (!current.saved && current.res.L && (p.duration_hours || p.distance_km) && Math.abs(r.len - current.res.L) / current.res.L > 0.35) w.push('לא מצאתי מסלול באורך המבוקש בדיוק. זה הקרוב ביותר.');
+  if (r.res > 300 && !r.unrated) w.push(isIL(r) ? `${(r.res / 1000).toFixed(1)} ק"מ עוברים בתוך שמורת טבע / גן לאומי. בשמורות מותר לנסוע רק בדרכים המסומנות לרכב (סימון שבילים בצבע + שלט "דרך לרכב"), ו-OSM לא תמיד יודע איזו דרך מסומנת. אם אין סימון בשטח, לא נכנסים.` : `${(r.res / 1000).toFixed(1)} ק"מ עוברים בתוך שמורת טבע / פארק לאומי. ברוב אירופה נסיעה ברכב שם מותרת רק בדרכים ציבוריות פתוחות לרכב, וקנסות גבוהים. בדקו את השילוט בכניסה.`);
+  const SF = safetyFor(r, dv);
+  if (SF && SF.bail.m > 20000) w.push(`הנקודה הכי מרוחקת מכביש: כ-${(SF.bail.m / 1000).toFixed(0)} ק"מ שטח (בק"מ ${SF.bail.km.toFixed(0)}). אם משהו נשבר שם, החילוץ ארוך: צאו לפחות בשני רכבים, עם מים, מדחס, רצועת גרירה וקליטה/מכשיר קשר.`);
+  if (SF && SF.fuelGap > 200 && (D || r.len > 150000)) w.push(`הקטע הארוך ביותר בלי תחנת דלק ליד המסלול: כ-${SF.fuelGap.toFixed(0)} ק"מ. בשטח רכב צורך פי 1.5–2 מבכביש: מלאו מיכל לפני, ושקלו ג'ריקן.`);
   w.push('המסלול מבוסס על נתוני OSM. מצב השטח בפועל (שיטפונות, חסימות, סגירת שמורות) יכול להשתנות: בדקו לפני יציאה.');
   $('warns').innerHTML = w.map(t => `<div class="warn">${t}</div>`).join('');
   if (!current.saved) { // quick firing-zone switch, works without a date
@@ -2636,6 +2734,7 @@ function render(i, day = null) {
     $('warns').append(row);
   }
   renderWeather(r, { ...p, date: $('pDate').value || p.date }, D);
+  renderSafety(r, dv, w);
   renderElevation(dv ? { ...r, coords: r.coords.slice(dv.from, dv.to + 1) } : r);
   $('dayPlan').innerHTML = '';
   if (D) {

@@ -199,6 +199,9 @@ ul.pois li{margin-bottom:8px}
 .repbtns button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 8px;font:500 12px var(--body);cursor:pointer;color:var(--ink)}
 .repnote{width:100%;box-sizing:border-box;margin-top:6px;font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px}
 .elevax{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.safeic{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font:700 11px var(--body);color:#fff;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.35)}
+.safeic.fuel{background:#333}.safeic.water{background:#1f6fd6}
+.safelist{padding:2px 12px 10px;font-size:13px;line-height:1.6;color:var(--ink2,#444)}
 .steepic{background:#fff;border:1.5px solid #d23a2a;color:#d23a2a;border-radius:4px;font:700 10px var(--body);padding:0 4px;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.25)}
 .daychips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-top:8px}
 .daychips button{flex:none;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:7px 12px;font:500 13px var(--body);cursor:pointer;font-variant-numeric:tabular-nums}
@@ -308,6 +311,7 @@ ul.pois li{margin-bottom:8px}
       <div id="dayPlan"></div>
       <div id="stopsBox"></div>
       <div class="refine" id="refineRow"><input type="text" id="refineIn" placeholder="שיפור במילים: &quot;תסיים באילת&quot;, &quot;תוסיף עצירה בעין עבדת&quot;, &quot;פחות כביש&quot;"><button class="ghost" id="refineBtn">עדכון</button></div>
+      <div id="safe"></div>
       <div id="elev"></div>
       <div id="wx"></div>
       <div id="poiList" style="margin-top:6px"></div>
@@ -692,7 +696,7 @@ function overpassQuery(bb) {
   return `[out:json][timeout:120];
 (way["highway"~"^(track|unclassified|tertiary|secondary|primary|trunk|tertiary_link|secondary_link|primary_link|trunk_link)$"](${bb});way["highway"~"^(path|service)$"]["motor_vehicle"!~"no|private"]["surface"~"^(unpaved|gravel|fine_gravel|dirt|ground|sand|compacted|rock|pebblestone|earth|mud)$"](${bb});way["highway"="path"]["4wd_only"="yes"](${bb}););out geom qt;
 (${Object.values(POI_TYPES).map(p => p.q + `(${bb});`).join('')});out center qt;
-(way["landuse"="military"](${bb});relation["landuse"="military"](${bb});way["military"~"^(danger_area|training_area|range)$"](${bb});relation["military"~"^(danger_area|training_area|range)$"](${bb}););out geom qt;`;
+(way["landuse"="military"](${bb});relation["landuse"="military"](${bb});way["military"~"^(danger_area|training_area|range)$"](${bb});relation["military"~"^(danger_area|training_area|range)$"](${bb});${RESERVE_Q(bb)});out geom qt;`;
 }
 // One area at a time is light enough for busy public servers. Each request races two servers;
 // on failure it retries with the others, backing off (1s, 3s, 7s), as the servers ask.
@@ -1001,6 +1005,30 @@ async function renderElevation(r) {
     for (const s of A.steep) L.marker([s.lat, s.lon], { icon: L.divIcon({ className: '', html: `<div class="steepic">${s.grade > 0 ? '⬈' : '⬊'} ${Math.abs(Math.round(s.grade))}%</div>`, iconSize: null, iconAnchor: [0, 0] }) }).addTo(elevLayer).bindTooltip(`${s.grade > 0 ? 'עלייה' : 'ירידה'} תלולה של ${Math.abs(Math.round(s.grade))}% לאורך כ-${Math.round(s.to - s.from)} מ׳, בק"מ ${(s.from / 1000).toFixed(1)}`);
     if (worst && Math.abs(worst.grade) >= 25) $('warns').insertAdjacentHTML('afterbegin', `<div class="warn">${worst.grade > 0 ? 'עלייה' : 'ירידה'} תלולה מאוד (${Math.abs(Math.round(worst.grade))}%) בק"מ ${(worst.from / 1000).toFixed(1)}. בהילוך כוח, ועדיף שמישהו ייצא לכוון. ייתכן שזו טעות במודל הגובה בקצה מצוק: הסתכלו בשטח.</div>`);
   }
+}
+
+// ---------- safety: bail-out to asphalt, fuel, drinking water ----------
+const isIL = r => { const c = r.coords[0]; return inIsrael(c[0], c[1]); };
+let safeLayer = null;
+function safetyFor(r, dv) {
+  const G = current?.G; if (!G || !r.edges?.length || r.unrated || current.saved) return null;
+  try { return dv ? safetyInfo(G, r.edges.slice(dv.from, dv.to), null) : safetyInfo(G, r.edges, r.stops?.[0]); } catch { return null; }
+}
+function renderSafety(r, dv) {
+  const box = $('safe'); box.innerHTML = '';
+  if (safeLayer) { safeLayer.remove(); safeLayer = null; }
+  const S = safetyFor(r, dv); if (!S) return;
+  safeLayer = L.layerGroup().addTo(map);
+  const ic = (k, t) => L.divIcon({ className: '', html: `<div class="safeic ${k}">${t}</div>`, iconSize: [20, 20], iconAnchor: [10, 10] });
+  for (const f of S.fuel) L.marker([f.lat, f.lon], { icon: ic('fuel', '⛽') }).addTo(safeLayer).bindTooltip(`${f.name} · ק"מ ${f.km.toFixed(0)}`);
+  for (const f of S.water) L.marker([f.lat, f.lon], { icon: ic('water', '💧') }).addTo(safeLayer).bindTooltip(`מי שתייה · ק"מ ${f.km.toFixed(0)}`);
+  if (S.bail.m > 3000) L.marker([S.bail.lat, S.bail.lon], { icon: L.divIcon({ className: '', html: `<div class="steepic" style="border-color:#8a5a00;color:#8a5a00">${(S.bail.m / 1000).toFixed(0)} ק"מ מכביש</div>`, iconSize: null, iconAnchor: [0, 0] }) }).addTo(safeLayer).bindTooltip('הנקודה הכי מרוחקת מכביש סלול לאורך המסלול');
+  const km = x => x.toFixed(0);
+  const fuelTxt = S.fuel.length ? S.fuel.slice(0, 6).map(f => `ק"מ ${km(f.km)}`).join(', ') + (S.fuel.length > 6 ? '…' : '') : 'אין תחנות ליד המסלול (עד 2.5 ק"מ)';
+  const waterTxt = S.water.length ? S.water.slice(0, 6).map(f => `ק"מ ${km(f.km)}`).join(', ') : 'אין ברזיות מסומנות ליד המסלול. קחו לפחות 5 ליטר לאדם ליום, יותר בקיץ.';
+  box.innerHTML = `<div class="wx"><h3>בטיחות בדרך<small>לפי OSM</small></h3>
+    <div class="wxrow" style="grid-template-columns:1fr 1fr 1fr;text-align:center"><span><b>${(S.bail.m / 1000).toFixed(1)}</b><br><small>ק"מ מקסימום מכביש</small></span><span><b>${S.fuel.length}</b><br><small>תחנות דלק בדרך</small></span><span><b>${S.water.length}</b><br><small>נקודות מי שתייה</small></span></div>
+    <div class="safelist">⛽ ${fuelTxt}<br>💧 ${waterTxt}</div></div>`;
 }
 
 // ---------- field reports ----------
@@ -1628,6 +1656,10 @@ function render(i, day = null) {
   else if (!current.saved && mr.avoid && mr.info && !mr.info.open) w.push(`התאריך הוא ${mr.info.why}, אז שטחי אש לא נכללו. בסופ"ש יהיו יותר אפשרויות.`);
   if (r.reuse / r.len > 0.15) w.push(`${(r.reuse / 1000).toFixed(1)} ק"מ נוסעים פעמיים באותו קטע (הלוך-חזור).`);
   if (!current.saved && current.res.L && (p.duration_hours || p.distance_km) && Math.abs(r.len - current.res.L) / current.res.L > 0.35) w.push('לא מצאתי מסלול באורך המבוקש בדיוק. זה הקרוב ביותר.');
+  if (r.res > 300 && !r.unrated) w.push(isIL(r) ? `${(r.res / 1000).toFixed(1)} ק"מ עוברים בתוך שמורת טבע / גן לאומי. בשמורות מותר לנסוע רק בדרכים המסומנות לרכב (סימון שבילים בצבע + שלט "דרך לרכב"), ו-OSM לא תמיד יודע איזו דרך מסומנת. אם אין סימון בשטח, לא נכנסים.` : `${(r.res / 1000).toFixed(1)} ק"מ עוברים בתוך שמורת טבע / פארק לאומי. ברוב אירופה נסיעה ברכב שם מותרת רק בדרכים ציבוריות פתוחות לרכב, וקנסות גבוהים. בדקו את השילוט בכניסה.`);
+  const SF = safetyFor(r, dv);
+  if (SF && SF.bail.m > 20000) w.push(`הנקודה הכי מרוחקת מכביש: כ-${(SF.bail.m / 1000).toFixed(0)} ק"מ שטח (בק"מ ${SF.bail.km.toFixed(0)}). אם משהו נשבר שם, החילוץ ארוך: צאו לפחות בשני רכבים, עם מים, מדחס, רצועת גרירה וקליטה/מכשיר קשר.`);
+  if (SF && SF.fuelGap > 200 && (D || r.len > 150000)) w.push(`הקטע הארוך ביותר בלי תחנת דלק ליד המסלול: כ-${SF.fuelGap.toFixed(0)} ק"מ. בשטח רכב צורך פי 1.5–2 מבכביש: מלאו מיכל לפני, ושקלו ג'ריקן.`);
   w.push('המסלול מבוסס על נתוני OSM. מצב השטח בפועל (שיטפונות, חסימות, סגירת שמורות) יכול להשתנות: בדקו לפני יציאה.');
   $('warns').innerHTML = w.map(t => `<div class="warn">${t}</div>`).join('');
   if (!current.saved) { // quick firing-zone switch, works without a date
@@ -1643,6 +1675,7 @@ function render(i, day = null) {
     $('warns').append(row);
   }
   renderWeather(r, { ...p, date: $('pDate').value || p.date }, D);
+  renderSafety(r, dv, w);
   renderElevation(dv ? { ...r, coords: r.coords.slice(dv.from, dv.to + 1) } : r);
   $('dayPlan').innerHTML = '';
   if (D) {

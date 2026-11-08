@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Build the app's trail-data tiles from an OSM extract (e.g. Geofabrik israel-and-palestine-latest.osm.pbf).
 
-Output matches the app's compact tile format v2 (see splitToTiles in src/engine.js):
-  out/v2_<i>_<j>.json.gz  ->  {"w": [[id, nodeIds, flatLatLon, tags]], "p": [[t, id, lat, lon, tags]],
-                               "m": [[id, [flatRing, ...], tags]], "at": ms, "key": "v2_i_j"}
+Output matches the app's compact tile format v3 (see splitToTiles in src/engine.js):
+  out/v3_<i>_<j>.json.gz  ->  {"w": [[id, nodeIds, flatLatLon, tags]], "p": [[t, id, lat, lon, tags]],
+                               "m": [[id, [flatRing, ...], tags]], "at": ms, "key": "v3_i_j"}
+(m holds military areas and nature reserves; p includes fuel, drinking water and caravan sites)
 plus out/index.json. The selection mirrors overpassQuery() in src/app.html.
 
 usage: build_tiles.py <extract.osm.pbf> <out_dir>
@@ -12,14 +13,14 @@ import gzip, json, math, os, sys, time
 import osmium
 
 TILE = 0.25
-VER = "v2"
+VER = "v3"
 BBOX = (29.3, 34.1, 33.5, 36.0)  # s, w, n, e: Israel incl. Golan, Judea & Samaria, Arava
 
 MAIN_HW = {"track", "unclassified", "tertiary", "secondary", "primary", "trunk", "tertiary_link", "secondary_link", "primary_link", "trunk_link"}
 UNPAVED = {"unpaved", "gravel", "fine_gravel", "dirt", "ground", "sand", "compacted", "rock", "pebblestone", "earth", "mud"}
 WAY_TAGS = ["highway", "tracktype", "surface", "smoothness", "4wd_only", "access", "motor_vehicle", "motorcar", "vehicle", "oneway", "name", "name:he", "ref"]
-POI_TAGS = ["tourism", "natural", "historic", "name", "name:he", "image", "wikimedia_commons", "wikidata", "operator", "owner", "operator:he", "operator:en", "fee", "drinking_water", "toilets"]
-MIL_TAGS = ["landuse", "military", "name", "name:en"]
+POI_TAGS = ["amenity", "brand", "backcountry", "group_only", "website", "access", "tourism", "natural", "historic", "name", "name:he", "image", "wikimedia_commons", "wikidata", "operator", "owner", "operator:he", "operator:en", "fee", "drinking_water", "toilets"]
+MIL_TAGS = ["landuse", "military", "leisure", "boundary", "protect_class", "name", "name:he", "name:en"]
 MIL_KINDS = {"danger_area", "training_area", "range"}
 
 
@@ -39,11 +40,16 @@ def keep_way(t):
 
 
 def poi_node(t):
-    return (t.get("tourism") in ("viewpoint", "camp_site", "picnic_site") or t.get("natural") == "spring"
+    return (t.get("tourism") in ("viewpoint", "camp_site", "caravan_site", "picnic_site") or t.get("amenity") in ("fuel", "drinking_water") or t.get("natural") == "spring"
             or (t.get("natural") in ("peak", "water") and "name" in t) or ("historic" in t and "name" in t))
 
 
 def is_mil(t): return t.get("landuse") == "military" or t.get("military") in MIL_KINDS
+
+
+def is_reserve(t):  # mirrors isReserve / RESERVE_Q in src/engine.js
+    return (t.get("leisure") == "nature_reserve" or t.get("boundary") == "national_park"
+            or (t.get("boundary") == "protected_area" and t.get("protect_class") in ("1a", "1b", "1", "2")))
 
 
 class Builder(osmium.SimpleHandler):
@@ -86,7 +92,7 @@ class Builder(osmium.SimpleHandler):
 
     def area(self, a):
         t = {tg.k: tg.v for tg in a.tags}
-        mil, camp = is_mil(t), t.get("tourism") == "camp_site"
+        mil, camp = is_mil(t) or is_reserve(t), t.get("tourism") in ("camp_site", "caravan_site")
         if not (mil or camp): return
         rings = []
         try:

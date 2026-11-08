@@ -1,6 +1,6 @@
 // Background trail-data warmer. Called by pg_cron every few minutes: takes the most-due area from
 // public.tile_queue, downloads it from Overpass, compacts it exactly like the app does
-// (src/engine.js splitToTiles, format v2) and stores it in the shared tile cache.
+// (src/engine.js splitToTiles, format v3) and stores it in the shared tile cache.
 // One area per call keeps us gentle on the public Overpass servers and inside the edge time limit.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
@@ -11,17 +11,18 @@ const REFRESH_DAYS = 21;
 const MIRRORS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
 
 // --- must stay identical to src/app.html overpassQuery() and src/engine.js POI_TYPES ---
-const POI_Q = ['node["tourism"="viewpoint"]', 'node["natural"="spring"]', 'nwr["tourism"="camp_site"]', 'node["tourism"="picnic_site"]', 'node["natural"="peak"]["name"]', 'node["historic"]["name"]', 'node["natural"="water"]["name"]'];
+const POI_Q = ['node["tourism"="viewpoint"]', 'node["natural"="spring"]', 'nwr["tourism"~"^(camp_site|caravan_site)$"]', 'node["tourism"="picnic_site"]', 'node["natural"="peak"]["name"]', 'node["historic"]["name"]', 'node["natural"="water"]["name"]', 'node["amenity"="fuel"]', 'node["amenity"="drinking_water"]'];
+const RESERVE_Q = (bb: string) => `way["leisure"="nature_reserve"](${bb});relation["leisure"="nature_reserve"](${bb});relation["boundary"="national_park"](${bb});relation["boundary"="protected_area"]["protect_class"~"^(1a|1b|1|2)$"](${bb});`;
 function overpassQuery(bb: string) {
   return `[out:json][timeout:120];
 (way["highway"~"^(track|unclassified|tertiary|secondary|primary|trunk|tertiary_link|secondary_link|primary_link|trunk_link)$"](${bb});way["highway"~"^(path|service)$"]["motor_vehicle"!~"no|private"]["surface"~"^(unpaved|gravel|fine_gravel|dirt|ground|sand|compacted|rock|pebblestone|earth|mud)$"](${bb});way["highway"="path"]["4wd_only"="yes"](${bb}););out geom qt;
 (${POI_Q.map((q) => q + `(${bb});`).join("")});out center qt;
-(way["landuse"="military"](${bb});relation["landuse"="military"](${bb});way["military"~"^(danger_area|training_area|range)$"](${bb});relation["military"~"^(danger_area|training_area|range)$"](${bb}););out geom qt;`;
+(way["landuse"="military"](${bb});relation["landuse"="military"](${bb});way["military"~"^(danger_area|training_area|range)$"](${bb});relation["military"~"^(danger_area|training_area|range)$"](${bb});${RESERVE_Q(bb)});out geom qt;`;
 }
 // --- port of src/engine.js splitToTiles for a single tile ---
 const WAY_TAGS = ["highway", "tracktype", "surface", "smoothness", "4wd_only", "access", "motor_vehicle", "motorcar", "vehicle", "oneway", "name", "name:he", "ref"];
-const POI_TAGS = ["tourism", "natural", "historic", "name", "name:he", "image", "wikimedia_commons", "wikidata", "operator", "owner", "operator:he", "operator:en", "fee", "drinking_water", "toilets"];
-const MIL_TAGS = ["landuse", "military", "name", "name:en"];
+const POI_TAGS = ["amenity", "brand", "backcountry", "group_only", "website", "access", "tourism", "natural", "historic", "name", "name:he", "image", "wikimedia_commons", "wikidata", "operator", "owner", "operator:he", "operator:en", "fee", "drinking_water", "toilets"];
+const MIL_TAGS = ["landuse", "military", "leisure", "boundary", "protect_class", "name", "name:he", "name:en"];
 const pick = (t: any, keys: string[]) => { const o: any = {}; for (const k of keys) if (t[k] != null) o[k] = t[k]; return o; };
 const r6 = (x: number) => Math.round(x * 1e6) / 1e6;
 const flatGeom = (g: any[]) => { const f: number[] = []; for (const p of g || []) if (p) f.push(r6(p.lat), r6(p.lon)); return f; };
@@ -29,7 +30,7 @@ const geomBox = (f: number[]) => { let s = 90, n = -90, w = 180, e = -180; for (
 const boxHit = (a: number[], b: number[]) => a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
 function compactTile(elements: any[], box: number[]) {
   const out: any = { w: [], p: [], m: [] };
-  const isMil = (t: any) => t && (t.landuse === "military" || t.military);
+  const isMil = (t: any) => t && (t.landuse === "military" || t.military || t.leisure === "nature_reserve" || t.boundary === "national_park" || (t.boundary === "protected_area" && /^(1a|1b|1|2)$/.test(t.protect_class || "")));
   for (const el of elements) {
     const t = el.tags || {};
     if (el.type === "way" && t.highway && el.geometry) {
