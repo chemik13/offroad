@@ -1,0 +1,141 @@
+// Off-road planner API: Claude prompt parsing (server-side key), shared route library, GPX/KML import proxy.
+// Access is gated by a shared group code (env GROUP_CODE) sent in the x-group-code header.
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+
+const MODEL = "claude-haiku-5-5";
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "content-type, x-group-code, authorization, apikey",
+  "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+};
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { ...CORS, "content-type": "application/json; charset=utf-8" } });
+
+const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
+  auth: { persistSession: false },
+});
+
+const LIST_FIELDS = "id,created_at,name,created_by,source,region,tags,notes,driven,stats";
+const EDITABLE = ["name", "tags", "notes", "driven", "region"];
+
+function privateHost(h: string) {
+  return /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.|\[?::1\]?|.*\.internal$|.*\.local$)/i.test(h);
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  const url = new URL(req.url);
+  const path = url.pathname.replace(/^.*\/api/, "") || "/";
+
+  if (path === "/health") {
+    return json({ ok: true, claude: !!Deno.env.get("ANTHROPIC_API_KEY"), group: !!Deno.env.get("GROUP_CODE") });
+  }
+
+  const code = Deno.env.get("GROUP_CODE");
+  if (!code || req.headers.get("x-group-code") !== code) return json({ error: "קוד קבוצה שגוי" }, 401);
+
+  try {
+    // ---- Claude prompt parsing ----
+    if (path === "/parse" && req.method === "POST") {
+      const key = Deno.env.get("ANTHROPIC_API_KEY");
+      if (!key) return json({ error: "מפתח Claude לא הוגדר בשרת" }, 503);
+      const { prompt, system, tool } = await req.json();
+      if (!prompt || String(prompt).length > 2000 || !tool?.name) return json({ error: "בקשה לא תקינה" }, 400);
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({
+          model: MODEL, max_tokens: 900, system: String(system || "").slice(0, 4000),
+          tools: [tool], tool_choice: { type: "tool", name: tool.name },
+          messages: [{ role: "user", content: String(prompt) }],
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) return json({ error: "שגיאה מ-Claude", detail: j?.error?.message }, 502);
+      const tu = (j.content || []).find((c: { type: string }) => c.type === "tool_use");
+      return json({ input: tu?.input ?? null });
+    }
+
+    // ---- import proxy (fetch GPX/KML from a link, avoiding CORS) ----
+    if (path === "/import" && req.method === "POST") {
+      const { url: target } = await req.json();
+      let u: URL;
+      try { u = new URL(target); } catch { return json({ error: "לינק לא תקין" }, 400); }
+      if (!/^https?:$/.test(u.protocol) || privateHost(u.hostname)) return json({ error: "לינק לא נתמך" }, 400);
+      const r = await fetch(u, { redirect: "follow", headers: { "user-agent": "offroad-planner/1.0" } });
+      if (!r.ok) return json({ error: `האתר החזיר ${r.status}` }, 502);
+      const buf = new Uint8Array(await r.arrayBuffer());
+      if (buf.length > 8_000_000) return json({ error: "הקובץ גדול מדי" }, 413);
+      const text = new TextDecoder().decode(buf);
+      return json({ contentType: r.headers.get("content-type"), text, finalUrl: r.url });
+    }
+
+    // ---- route library ----
+    const m = path.match(/^\/routes(?:\/([0-9a-f-]{36}))?$/);
+    if (m) {
+      const id = m[1];
+      if (req.method === "GET" && !id) {
+        const { data, error } = await db.from("routes").select(LIST_FIELDS).order("created_at", { ascending: false }).limit(300);
+        if (error) throw error;
+        return json({ routes: data });
+      }
+      if (req.method === "GET" && id) {
+        const { data, error } = await db.from("routes").select("*").eq("id", id).single();
+        if (error) return json({ error: "המסלול לא נמצא" }, 404);
+        return json({ route: data });
+      }
+      if (req.method === "POST" && !id) {
+        const b = await req.json();
+        if (!b.name || !Array.isArray(b.coords) || b.coords.length < 2 || b.coords.length > 50000) return json({ error: "מסלול לא תקין" }, 400);
+        const row = {
+          name: String(b.name).slice(0, 200), created_by: b.created_by ? String(b.created_by).slice(0, 60) : null,
+          source: b.source === "imported" ? "imported" : "planned", source_url: b.source_url || null,
+          prompt: b.prompt ? String(b.prompt).slice(0, 2000) : null, params: b.params || null,
+          coords: b.coords, waypoints: Array.isArray(b.waypoints) ? b.waypoints.slice(0, 500) : [],
+          stats: b.stats || {}, region: b.region || null, tags: Array.isArray(b.tags) ? b.tags.slice(0, 20).map(String) : [],
+          notes: b.notes ? String(b.notes).slice(0, 4000) : null,
+        };
+        const { data, error } = await db.from("routes").insert(row).select(LIST_FIELDS).single();
+        if (error) throw error;
+        return json({ route: data }, 201);
+      }
+      if (req.method === "PATCH" && id) {
+        const b = await req.json();
+        const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        for (const k of EDITABLE) if (k in b) patch[k] = b[k];
+        const { data, error } = await db.from("routes").update(patch).eq("id", id).select(LIST_FIELDS).single();
+        if (error) throw error;
+        return json({ route: data });
+      }
+      if (req.method === "DELETE" && id) {
+        const { error } = await db.from("routes").delete().eq("id", id);
+        if (error) throw error;
+        return json({ ok: true });
+      }
+    }
+
+    // ---- field reports (closed / harder / easier segments) ----
+    if (path === "/reports" && req.method === "GET") {
+      const b = ["s", "w", "n", "e"].map((k) => Number(url.searchParams.get(k)));
+      if (b.some((x) => !isFinite(x))) return json({ error: "חסר תחום" }, 400);
+      const { data, error } = await db.from("route_reports").select("*")
+        .gte("lat", b[0]).lte("lat", b[2]).gte("lon", b[1]).lte("lon", b[3]).limit(1000);
+      if (error) throw error;
+      return json({ reports: data });
+    }
+    if (path === "/reports" && req.method === "POST") {
+      const b = await req.json();
+      const { data, error } = await db.from("route_reports").insert({
+        route_id: b.route_id || null, lat: +b.lat, lon: +b.lon, kind: b.kind,
+        note: b.note ? String(b.note).slice(0, 1000) : null, created_by: b.created_by ? String(b.created_by).slice(0, 60) : null,
+      }).select("*").single();
+      if (error) throw error;
+      return json({ report: data }, 201);
+    }
+
+    return json({ error: "not found" }, 404);
+  } catch (e) {
+    return json({ error: "שגיאת שרת", detail: String((e as Error)?.message || e) }, 500);
+  }
+});
