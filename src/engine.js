@@ -280,8 +280,7 @@ function nearestNode(G, la, lo, fac, maxM = 3000) {
   return Math.sqrt(bd) <= maxM ? best : -1;
 }
 
-function buildRoute(G, fac, stops, maxCost) {
-  const used = new Uint8Array(G.E);
+function buildRoute(G, fac, stops, maxCost, used = new Uint8Array(G.E)) {
   const edges = [];
   for (let i = 0; i + 1 < stops.length; i++) {
     if (stops[i] === stops[i + 1]) continue;
@@ -543,6 +542,117 @@ function lookupPlace(name) {
   return best;
 }
 
+// ---------- multi-day planning ----------
+// Beam search over authorized night camps. Day k ends at a camp ~dayLen away; last day ends at the
+// destination (given), back at the start (loop) or at a good open end. Returns up to 3 alternatives.
+function addDays(iso, k) { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + k); return d.toISOString().slice(0, 10); }
+function multiMilitary(p) {
+  const mode = p.military_mode || 'auto';
+  if (mode !== 'auto') return resolveMilitary(p).avoid;
+  const base = p.date || nextSaturday();
+  for (let k = 0; k < (p.days || 1); k++) if (!dayInfo(addDays(base, k)).open) return true;
+  return false;
+}
+function planMulti(G, p, nodes, onProgress = () => {}) {
+  const N = Math.max(2, Math.min(7, p.days | 0));
+  const fac = factors(G, { ...p, avoid_military: multiMilitary(p) });
+  const dayL = targetLengthM({ ...p, distance_km: p.distance_km ? p.distance_km / N : null, duration_hours: p.hours_per_day || p.duration_hours || 6 });
+  const maxCost = dayL * 6;
+  const s = nodes.s, end = p.loop ? s : nodes.e;
+  const types = (p.poi_types || []).filter(t => t !== 'nightcamp');
+  const camps = G.pois.filter(c => c.type === 'nightcamp' && c.auth).map(c => ({ ...c, node: nearestNode(G, c.lat, c.lon, fac, 800) })).filter(c => c.node >= 0);
+  const Rend = end >= 0 ? dijkstra(G, end, fac, null, Infinity) : null;
+  const totalDirect = Rend ? Rend.len[s] : null;
+  onProgress(`מצאתי ${camps.length} חניוני לילה מורשים באזור. מתכנן ${N} ימים…`);
+  const Rcache = new Map();
+  const Rfrom = n => { if (!Rcache.has(n)) Rcache.set(n, dijkstra(G, n, fac, null, maxCost * 2)); return Rcache.get(n); };
+  // beam: {at, stops:[nodes], camps:[camp], score}
+  let beam = [{ at: s, stops: [s], camps: [], score: 0 }];
+  for (let k = 0; k < N - 1; k++) {
+    onProgress(`יום ${k + 1}: מחפש חניון לילה…`);
+    const next = [];
+    for (const st of beam) {
+      const R = Rfrom(st.at);
+      const remainingDays = N - k - 1;
+      const opts = [];
+      for (const c of camps) {
+        if (st.camps.some(x => x.node === c.node) || c.node === st.at) continue;
+        const d = R.len[c.node];
+        if (!isFinite(d) || d < dayL * 0.45 || d > dayL * 1.6) continue;
+        let sc = Math.abs(d - dayL) / dayL;
+        if (Rend) {
+          const rem = Rend.len[c.node];
+          if (!isFinite(rem)) continue;
+          // remaining distance should fit the remaining days (not too much, not too little)
+          const want = remainingDays * dayL;
+          sc += 0.8 * Math.max(0, rem - want * 1.3) / dayL + (p.loop ? 0 : 0.4 * Math.max(0, want * 0.4 - rem) / dayL);
+        }
+        sc += (R.dist[c.node] / d - 1) * 0.4;
+        opts.push({ c, sc });
+      }
+      opts.sort((a, b) => a.sc - b.sc);
+      for (const o of opts.slice(0, 4)) next.push({ at: o.c.node, stops: [...st.stops, o.c.node], camps: [...st.camps, o.c], score: st.score + o.sc });
+    }
+    if (!next.length) return { results: [], L: dayL * N, reason: `לא מצאתי חניון לילה מורשה במרחק נסיעה של יום ${k + 1} (בערך ${(dayL / 1000).toFixed(0)} ק"מ). נסו להגדיל את שעות הנסיעה ביום, לשנות נקודת התחלה, או לבחור פחות ימים.` };
+    next.sort((a, b) => a.score - b.score);
+    beam = [];
+    for (const n of next) { if (beam.length >= 4) break; if (!beam.some(b => b.at === n.at && b.stops.length === n.stops.length && b.stops[1] === n.stops[1])) beam.push(n); }
+  }
+  onProgress('מרכיב את הימים…');
+  const results = [];
+  for (const st of beam) {
+    let finalStop = end;
+    let lastPoi = null;
+    if (finalStop < 0) {
+      // open end on the last day: an end ~dayL away, prefer POIs
+      const R = Rfrom(st.at);
+      let ends = snapPois(G, fac, types, R, dayL * 0.5, dayL * 1.3).map(c => ({ ...c, w: 0.35 }));
+      ends.push(...genericCands(G, st.at, R, dayL * 0.9, 6).map(c => ({ ...c, w: 0 })));
+      ends = ends.filter(c => !st.stops.includes(c.node));
+      ends.sort((a, b) => (Math.abs(R.len[a.node] - dayL) / dayL - a.w) - (Math.abs(R.len[b.node] - dayL) / dayL - b.w));
+      if (!ends.length) continue;
+      finalStop = ends[0].node; if (ends[0].type) lastPoi = ends[0];
+    }
+    const dayStops = [...st.stops, finalStop];
+    const allEdges = [], days = [], pois = [];
+    const used = new Uint8Array(G.E);
+    let ok = true, edgeCount = 0;
+    for (let k = 0; k < dayStops.length - 1; k++) {
+      const a = dayStops[k], b = dayStops[k + 1];
+      let seq = [a, b], mid = null;
+      // one scenic stop per day if it does not add much
+      if (types.length) {
+        const R = Rfrom(a);
+        const direct = R.len[b];
+        const cands = snapPois(G, fac, types, R, direct * 0.2, direct * 0.8).filter(m => hav(G.lat[m.node], G.lon[m.node], G.lat[b], G.lon[b]) < direct * 0.8);
+        cands.sort((x, y) => (R.len[x.node] + hav(G.lat[x.node], G.lon[x.node], G.lat[b], G.lon[b])) - (R.len[y.node] + hav(G.lat[y.node], G.lon[y.node], G.lat[b], G.lon[b])));
+        if (cands[0]) { mid = cands[0]; seq = [a, mid.node, b]; }
+      }
+      const snap = used.slice();
+      let edges = buildRoute(G, fac, seq, maxCost * 2, used);
+      if (mid && edges) { const L = edges.reduce((s, e) => s + G.eLen[e], 0); const direct = Rfrom(a).len[b]; if (L > direct * 1.35) { used.set(snap); edges = buildRoute(G, fac, [a, b], maxCost * 2, used); mid = null; } }
+      if (!edges || !edges.length) { ok = false; break; }
+      const dl = edges.reduce((s, e) => s + G.eLen[e], 0);
+      let dh = 0; for (const e of edges) dh += G.eLen[e] / 1000 / DIFF[G.eD[e]].speed;
+      const camp = k < st.camps.length ? st.camps[k] : null;
+      if (mid) pois.push({ ...mid, day: k + 1 });
+      if (camp) pois.push({ ...camp, day: k + 1 });
+      days.push({ from: edgeCount, to: edgeCount + edges.length, len: dl, hrs: dh, camp, mid, startNode: a, endNode: b });
+      edgeCount += edges.length; allEdges.push(...edges);
+    }
+    if (!ok) continue;
+    if (lastPoi) pois.push({ ...lastPoi, day: days.length });
+    const stt = routeStats(G, allEdges, s);
+    const r = { edges: allEdges, stops: dayStops, pois, ...stt, days };
+    r.score = st.score + (stt.reuse / stt.len) * 1.5 + days.reduce((sum, d) => sum + Math.abs(d.len - dayL) / dayL, 0) * 0.5;
+    results.push(r);
+  }
+  results.sort((a, b) => a.score - b.score);
+  const out = [];
+  for (const r of results) { if (out.length >= 3) break; if (out.every(q => overlapRatio(q.edges, r.edges) < 0.75)) out.push(r); }
+  return { results: out, L: dayL * N, dayL, totalDirect };
+}
+
 function targetLengthM(p) {
   if (p.distance_km) return p.distance_km * 1000;
   const h = p.duration_hours || 3;
@@ -561,14 +671,15 @@ function toGPX(route, title) {
   w.push(`<wpt lat="${f(sa)}" lon="${f(so)}"><name>${loop ? 'התחלה / סיום' : 'התחלה'}</name><sym>Flag, Green</sym></wpt>`);
   if (!loop) w.push(`<wpt lat="${f(ea)}" lon="${f(eo)}"><name>סיום</name><sym>Flag, Red</sym></wpt>`);
   for (const p of route.pois) w.push(`<wpt lat="${f(p.lat)}" lon="${f(p.lon)}"><name>${esc(p.name)}</name><type>${esc((POI_TYPES[p.type]?.he || '') + (p.auth ? ' · מורשה (' + p.auth + ')' : ''))}</type>${p.type === 'nightcamp' ? '<sym>Campground</sym>' : ''}</wpt>`);
-  const pts = route.coords.map(([a, o]) => `<trkpt lat="${f(a)}" lon="${f(o)}"></trkpt>`).join('\n');
+  const seg = cs => cs.map(([a, o]) => `<trkpt lat="${f(a)}" lon="${f(o)}"></trkpt>`).join('\n');
+  const trks = route.days && route.days.length > 1
+    ? route.days.map((d, k) => `<trk><name>${esc(`יום ${k + 1}${d.camp ? ' → ' + d.camp.name : ''}`)}</name><trkseg>\n${seg(route.coords.slice(d.from, d.to + 1))}\n</trkseg></trk>`).join('\n')
+    : `<trk><name>${esc(title)}</name><trkseg>\n${seg(route.coords)}\n</trkseg></trk>`;
   return `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Negev 4x4 Planner" xmlns="http://www.topografix.com/GPX/1/1">
+<gpx version="1.1" creator="Off-road Planner" xmlns="http://www.topografix.com/GPX/1/1">
 <metadata><name>${esc(title)}</name></metadata>
 ${w.join('\n')}
-<trk><name>${esc(title)}</name><trkseg>
-${pts}
-</trkseg></trk>
+${trks}
 </gpx>`;
 }
 
@@ -583,6 +694,12 @@ function parseLocal(text) {
   else if (/יום שלם|כל היום|יום נסיעה|יום טיול/.test(t)) p.duration_hours = 7;
   else if (/שעה/.test(t)) p.duration_hours = 1;
   if ((m = t.match(/(\d+)\s*(ק"מ|קמ|קילומטר|km)/i))) p.distance_km = +m[1];
+  const HEB_N = { 'שני': 2, 'שתי': 2, 'שלושה': 3, 'שלוש': 3, 'ארבעה': 4, 'ארבע': 4, 'חמישה': 5, 'חמש': 5 };
+  if ((m = t.match(/(\d+)\s*ימים/))) p.days = +m[1];
+  else if ((m = t.match(/(שני|שתי|שלושה|שלוש|ארבעה|ארבע|חמישה|חמש)\s*ימים/))) p.days = HEB_N[m[1]];
+  else if (/יומיים/.test(t)) p.days = 2;
+  else if (/סופ"?ש|סוף שבוע|שישי.?שבת/.test(t)) p.days = 2;
+  if (p.days > 1) { if (!p.poi_types.includes('nightcamp')) p.poi_types.push('nightcamp'); if ((m = t.match(/(\d+)\s*שעות\s*(ביום|כל יום|ליום)/))) p.hours_per_day = +m[1]; p.duration_hours = null; }
   if (/קל|משפחת|ילדים/.test(t)) p.difficulty = 'easy';
   if (/קשה|אתגר|טכני|מאתגר/.test(t)) p.difficulty = 'hard';
   if (/סטוק|מקורי|רכב רגיל|פנאי/.test(t)) p.vehicle = 'stock';
@@ -593,7 +710,7 @@ function parseLocal(text) {
   if (/פיקניק|חניון יום|(?<!חניון )חניון(?! לילה)/.test(t) && !/חניון לילה/.test(t)) p.poi_types.push('camp');
   if (/פסגה|פסגות/.test(t)) p.poi_types.push('peak');
   if (/עתיק|היסטור|ארכיאולוג/.test(t)) p.poi_types.push('historic');
-  if (/גב |גבים|בור מים/.test(t)) p.poi_types.push('water');
+  if (/(^|\s)(גב|גבים|בור מים|בורות מים)(?=\s|,|$)/.test(t)) p.poi_types.push('water');
   if (/בלי כביש|בלי אספלט|רק עפר|רק שטח/.test(t)) p.avoid_asphalt = true;
   const STOP = /^(סלול|עגלי|אתגר|וגבה|עיין|ים|קורי|כונית|שפחתי|דרום|צפון)/;
   const place = '([\\u0590-\\u05FF"\'\\- ]{2,25}?)(?=\\s*(?:,|\\.|$|\\sעם|\\sשל|\\sל|\\sעד|\\sו))';
@@ -625,5 +742,5 @@ function parseLocal(text) {
   return p;
 }
 
-if (typeof module !== 'undefined') module.exports = { campAuth, KNOWN_CAMPS, AREA_A, inAreaA, lookupPlace, dayInfo, resolveMilitary, nextSaturday, buildGraph, plan, nearestNode, factors, toGPX, parseLocal, targetLengthM, wayInfo, POI_TYPES };
+if (typeof module !== 'undefined') module.exports = { planMulti, addDays, campAuth, KNOWN_CAMPS, AREA_A, inAreaA, lookupPlace, dayInfo, resolveMilitary, nextSaturday, buildGraph, plan, nearestNode, factors, toGPX, parseLocal, targetLengthM, wayInfo, POI_TYPES };
 // ===== END ENGINE =====

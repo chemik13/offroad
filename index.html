@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>מתכנן מסלולי שטח</title>
 <meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="מסלולי שטח">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600&display=swap">
@@ -37,9 +45,14 @@ header .brand small{font-weight:400;color:var(--muted);font-size:12px}
 header button{pointer-events:auto;margin-inline-start:auto}
 .iconbtn{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:10px;width:40px;height:40px;font-size:18px;box-shadow:0 1px 6px rgba(20,30,25,.12);cursor:pointer}
 #sheet{position:fixed;inset-inline:0;bottom:0;z-index:6;background:var(--panel);border-top-left-radius:16px;border-top-right-radius:16px;
-  box-shadow:0 -4px 20px rgba(20,30,25,.14);border-top:1px solid var(--line);max-height:72vh;display:flex;flex-direction:column;
+  box-shadow:0 -4px 20px rgba(20,30,25,.14);border-top:1px solid var(--line);max-height:72vh;max-height:72dvh;display:flex;flex-direction:column;
   padding:6px max(14px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 12px) max(14px,env(safe-area-inset-left,0px))}
 #sheet.min #body{display:none}
+#sheet.has-results{max-height:52vh;max-height:52dvh}
+#sheet.full{max-height:calc(100vh - 70px);max-height:calc(100dvh - 70px - env(safe-area-inset-top,0px))}
+#sheet.has-results .examples{display:none}
+.grip{position:relative}
+.grip::after{content:"";position:absolute;inset:-12px -40px}
 .grip{width:40px;height:4px;border-radius:2px;background:var(--stone-2);margin:4px auto 10px;cursor:pointer;border:0;display:block}
 #body{overflow-y:auto;display:flex;flex-direction:column;gap:12px;min-height:0}
 .promptrow{display:flex;gap:8px;align-items:stretch}
@@ -54,6 +67,7 @@ textarea:focus,select:focus,input:focus,button:focus-visible{outline:2px solid v
 .examples button:hover{border-color:var(--accent);color:var(--accent)}
 #status{font-size:14px;color:var(--muted);min-height:1.2em}
 #status.err{color:var(--danger)}
+#status:empty{display:none}
 details.params{border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:#fff}
 details.params summary{cursor:pointer;font-weight:500;font-size:14px}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
@@ -64,7 +78,9 @@ details.params summary{cursor:pointer;font-weight:500;font-size:14px}
 .checks label{flex-direction:row;align-items:center;gap:5px;background:var(--stone);border-radius:999px;padding:4px 10px;color:var(--ink);font-size:13px;font-weight:400}
 .understood{font-size:14px;background:var(--accent-soft);color:var(--ink);border-radius:8px;padding:8px 10px;line-height:1.45}
 .tabs{display:flex;gap:6px}
-.tabs button{flex:1;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:8px;padding:7px 4px;font:500 13px var(--body);cursor:pointer;font-variant-numeric:tabular-nums}
+.tabs button{flex:1;min-width:0;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:8px;padding:6px 4px;font:500 13px var(--body);cursor:pointer;font-variant-numeric:tabular-nums;display:flex;flex-direction:column;align-items:center;line-height:1.25}
+.tabs button small{font-size:11px;color:var(--muted);font-weight:400}
+.tabs button[aria-pressed=true] small{color:var(--accent)}
 .tabs button[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .stat{padding:9px 10px;border-inline-start:1px solid var(--line)}
@@ -108,6 +124,17 @@ ul.pois li{margin-bottom:8px}
 .hbtns{display:flex;flex:none;gap:8px;margin-inline-start:auto;pointer-events:auto}
 .textbtn{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:10px;height:40px;padding:0 12px;font:500 14px var(--body);box-shadow:0 1px 6px rgba(20,30,25,.12);cursor:pointer}
 .saverow{display:flex;gap:8px;align-items:center}
+.daychips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-top:8px}
+.daychips button{flex:none;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:7px 12px;font:500 13px var(--body);cursor:pointer;font-variant-numeric:tabular-nums}
+.daychips button[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.dayplan{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:8px}
+.dayrow{display:grid;grid-template-columns:auto 1fr auto;gap:4px 10px;align-items:center;padding:8px 10px;border-top:1px solid var(--line);background:#fff;border-inline:0;border-bottom:0;font:inherit;color:var(--ink);text-align:start;cursor:pointer}
+.dayrow:first-child{border-top:0}
+.dayrow:hover{background:var(--stone)}
+.dayrow .dn{font-weight:600;font-size:13px;background:var(--stone);border-radius:6px;padding:2px 7px}
+.dayrow .dt{font-size:14px;min-width:0}
+.dayrow .dm{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.dayrow .ds{grid-column:2/4;font-size:12px;color:var(--muted)}
 .saverow input{flex:1;min-width:0;font:inherit;font-size:15px;color:var(--ink);background:var(--stone);border:1px solid transparent;border-radius:8px;padding:8px 10px}
 .savedtag{font-size:12px;color:var(--muted)}
 #library{width:min(560px,calc(100vw - 16px));max-height:calc(100vh - 40px);padding:0;display:flex;flex-direction:column}
@@ -130,7 +157,24 @@ ul.pois li{margin-bottom:8px}
 .confirm{display:flex;gap:8px;align-items:center;font-size:13px}
 .danger{background:#fff;border:1px solid var(--danger);color:var(--danger);border-radius:10px;padding:9px 14px;font:500 14px var(--body);cursor:pointer}
 @media (prefers-reduced-motion:no-preference){#sheet{transition:max-height .2s}}
-@media (min-width:760px){#sheet{inset-inline-start:auto;inset-inline-end:16px;bottom:16px;width:400px;border-radius:14px;border:1px solid var(--line);max-height:calc(100vh - 100px)}}
+@media (max-width:380px){
+  .go{padding:10px 12px}
+  textarea{font-size:16px;padding:8px 10px}
+  header .brand small{display:none}
+  .stat b{font-size:17px}
+}
+/* tablets & desktop: floating side panel */
+@media (min-width:760px){#sheet,#sheet.has-results,#sheet.full{left:auto;right:16px;bottom:16px;width:400px;border-radius:14px;border:1px solid var(--line);max-height:calc(100vh - 100px);max-height:calc(100dvh - 100px)}}
+/* phones in landscape: full-height side panel so the map stays usable */
+@media (orientation:landscape) and (max-height:540px){
+  header{padding-top:calc(env(safe-area-inset-top,0px) + 6px)}
+  .leaflet-top{top:calc(env(safe-area-inset-top,0px) + 52px)}
+  #sheet,#sheet.has-results,#sheet.full{top:0;bottom:0;left:auto;right:0;width:min(380px,50vw);max-height:none;border-radius:0;border-top:0;border-left:1px solid var(--line);
+    padding:calc(env(safe-area-inset-top,0px) + 8px) max(12px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 8px) 12px}
+  header{right:min(380px,50vw);padding-left:max(14px,env(safe-area-inset-left,0px))}
+  .grip{display:none}
+  #sheet.min #body{display:flex}
+}
 </style>
 </head>
 <body>
@@ -158,7 +202,9 @@ ul.pois li{margin-bottom:8px}
         <label>סוג<select id="pLoop"><option value="0">מנקודה לנקודה</option><option value="1">לופ (חוזר להתחלה)</option></select></label>
         <label>יעד<input type="text" id="pEnd" placeholder="ריק = המערכת תבחר יעד"></label>
         <label>משך (שעות)<input type="number" id="pHours" min="0.5" max="12" step="0.5"></label>
-        <label>או אורך (ק"מ)<input type="number" id="pKm" min="2" max="200" step="1"></label>
+        <label>או אורך (ק"מ)<input type="number" id="pKm" min="2" max="600" step="1"></label>
+        <label>מספר ימים<input type="number" id="pDays" min="1" max="7" step="1" value="1"></label>
+        <label>שעות נסיעה ביום<input type="number" id="pHpd" min="2" max="12" step="0.5" placeholder="6"></label>
         <label>רמת קושי<select id="pDiff"><option value="easy">קל</option><option value="medium">בינוני</option><option value="hard">קשה</option></select></label>
         <label>רכב<select id="pVeh"><option value="stock">סטוק</option><option value="raised">מוגבה / צמיגי שטח</option><option value="lockers">נעילות</option></select></label>
         <label class="full">עצירות בדרך
@@ -177,9 +223,11 @@ ul.pois li{margin-bottom:8px}
 
     <div id="results" hidden>
       <div class="tabs" id="tabs"></div>
+      <div class="daychips" id="dayChips" hidden></div>
       <div class="stats" id="stats" style="margin-top:8px"></div>
       <div style="margin-top:8px"><div class="bar" id="bar"></div><div class="legend" id="legend"></div></div>
       <div id="warns" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
+      <div id="dayPlan"></div>
       <div id="poiList" style="margin-top:6px"></div>
       <div class="saverow" style="margin-top:10px" id="saveRow">
         <input type="text" id="routeName" aria-label="שם המסלול" placeholder="שם המסלול">
@@ -515,8 +563,7 @@ function nearestNode(G, la, lo, fac, maxM = 3000) {
   return Math.sqrt(bd) <= maxM ? best : -1;
 }
 
-function buildRoute(G, fac, stops, maxCost) {
-  const used = new Uint8Array(G.E);
+function buildRoute(G, fac, stops, maxCost, used = new Uint8Array(G.E)) {
   const edges = [];
   for (let i = 0; i + 1 < stops.length; i++) {
     if (stops[i] === stops[i + 1]) continue;
@@ -778,6 +825,117 @@ function lookupPlace(name) {
   return best;
 }
 
+// ---------- multi-day planning ----------
+// Beam search over authorized night camps. Day k ends at a camp ~dayLen away; last day ends at the
+// destination (given), back at the start (loop) or at a good open end. Returns up to 3 alternatives.
+function addDays(iso, k) { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + k); return d.toISOString().slice(0, 10); }
+function multiMilitary(p) {
+  const mode = p.military_mode || 'auto';
+  if (mode !== 'auto') return resolveMilitary(p).avoid;
+  const base = p.date || nextSaturday();
+  for (let k = 0; k < (p.days || 1); k++) if (!dayInfo(addDays(base, k)).open) return true;
+  return false;
+}
+function planMulti(G, p, nodes, onProgress = () => {}) {
+  const N = Math.max(2, Math.min(7, p.days | 0));
+  const fac = factors(G, { ...p, avoid_military: multiMilitary(p) });
+  const dayL = targetLengthM({ ...p, distance_km: p.distance_km ? p.distance_km / N : null, duration_hours: p.hours_per_day || p.duration_hours || 6 });
+  const maxCost = dayL * 6;
+  const s = nodes.s, end = p.loop ? s : nodes.e;
+  const types = (p.poi_types || []).filter(t => t !== 'nightcamp');
+  const camps = G.pois.filter(c => c.type === 'nightcamp' && c.auth).map(c => ({ ...c, node: nearestNode(G, c.lat, c.lon, fac, 800) })).filter(c => c.node >= 0);
+  const Rend = end >= 0 ? dijkstra(G, end, fac, null, Infinity) : null;
+  const totalDirect = Rend ? Rend.len[s] : null;
+  onProgress(`מצאתי ${camps.length} חניוני לילה מורשים באזור. מתכנן ${N} ימים…`);
+  const Rcache = new Map();
+  const Rfrom = n => { if (!Rcache.has(n)) Rcache.set(n, dijkstra(G, n, fac, null, maxCost * 2)); return Rcache.get(n); };
+  // beam: {at, stops:[nodes], camps:[camp], score}
+  let beam = [{ at: s, stops: [s], camps: [], score: 0 }];
+  for (let k = 0; k < N - 1; k++) {
+    onProgress(`יום ${k + 1}: מחפש חניון לילה…`);
+    const next = [];
+    for (const st of beam) {
+      const R = Rfrom(st.at);
+      const remainingDays = N - k - 1;
+      const opts = [];
+      for (const c of camps) {
+        if (st.camps.some(x => x.node === c.node) || c.node === st.at) continue;
+        const d = R.len[c.node];
+        if (!isFinite(d) || d < dayL * 0.45 || d > dayL * 1.6) continue;
+        let sc = Math.abs(d - dayL) / dayL;
+        if (Rend) {
+          const rem = Rend.len[c.node];
+          if (!isFinite(rem)) continue;
+          // remaining distance should fit the remaining days (not too much, not too little)
+          const want = remainingDays * dayL;
+          sc += 0.8 * Math.max(0, rem - want * 1.3) / dayL + (p.loop ? 0 : 0.4 * Math.max(0, want * 0.4 - rem) / dayL);
+        }
+        sc += (R.dist[c.node] / d - 1) * 0.4;
+        opts.push({ c, sc });
+      }
+      opts.sort((a, b) => a.sc - b.sc);
+      for (const o of opts.slice(0, 4)) next.push({ at: o.c.node, stops: [...st.stops, o.c.node], camps: [...st.camps, o.c], score: st.score + o.sc });
+    }
+    if (!next.length) return { results: [], L: dayL * N, reason: `לא מצאתי חניון לילה מורשה במרחק נסיעה של יום ${k + 1} (בערך ${(dayL / 1000).toFixed(0)} ק"מ). נסו להגדיל את שעות הנסיעה ביום, לשנות נקודת התחלה, או לבחור פחות ימים.` };
+    next.sort((a, b) => a.score - b.score);
+    beam = [];
+    for (const n of next) { if (beam.length >= 4) break; if (!beam.some(b => b.at === n.at && b.stops.length === n.stops.length && b.stops[1] === n.stops[1])) beam.push(n); }
+  }
+  onProgress('מרכיב את הימים…');
+  const results = [];
+  for (const st of beam) {
+    let finalStop = end;
+    let lastPoi = null;
+    if (finalStop < 0) {
+      // open end on the last day: an end ~dayL away, prefer POIs
+      const R = Rfrom(st.at);
+      let ends = snapPois(G, fac, types, R, dayL * 0.5, dayL * 1.3).map(c => ({ ...c, w: 0.35 }));
+      ends.push(...genericCands(G, st.at, R, dayL * 0.9, 6).map(c => ({ ...c, w: 0 })));
+      ends = ends.filter(c => !st.stops.includes(c.node));
+      ends.sort((a, b) => (Math.abs(R.len[a.node] - dayL) / dayL - a.w) - (Math.abs(R.len[b.node] - dayL) / dayL - b.w));
+      if (!ends.length) continue;
+      finalStop = ends[0].node; if (ends[0].type) lastPoi = ends[0];
+    }
+    const dayStops = [...st.stops, finalStop];
+    const allEdges = [], days = [], pois = [];
+    const used = new Uint8Array(G.E);
+    let ok = true, edgeCount = 0;
+    for (let k = 0; k < dayStops.length - 1; k++) {
+      const a = dayStops[k], b = dayStops[k + 1];
+      let seq = [a, b], mid = null;
+      // one scenic stop per day if it does not add much
+      if (types.length) {
+        const R = Rfrom(a);
+        const direct = R.len[b];
+        const cands = snapPois(G, fac, types, R, direct * 0.2, direct * 0.8).filter(m => hav(G.lat[m.node], G.lon[m.node], G.lat[b], G.lon[b]) < direct * 0.8);
+        cands.sort((x, y) => (R.len[x.node] + hav(G.lat[x.node], G.lon[x.node], G.lat[b], G.lon[b])) - (R.len[y.node] + hav(G.lat[y.node], G.lon[y.node], G.lat[b], G.lon[b])));
+        if (cands[0]) { mid = cands[0]; seq = [a, mid.node, b]; }
+      }
+      const snap = used.slice();
+      let edges = buildRoute(G, fac, seq, maxCost * 2, used);
+      if (mid && edges) { const L = edges.reduce((s, e) => s + G.eLen[e], 0); const direct = Rfrom(a).len[b]; if (L > direct * 1.35) { used.set(snap); edges = buildRoute(G, fac, [a, b], maxCost * 2, used); mid = null; } }
+      if (!edges || !edges.length) { ok = false; break; }
+      const dl = edges.reduce((s, e) => s + G.eLen[e], 0);
+      let dh = 0; for (const e of edges) dh += G.eLen[e] / 1000 / DIFF[G.eD[e]].speed;
+      const camp = k < st.camps.length ? st.camps[k] : null;
+      if (mid) pois.push({ ...mid, day: k + 1 });
+      if (camp) pois.push({ ...camp, day: k + 1 });
+      days.push({ from: edgeCount, to: edgeCount + edges.length, len: dl, hrs: dh, camp, mid, startNode: a, endNode: b });
+      edgeCount += edges.length; allEdges.push(...edges);
+    }
+    if (!ok) continue;
+    if (lastPoi) pois.push({ ...lastPoi, day: days.length });
+    const stt = routeStats(G, allEdges, s);
+    const r = { edges: allEdges, stops: dayStops, pois, ...stt, days };
+    r.score = st.score + (stt.reuse / stt.len) * 1.5 + days.reduce((sum, d) => sum + Math.abs(d.len - dayL) / dayL, 0) * 0.5;
+    results.push(r);
+  }
+  results.sort((a, b) => a.score - b.score);
+  const out = [];
+  for (const r of results) { if (out.length >= 3) break; if (out.every(q => overlapRatio(q.edges, r.edges) < 0.75)) out.push(r); }
+  return { results: out, L: dayL * N, dayL, totalDirect };
+}
+
 function targetLengthM(p) {
   if (p.distance_km) return p.distance_km * 1000;
   const h = p.duration_hours || 3;
@@ -796,14 +954,15 @@ function toGPX(route, title) {
   w.push(`<wpt lat="${f(sa)}" lon="${f(so)}"><name>${loop ? 'התחלה / סיום' : 'התחלה'}</name><sym>Flag, Green</sym></wpt>`);
   if (!loop) w.push(`<wpt lat="${f(ea)}" lon="${f(eo)}"><name>סיום</name><sym>Flag, Red</sym></wpt>`);
   for (const p of route.pois) w.push(`<wpt lat="${f(p.lat)}" lon="${f(p.lon)}"><name>${esc(p.name)}</name><type>${esc((POI_TYPES[p.type]?.he || '') + (p.auth ? ' · מורשה (' + p.auth + ')' : ''))}</type>${p.type === 'nightcamp' ? '<sym>Campground</sym>' : ''}</wpt>`);
-  const pts = route.coords.map(([a, o]) => `<trkpt lat="${f(a)}" lon="${f(o)}"></trkpt>`).join('\n');
+  const seg = cs => cs.map(([a, o]) => `<trkpt lat="${f(a)}" lon="${f(o)}"></trkpt>`).join('\n');
+  const trks = route.days && route.days.length > 1
+    ? route.days.map((d, k) => `<trk><name>${esc(`יום ${k + 1}${d.camp ? ' → ' + d.camp.name : ''}`)}</name><trkseg>\n${seg(route.coords.slice(d.from, d.to + 1))}\n</trkseg></trk>`).join('\n')
+    : `<trk><name>${esc(title)}</name><trkseg>\n${seg(route.coords)}\n</trkseg></trk>`;
   return `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Negev 4x4 Planner" xmlns="http://www.topografix.com/GPX/1/1">
+<gpx version="1.1" creator="Off-road Planner" xmlns="http://www.topografix.com/GPX/1/1">
 <metadata><name>${esc(title)}</name></metadata>
 ${w.join('\n')}
-<trk><name>${esc(title)}</name><trkseg>
-${pts}
-</trkseg></trk>
+${trks}
 </gpx>`;
 }
 
@@ -818,6 +977,12 @@ function parseLocal(text) {
   else if (/יום שלם|כל היום|יום נסיעה|יום טיול/.test(t)) p.duration_hours = 7;
   else if (/שעה/.test(t)) p.duration_hours = 1;
   if ((m = t.match(/(\d+)\s*(ק"מ|קמ|קילומטר|km)/i))) p.distance_km = +m[1];
+  const HEB_N = { 'שני': 2, 'שתי': 2, 'שלושה': 3, 'שלוש': 3, 'ארבעה': 4, 'ארבע': 4, 'חמישה': 5, 'חמש': 5 };
+  if ((m = t.match(/(\d+)\s*ימים/))) p.days = +m[1];
+  else if ((m = t.match(/(שני|שתי|שלושה|שלוש|ארבעה|ארבע|חמישה|חמש)\s*ימים/))) p.days = HEB_N[m[1]];
+  else if (/יומיים/.test(t)) p.days = 2;
+  else if (/סופ"?ש|סוף שבוע|שישי.?שבת/.test(t)) p.days = 2;
+  if (p.days > 1) { if (!p.poi_types.includes('nightcamp')) p.poi_types.push('nightcamp'); if ((m = t.match(/(\d+)\s*שעות\s*(ביום|כל יום|ליום)/))) p.hours_per_day = +m[1]; p.duration_hours = null; }
   if (/קל|משפחת|ילדים/.test(t)) p.difficulty = 'easy';
   if (/קשה|אתגר|טכני|מאתגר/.test(t)) p.difficulty = 'hard';
   if (/סטוק|מקורי|רכב רגיל|פנאי/.test(t)) p.vehicle = 'stock';
@@ -828,7 +993,7 @@ function parseLocal(text) {
   if (/פיקניק|חניון יום|(?<!חניון )חניון(?! לילה)/.test(t) && !/חניון לילה/.test(t)) p.poi_types.push('camp');
   if (/פסגה|פסגות/.test(t)) p.poi_types.push('peak');
   if (/עתיק|היסטור|ארכיאולוג/.test(t)) p.poi_types.push('historic');
-  if (/גב |גבים|בור מים/.test(t)) p.poi_types.push('water');
+  if (/(^|\s)(גב|גבים|בור מים|בורות מים)(?=\s|,|$)/.test(t)) p.poi_types.push('water');
   if (/בלי כביש|בלי אספלט|רק עפר|רק שטח/.test(t)) p.avoid_asphalt = true;
   const STOP = /^(סלול|עגלי|אתגר|וגבה|עיין|ים|קורי|כונית|שפחתי|דרום|צפון)/;
   const place = '([\\u0590-\\u05FF"\'\\- ]{2,25}?)(?=\\s*(?:,|\\.|$|\\sעם|\\sשל|\\sל|\\sעד|\\sו))';
@@ -860,7 +1025,7 @@ function parseLocal(text) {
   return p;
 }
 
-if (typeof module !== 'undefined') module.exports = { campAuth, KNOWN_CAMPS, AREA_A, inAreaA, lookupPlace, dayInfo, resolveMilitary, nextSaturday, buildGraph, plan, nearestNode, factors, toGPX, parseLocal, targetLengthM, wayInfo, POI_TYPES };
+if (typeof module !== 'undefined') module.exports = { planMulti, addDays, campAuth, KNOWN_CAMPS, AREA_A, inAreaA, lookupPlace, dayInfo, resolveMilitary, nextSaturday, buildGraph, plan, nearestNode, factors, toGPX, parseLocal, targetLengthM, wayInfo, POI_TYPES };
 // ===== END ENGINE =====
 
 </script>
@@ -872,7 +1037,7 @@ const DEFAULT_CENTER = [31.45, 35.0]; // כל הארץ
 const store = { get(k){try{return localStorage.getItem(k)}catch{return null}}, set(k,v){try{localStorage.setItem(k,v)}catch{}} };
 
 // ---------- map ----------
-const map = L.map('map', { zoomControl: false, attributionControl: true }).setView(DEFAULT_CENTER, 7);
+const map = L.map('map', { zoomControl: false, attributionControl: true, zoomSnap: 0.5 }).setView(DEFAULT_CENTER, 7);
 const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17, attribution: '© OpenStreetMap, SRTM · OpenTopoMap' }).addTo(map);
 const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' });
 const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18, attribution: 'Esri World Imagery' });
@@ -926,7 +1091,13 @@ EXAMPLES.forEach(t => { const b = document.createElement('button'); b.textConten
 for (const [k, v] of Object.entries(POI_TYPES)) {
   const l = document.createElement('label'); l.innerHTML = `<input type="checkbox" value="${k}"> ${v.he}`; $('pPois').append(l);
 }
-$('grip').onclick = () => $('sheet').classList.toggle('min');
+// grip: normal → full → collapsed → normal
+$('grip').onclick = () => {
+  const s = $('sheet').classList;
+  if (s.contains('min')) s.remove('min');
+  else if (s.contains('full')) { s.remove('full'); s.add('min'); }
+  else s.add('full');
+};
 // ---------- server (Supabase edge function) ----------
 const API = 'https://tbuoselznsubmndvaxjc.supabase.co/functions/v1/api';
 const hasGroup = () => !!store.get('groupCode');
@@ -972,6 +1143,7 @@ function fillForm(p) {
   $('pAsph').checked = !!p.avoid_asphalt;
   $('pMil').value = p.military_mode || (p.avoid_military === false ? 'allow' : 'auto');
   $('pAA').value = p.allow_area_a ? '1' : '0';
+  $('pDays').value = p.days || 1; $('pHpd').value = p.hours_per_day || '';
   $('pDate').value = p.date || nextSaturday();
   milNote();
 }
@@ -987,7 +1159,7 @@ function readForm(prev = {}) {
     difficulty: $('pDiff').value, vehicle: $('pVeh').value,
     poi_types: [...$('pPois').querySelectorAll('input:checked')].map(i => i.value),
     via: viaNames.map(n => (prev.via || []).find(v => v.name === n) || { name: n }),
-    avoid_asphalt: $('pAsph').checked, military_mode: $('pMil').value, allow_area_a: $('pAA').value === '1', date: $('pDate').value || nextSaturday(),
+    avoid_asphalt: $('pAsph').checked, military_mode: $('pMil').value, allow_area_a: $('pAA').value === '1', days: Math.max(1, +$('pDays').value || 1), hours_per_day: +$('pHpd').value || null, date: $('pDate').value || nextSaturday(),
     summary_he: prev.summary_he,
   };
 }
@@ -1002,7 +1174,9 @@ const TOOL = {
       start: { type: 'object', properties: { name: { type: 'string', description: 'Place name in Hebrew as it would appear on a map' }, lat: { type: 'number' }, lon: { type: 'number' } }, description: 'Start point. Omit if not stated.' },
       end: { type: 'object', properties: { name: { type: 'string' }, lat: { type: 'number' }, lon: { type: 'number' } }, description: 'Destination for point-to-point routes. Omit for loops.' },
       loop: { type: 'boolean', description: 'True ONLY if the user asks for a loop / circular route / to return to the start. Default false (point-to-point). If no destination is given, leave end empty and the planner picks one.' },
-      duration_hours: { type: 'number', description: 'Total trip duration in hours, if stated' },
+      duration_hours: { type: 'number', description: 'Total trip duration in hours, if stated (single-day trips only)' },
+      days: { type: 'integer', description: 'Number of trip days for multi-day trips (2-7). סופ"ש / weekend = 2. Omit for a single day.' },
+      hours_per_day: { type: 'number', description: 'Driving hours per day for multi-day trips, if stated' },
       distance_km: { type: 'number', description: 'Total distance in km, if stated' },
       difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'] },
       vehicle: { type: 'string', enum: ['stock', 'raised', 'lockers'], description: 'stock = standard SUV, raised = lifted / AT tires, lockers = diff lockers / built' },
@@ -1136,9 +1310,12 @@ async function run(fromPrompt) {
     const viaLL = [];
     for (const v of p.via || []) { const ll = await geocode(v); if (!ll) throw new Error(`לא מצאתי את "${v.name}".`); viaLL.push({ ll, name: v.name }); }
 
-    const L0 = targetLengthM(p);
+    const multi = (p.days || 1) > 1;
+    if (multi && !(p.poi_types || []).includes('nightcamp')) p.poi_types = [...(p.poi_types || []), 'nightcamp'];
+    const L0 = multi ? targetLengthM({ ...p, duration_hours: p.hours_per_day || 6, distance_km: p.distance_km ? p.distance_km / p.days : null }) * p.days : targetLengthM(p);
     const pts = [sLL, ...(eLL ? [eLL] : []), ...viaLL.map(v => v.ll)];
-    const radius = Math.min(40000, Math.max(6000, p.loop ? L0 / 2.6 : !eLL ? L0 * 0.75 : 5000));
+    const radius = multi ? Math.min(50000, Math.max(15000, eLL ? 15000 : p.loop ? L0 / 3.2 : L0 * 0.45)) : Math.min(40000, Math.max(6000, p.loop ? L0 / 2.6 : !eLL ? L0 * 0.75 : 5000));
+    if (multi) status('מוריד שבילים לאזור גדול (טיול של כמה ימים), זה יכול לקחת חצי דקה…');
     const bbox = bboxFor(pts, radius);
     status('מוריד שבילים מ-OpenStreetMap (בפעם הראשונה זה לוקח כמה שניות)…');
     const G = await loadGraph(bbox);
@@ -1154,7 +1331,8 @@ async function run(fromPrompt) {
     const viaPois = viaLL.map((v, i) => ({ type: 'via', name: v.name, lat: G.lat[vias[i]], lon: G.lon[vias[i]] }));
 
     await new Promise(r => setTimeout(r, 30));
-    const res = plan(G, p, { s, e, vias, viaPois }, m => status(m));
+    const res = multi ? planMulti(G, p, { s, e, vias, viaPois }, m => status(m)) : plan(G, p, { s, e, vias, viaPois }, m => status(m));
+    if (!res.results.length && res.reason) throw new Error(res.reason);
     if (!res.results.length) throw new Error('לא מצאתי מסלול שעומד בתנאים. נסו לקצר, לשנות רמת קושי/רכב, או לבטל הימנעות מכבישים / שטחי אש.');
     current = { p, res, G, sel: 0, saved: null, prompt: fromPrompt ? text : (current?.prompt || '') };
     status('');
@@ -1251,20 +1429,49 @@ function placePopup(pt, title, sub) {
 }
 
 const fmtH = h => { const hh = Math.floor(h), mm = Math.round((h - hh) * 60 / 5) * 5; return mm === 60 ? `${hh + 1}:00` : `${hh}:${String(mm).padStart(2, '0')}`; };
-function render(i) {
-  const { res, p } = current; current.sel = i;
+// keep the route clear of the panel, wherever the panel sits (bottom sheet / side panel)
+function mapPad() {
+  const sh = $('sheet').getBoundingClientRect(), side = sh.width < innerWidth - 20;
+  if (side) return { paddingTopLeft: [20, 70], paddingBottomRight: [innerWidth - sh.left + 20, 20] };
+  const target = Math.min(sh.height, parseFloat(getComputedStyle($('sheet')).maxHeight) || sh.height); // sheet may still be animating
+  return { paddingTopLeft: [20, 70], paddingBottomRight: [20, Math.max(40, target + 16)] };
+}
+function segsInRange(r, from, to) {
+  const out = []; let idx = 0;
+  for (const sg of r.segs) {
+    const a = idx, b = idx + sg.pts.length - 1; idx = b;
+    const lo = Math.max(a, from), hi = Math.min(b, to);
+    if (hi > lo) out.push({ d: sg.d, pts: sg.pts.slice(lo - a, hi - a + 1) });
+  }
+  return out;
+}
+function render(i, day = null) {
+  const { res, p } = current; if (current.sel !== i) day = null; current.sel = i; current.day = day;
   const r = res.results[i];
+  $('results').hidden = false; $('sheet').classList.remove('min', 'full'); $('sheet').classList.add('has-results');
+  const D = r.days && r.days.length > 1 ? r.days : null;
+  const dv = D && day != null ? D[day] : null;
   $('tabs').innerHTML = '';
   $('tabs').hidden = !!current.saved;
   res.results.forEach((x, k) => {
     const b = document.createElement('button');
-    b.setAttribute('aria-pressed', k === i); b.textContent = `חלופה ${k + 1} · ${(x.len / 1000).toFixed(0)} ק"מ`;
+    b.setAttribute('aria-pressed', k === i); b.innerHTML = `<span>חלופה ${k + 1}</span><small>${(x.len / 1000).toFixed(0)} ק"מ</small>`;
     b.onclick = () => render(k); $('tabs').append(b);
   });
   routeLayer.clearLayers(); markLayer.clearLayers();
   res.results.forEach((x, k) => { if (k !== i) L.polyline(x.coords, { color: '#646b66', weight: 3, opacity: .5, dashArray: '4 6' }).addTo(routeLayer).on('click', () => render(k)); });
-  L.polyline(r.coords, { color: '#fff', weight: 9, opacity: 1 }).addTo(routeLayer);
-  for (const sg of r.segs) L.polyline(sg.pts, { color: DCOL(sg.d < 0 ? 'x' : sg.d), weight: 5 }).addTo(routeLayer);
+  L.polyline(r.coords, { color: '#fff', weight: 9, opacity: dv ? .6 : 1 }).addTo(routeLayer);
+  for (const sg of r.segs) L.polyline(sg.pts, { color: DCOL(sg.d < 0 ? 'x' : sg.d), weight: 5, opacity: dv ? .25 : 1 }).addTo(routeLayer);
+  if (dv) {
+    L.polyline(r.coords.slice(dv.from, dv.to + 1), { color: '#fff', weight: 11 }).addTo(routeLayer);
+    for (const sg of segsInRange(r, dv.from, dv.to)) L.polyline(sg.pts, { color: DCOL(sg.d < 0 ? 'x' : sg.d), weight: 6 }).addTo(routeLayer);
+  }
+  $('dayChips').hidden = !D; $('dayChips').innerHTML = '';
+  if (D) {
+    const mk = (label, k) => { const b = document.createElement('button'); b.textContent = label; b.setAttribute('aria-pressed', k === day); b.onclick = () => render(i, k); $('dayChips').append(b); };
+    mk(`כל הטיול · ${D.length} ימים`, null);
+    D.forEach((d, k) => mk(`יום ${k + 1} · ${(d.len / 1000).toFixed(0)} ק"מ`, k));
+  }
   if (startMarker) { startMarker.remove(); startMarker = null; }
   if (endMarker) { endMarker.remove(); endMarker = null; }
   const c0 = r.coords[0], c1 = r.coords[r.coords.length - 1];
@@ -1287,16 +1494,24 @@ function render(i) {
   r.pois.forEach(pt => {
     const ic = L.divIcon({ className: '', html: `<div class="poi-ic"></div>`, iconSize: null, iconAnchor: [0, 0] });
     const m = L.marker([pt.lat, pt.lon], { icon: ic }).addTo(markLayer);
-    m.getElement()?.querySelector('.poi-ic')?.append(document.createTextNode(pt.name));
+    m.getElement()?.querySelector('.poi-ic')?.append(document.createTextNode((D && pt.type === 'nightcamp' && pt.day ? `לילה ${pt.day}: ` : '') + pt.name));
     const pp = placePopup(pt, pt.name, pt.type === 'nightcamp' ? campSub(pt) : (POI_TYPES[pt.type]?.he || 'נקודת חובה'));
     m.bindPopup(pp.div, { maxWidth: 320, minWidth: 220 }).on('popupopen', pp.load);
   });
-  map.fitBounds(L.latLngBounds(r.coords), { paddingTopLeft: [20, 70], paddingBottomRight: [20, innerWidth >= 760 ? 20 : Math.min(innerHeight * 0.5, 420)] });
+  const fitB = L.latLngBounds(dv ? r.coords.slice(dv.from, dv.to + 1) : r.coords);
+  map.fitBounds(fitB, mapPad());
+  clearTimeout(window.__refit); window.__refit = setTimeout(() => { map.invalidateSize(); map.fitBounds(fitB, mapPad()); }, 320); // after the panel settles
 
-  const stopH = r.pois.length * 0.25;
-  $('stats').innerHTML = `
-    <div class="stat"><b>${(r.len / 1000).toFixed(1)}</b><span>ק"מ</span></div>
-    <div class="stat"><b>${fmtH(r.hrs + stopH)}</b><span>שעות (כולל עצירות)</span></div>
+  const stopH = r.pois.filter(x => x.type !== 'nightcamp').length * 0.25;
+  if (dv) {
+    $('stats').innerHTML = `
+    <div class="stat"><b>${(dv.len / 1000).toFixed(1)}</b><span>ק"מ ביום ${day + 1}</span></div>
+    <div class="stat"><b>${fmtH(dv.hrs + (dv.mid ? 0.25 : 0))}</b><span>שעות נסיעה</span></div>
+    <div class="stat"><b>${dv.camp ? 'לילה' : 'סיום'}</b><span>${dv.camp ? dv.camp.name : 'נקודת הסיום'}</span></div>`;
+  }
+  if (!dv) $('stats').innerHTML = `
+    <div class="stat"><b>${(r.len / 1000).toFixed(1)}</b><span>ק"מ${D ? ' בסה״כ' : ''}</span></div>
+    <div class="stat"><b>${fmtH(r.hrs + stopH)}</b><span>${D ? 'שעות נסיעה בסה״כ' : 'שעות (כולל עצירות)'}</span></div>
     <div class="stat"><b>${r.unrated ? 'לא מדורג' : (DIFF[r.maxD]?.he || '—').replace(/ \(.*\)/, '')}</b><span>הקטע הקשה ביותר</span></div>`;
   $('bar').innerHTML = ''; $('legend').innerHTML = '';
   r.byD.forEach((m, d) => {
@@ -1309,7 +1524,8 @@ function render(i) {
   const w = [];
   if (r.unrated) w.push('המסלול יובא מקובץ. לא בדקתי לו קושי ושטחי אש, רק שטחי A. סעו בו בזהירות כמו במסלול לא מוכר.');
   if (!r.unrated && r.unk / r.len > 0.3) w.push(`ל-${Math.round(r.unk / r.len * 100)}% מהדרך אין דירוג קושי ב-OSM. ההערכה שם שמרנית (בינוני).`);
-  const mr = resolveMilitary(p);
+  const mr = D ? { avoid: multiMilitary(p), info: { open: !multiMilitary(p), why: 'כל ימי הטיול בסופ"ש / חג' } } : resolveMilitary(p);
+  if (D && mr.avoid && (p.military_mode || 'auto') === 'auto') w.push('אחד מימי הטיול הוא יום חול, אז שטחי אש לא נכללו בכל הטיול.');
   if (r.aa > 0) w.push(`⚠ ${(r.aa / 1000).toFixed(1)} ק"מ עוברים בשטח A. הכניסה לשטחי A אסורה על אזרחים ישראלים בצו אלוף ומסוכנת. פתחתם את זה ידנית: ודאו שיש לכם היתר.`);
   else if (r.js > 0) w.push(`${(r.js / 1000).toFixed(1)} ק"מ עוברים ביהודה ושומרון. שטחי A המרכזיים חסומים, אבל המיפוי גס: שימו לב לשלטים האדומים בכניסה לשטחי A ולכפרים.`);
   if (!r.unrated && r.mil > 0) w.push(`${(r.mil / 1000).toFixed(1)} ק"מ עוברים בשטח אש${mr.info?.open ? ` (${mr.info.why})` : ''}. בדרך כלל פתוח בסופ"ש ובחגים, אבל הפתיחה משתנה: ודאו מול פרסומי צה"ל לשטחי אש לתאריך הספציפי לפני יציאה.`);
@@ -1318,6 +1534,21 @@ function render(i) {
   if (!current.saved && current.res.L && (p.duration_hours || p.distance_km) && Math.abs(r.len - current.res.L) / current.res.L > 0.35) w.push('לא מצאתי מסלול באורך המבוקש בדיוק. זה הקרוב ביותר.');
   w.push('המסלול מבוסס על נתוני OSM. מצב השטח בפועל (שיטפונות, חסימות, סגירת שמורות) יכול להשתנות: בדקו לפני יציאה.');
   $('warns').innerHTML = w.map(t => `<div class="warn">${t}</div>`).join('');
+  $('dayPlan').innerHTML = '';
+  if (D) {
+    const box = document.createElement('div'); box.className = 'dayplan';
+    D.forEach((d, k) => {
+      const b = document.createElement('button'); b.className = 'dayrow';
+      b.innerHTML = `<span class="dn"></span><span class="dt"></span><span class="dm"></span><span class="ds"></span>`;
+      b.querySelector('.dn').textContent = `יום ${k + 1}`;
+      b.querySelector('.dt').textContent = d.camp ? `לינה: ${d.camp.name}` : 'סיום הטיול';
+      b.querySelector('.dm').textContent = `${(d.len / 1000).toFixed(0)} ק"מ · ${fmtH(d.hrs)}`;
+      b.querySelector('.ds').textContent = [d.mid ? 'עצירה: ' + d.mid.name : null, d.camp ? campSub(d.camp) : null].filter(Boolean).join(' · ');
+      b.onclick = () => render(i, k);
+      box.append(b);
+    });
+    $('dayPlan').append(box);
+  }
   $('poiList').innerHTML = '';
   if (r.pois.length) {
     const ul = document.createElement('ul'); ul.className = 'pois';
@@ -1340,13 +1571,14 @@ function render(i) {
     $('drivenBtn').textContent = sv.driven ? 'בטל סימון "נסענו בזה"' : 'סמן: נסענו בזה';
   }
   $('results').hidden = false;
-  $('sheet').classList.remove('min');
+  $('sheet').classList.remove('min', 'full'); $('sheet').classList.add('has-results');
 }
 function routeTitle(r, p) {
   const nm = x => x?.name && !x.name.startsWith('📍') ? x.name : null;
   const a = nm(p.start), b = p.loop ? null : (nm(p.end) || r.pois.filter(x => x.type === 'nightcamp').map(x => x.name).pop() || null);
   const d = r.unrated ? '' : ' · ' + (DIFF[r.maxD]?.he || '').replace(/ \(.*\)/, '');
-  return `${a || 'מסלול'}${b ? ' ← ' + b : p.loop ? ' (לופ)' : ''} · ${(r.len / 1000).toFixed(0)} ק"מ${d}`;
+  const nd = r.days && r.days.length > 1 ? `${r.days.length} ימים · ` : '';
+  return `${nd}${a || 'מסלול'}${b && !nd ? ' ← ' + b : p.loop ? ' (לופ)' : ''} · ${(r.len / 1000).toFixed(0)} ק"מ${d}`;
 }
 
 // ---------- serialize / deserialize ----------
@@ -1357,7 +1589,8 @@ function packRoute(r) {
   return {
     coords: r.coords.map(([a, o]) => [R5(a), R5(o)]),
     waypoints: r.pois.map(x => ({ lat: R5(x.lat), lon: R5(x.lon), name: x.name, type: x.type, auth: x.auth || null, fee: x.fee, water: x.water, toilets: x.toilets, img: x.img, commons: x.commons, wd: x.wd })),
-    stats: { len: Math.round(r.len), hrs: +r.hrs.toFixed(2), maxD: r.maxD, byD: r.byD.map(Math.round), unk: Math.round(r.unk), mil: Math.round(r.mil), aa: Math.round(r.aa), js: Math.round(r.js), reuse: Math.round(r.reuse), runs, unrated: !!r.unrated },
+    stats: { len: Math.round(r.len), hrs: +r.hrs.toFixed(2), maxD: r.maxD, byD: r.byD.map(Math.round), unk: Math.round(r.unk), mil: Math.round(r.mil), aa: Math.round(r.aa), js: Math.round(r.js), reuse: Math.round(r.reuse), runs, unrated: !!r.unrated,
+      days: r.days && r.days.length > 1 ? r.days.map(d => ({ from: d.from, to: d.to, len: Math.round(d.len), hrs: +d.hrs.toFixed(2), camp: d.camp ? { name: d.camp.name, lat: R5(d.camp.lat), lon: R5(d.camp.lon), auth: d.camp.auth, type: 'nightcamp', fee: d.camp.fee, water: d.camp.water, toilets: d.camp.toilets } : null, mid: d.mid ? { name: d.mid.name, type: d.mid.type } : null })) : null },
   };
 }
 function unpackRoute(row) {
@@ -1367,7 +1600,7 @@ function unpackRoute(row) {
     let i = 0;
     st.runs.forEach(([d, n], k) => { const startI = k === 0 ? 0 : i - 1; const endI = k === 0 ? n : i + n; segs.push({ d, pts: coords.slice(Math.max(0, startI), endI) }); i = endI; });
   } else segs.push({ d: -1, pts: coords });
-  return { coords, segs, pois: row.waypoints || [], len: st.len || pathLen(coords), hrs: st.hrs || pathLen(coords) / 1000 / 15, maxD: st.maxD ?? 0, byD: st.byD || [0, 0, 0, 0, 0, 0], unk: st.unk || 0, mil: st.mil || 0, aa: st.aa || 0, js: st.js || 0, reuse: st.reuse || 0, unrated: !!st.unrated || !st.runs };
+  return { coords, segs, pois: row.waypoints || [], len: st.len || pathLen(coords), hrs: st.hrs || pathLen(coords) / 1000 / 15, maxD: st.maxD ?? 0, byD: st.byD || [0, 0, 0, 0, 0, 0], unk: st.unk || 0, mil: st.mil || 0, aa: st.aa || 0, js: st.js || 0, reuse: st.reuse || 0, unrated: !!st.unrated || !st.runs, days: st.days || null };
 }
 function pathLen(c) { let s = 0; for (let i = 1; i < c.length; i++) s += hav(c[i - 1][0], c[i - 1][1], c[i][0], c[i][1]); return s; }
 function showSaved(row) {
