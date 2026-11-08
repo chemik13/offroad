@@ -784,7 +784,9 @@ async function run(fromPrompt) {
 
     status('מאתר מקומות…');
     const sLL = await geocode(p.start);
-    if (!sLL) throw new Error(`לא מצאתי את "${p.start?.name}". נסו שם אחר, או לחצו על המפה ובחרו "התחלה מכאן".`);
+    if (!sLL) throw new Error(p._basic && !hasGroup()
+      ? `לא מצאתי את "${p.start?.name}". הפענוח החכם לא פעיל: הכניסו קוד קבוצה ב-⚙ כדי שאבין בקשות כמו "בעקבות מבצע…" ואחפש ברשת.`
+      : `לא מצאתי את "${p.start?.name}". נסו שם אחר, או לחצו על המפה ובחרו "התחלה מכאן".`);
     setStart(sLL);
     let eLL = null;
     if (!p.loop && p.end) { eLL = await geocode(p.end); if (!eLL) throw new Error(`לא מצאתי את היעד "${p.end.name}".`); setEnd(eLL); }

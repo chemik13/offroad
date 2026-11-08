@@ -1177,7 +1177,7 @@ function parseLocal(text) {
   if (/עתיק|היסטור|ארכיאולוג/.test(t)) p.poi_types.push('historic');
   if (/(^|\s)(גב|גבים|בור מים|בורות מים)(?=\s|,|$)/.test(t)) p.poi_types.push('water');
   if (/בלי כביש|בלי אספלט|רק עפר|רק שטח/.test(t)) p.avoid_asphalt = true;
-  const STOP = /^(סלול|עגלי|אתגר|וגבה|עיין|ים|קורי|כונית|שפחתי|דרום|צפון)/;
+  const STOP = /^(סלול|עגלי|אתגר|וגבה|עיין|ים|קורי|כונית|שפחתי|דרום|צפון|בצע|לחמה|ערכה|סע|סעות|סורת|פגש|קום|נוחה|נוף|דבר|כתש)(?=\s|$)|^(בצע|לחמ|ערכ)/;
   const place = '([\\u0590-\\u05FF"\'\\- ]{2,25}?)(?=\\s*(?:,|\\.|$|\\sעם|\\sשל|\\sל|\\sעד|\\sו))';
   if ((m = t.match(new RegExp('(?:מאזור|באזור|ליד|סביב|יציאה מ|יוצאים מ|מתחילים ב|התחלה ב)\\s*' + place)))) p.start = { name: m[1].trim() };
   else if ((m = t.match(new RegExp('(?:^|\\s)מ' + place))) && !STOP.test(m[1])) p.start = { name: m[1].trim() };
@@ -1683,7 +1683,9 @@ async function run(fromPrompt) {
 
     status('מאתר מקומות…');
     const sLL = await geocode(p.start);
-    if (!sLL) throw new Error(`לא מצאתי את "${p.start?.name}". נסו שם אחר, או לחצו על המפה ובחרו "התחלה מכאן".`);
+    if (!sLL) throw new Error(p._basic && !hasGroup()
+      ? `לא מצאתי את "${p.start?.name}". הפענוח החכם לא פעיל: הכניסו קוד קבוצה ב-⚙ כדי שאבין בקשות כמו "בעקבות מבצע…" ואחפש ברשת.`
+      : `לא מצאתי את "${p.start?.name}". נסו שם אחר, או לחצו על המפה ובחרו "התחלה מכאן".`);
     setStart(sLL);
     let eLL = null;
     if (!p.loop && p.end) { eLL = await geocode(p.end); if (!eLL) throw new Error(`לא מצאתי את היעד "${p.end.name}".`); setEnd(eLL); }
