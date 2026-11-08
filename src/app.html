@@ -62,6 +62,12 @@ textarea:focus,select:focus,input:focus,button:focus-visible{outline:2px solid v
 .go{background:var(--accent);color:var(--accent-ink);border:0;border-radius:10px;font:600 15px var(--body);padding:10px 16px;cursor:pointer;white-space:nowrap}
 .go:hover{filter:brightness(1.06)}
 .go:disabled{opacity:.5}
+.pwrap{position:relative;flex:1;min-width:0;display:flex}
+.pwrap textarea{padding-inline-start:44px}
+.mic{position:absolute;inset-inline-start:6px;top:50%;transform:translateY(-50%);width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:#fff;color:var(--ink);display:grid;place-items:center;cursor:pointer;padding:0}
+.mic.on{background:var(--danger);border-color:var(--danger);color:#fff}
+@media (prefers-reduced-motion:no-preference){.mic.on{animation:micpulse 1.2s ease-in-out infinite}}
+@keyframes micpulse{0%,100%{box-shadow:0 0 0 0 rgba(198,47,47,.45)}50%{box-shadow:0 0 0 8px rgba(198,47,47,0)}}
 .examples{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
 .examples button{flex:none;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:5px 11px;font:13px var(--body);cursor:pointer}
 .examples button:hover{border-color:var(--accent);color:var(--accent)}
@@ -135,6 +141,8 @@ ul.pois li{margin-bottom:8px}
 .wxi{width:26px;height:26px}
 .wxpop{font-size:12px;line-height:1.5;margin-top:6px;min-width:200px}
 .wxpop b{font-weight:600}
+.go.offroad{display:flex;align-items:center;justify-content:center;gap:8px;padding-block:12px;font-size:16px}
+.orhint{font-size:13px;line-height:1.5;color:var(--ink);background:var(--accent-soft);border-radius:8px;padding:8px 10px;margin-top:8px}
 .daychips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-top:8px}
 .daychips button{flex:none;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:7px 12px;font:500 13px var(--body);cursor:pointer;font-variant-numeric:tabular-nums}
 .daychips button[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
@@ -199,7 +207,8 @@ ul.pois li{margin-bottom:8px}
   <button class="grip" id="grip" aria-label="כווץ / הרחב"></button>
   <div id="body">
     <div class="promptrow">
-      <textarea id="prompt" rows="2" placeholder="למשל: חצי יום בגולן מקצרין, בינוני, עם מעיין ותצפית"></textarea>
+      <div class="pwrap"><textarea id="prompt" rows="2" placeholder="למשל: חצי יום בגולן מקצרין, בינוני, עם מעיין ותצפית"></textarea>
+        <button class="mic" id="micBtn" type="button" aria-label="דברו במקום להקליד" title="דברו במקום להקליד"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg></button></div>
       <button class="go" id="goBtn">בנה מסלול</button>
     </div>
     <div class="examples" id="examples"></div>
@@ -248,8 +257,10 @@ ul.pois li{margin-bottom:8px}
       </div>
       <div class="savedtag" id="savedTag" hidden></div>
       <div class="actions" style="margin-top:10px">
-        <button class="go" id="gpxBtn">שליחה ל-Off-Road (GPX)</button>
+        <button class="go offroad" id="offroadBtn"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 15.5h16l-1.6-4.6a2 2 0 0 0-1.9-1.4H7.5a2 2 0 0 0-1.9 1.4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M3.5 15.5h17v2.5h-17z" fill="currentColor"/><circle cx="7.5" cy="18.5" r="2.2" fill="currentColor" stroke="var(--accent)" stroke-width="1.2"/><circle cx="16.5" cy="18.5" r="2.2" fill="currentColor" stroke="var(--accent)" stroke-width="1.2"/><path d="M9 9.5V7h6v2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>פתיחה ב-Off-Road</button>
+        <button class="ghost" id="gpxBtn" title="הורדת קובץ GPX">GPX</button>
       </div>
+      <div class="orhint" id="orHint" hidden></div>
       <div class="actions" id="savedActions" style="margin-top:8px" hidden>
         <button class="ghost" id="drivenBtn">סמן: נסענו בזה</button>
         <button class="danger" id="delBtn">מחיקה</button>
@@ -509,7 +520,7 @@ async function geocode(place) {
 }
 
 // ---------- OSM data ----------
-const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
+const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
 // ---------- trail data: tile cache (phone IndexedDB -> shared server cache -> Overpass) ----------
 const TILE_TTL = 30 * 24 * 3600 * 1000;
 let gcache = null; // { keys:Set, G }
@@ -552,42 +563,81 @@ function overpassQuery(bb) {
 (${Object.values(POI_TYPES).map(p => p.q + `(${bb});`).join('')});out center qt;
 (way["landuse"="military"](${bb});relation["landuse"="military"](${bb});way["military"~"^(danger_area|training_area|range)$"](${bb});relation["military"~"^(danger_area|training_area|range)$"](${bb}););out geom qt;`;
 }
+// One area at a time is light enough for busy public servers. Each request races two servers;
+// on failure it retries with the others, backing off (1s, 3s, 7s), as the servers ask.
+let mirrorOrder = OVERPASS.slice();
+function overpassOnce(url, q, signal) {
+  return fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'content-type': 'application/x-www-form-urlencoded' }, signal })
+    .then(async r => { if (!r.ok) throw new Error('Overpass ' + r.status); const j = await r.json(); if (j.remark && /runtime error|timed out|out of memory/i.test(j.remark)) throw new Error(j.remark); return j.elements; });
+}
 async function fetchOverpass(bbox) {
   const q = overpassQuery(bbox.join(','));
-  let lastErr;
-  for (const url of OVERPASS) {
+  let netErr = 0;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const pair = [mirrorOrder[(attempt * 2) % mirrorOrder.length], mirrorOrder[(attempt * 2 + 1) % mirrorOrder.length]];
+    const ctls = pair.map(() => new AbortController());
+    const timer = setTimeout(() => ctls.forEach(c => c.abort()), 90000);
     try {
-      const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'content-type': 'application/x-www-form-urlencoded' } });
-      if (!r.ok) throw new Error('Overpass ' + r.status);
-      return (await r.json()).elements;
-    } catch (e) { lastErr = e; }
+      const els = await Promise.any(pair.map((u, k) => overpassOnce(u, q, ctls[k].signal).then(v => { mirrorOrder = [u, ...mirrorOrder.filter(x => x !== u)]; return v; })));
+      ctls.forEach(c => c.abort()); return els;
+    } catch (agg) {
+      for (const e of agg.errors || []) if (e instanceof TypeError) netErr++;
+      if (netErr >= 4 && !navigator.onLine) break;
+      await new Promise(r => setTimeout(r, [1000, 3000, 7000, 0][attempt]));
+    } finally { clearTimeout(timer); }
   }
-  if (lastErr instanceof TypeError) throw new Error('אין גישה לרשת. פתחו את האפליקציה בדפדפן רגיל (Safari / Chrome) דרך הלינק.');
-  throw new Error('לא הצלחתי להוריד נתוני שבילים מ-OSM. נסו שוב בעוד דקה.');
+  if (!navigator.onLine) throw new Error('אין חיבור לאינטרנט.');
+  throw new Error('שרתי OpenStreetMap עמוסים כרגע ולא הצלחתי להוריד שבילים. נסו שוב בעוד כמה דקות.');
+}
+// Tiles: memory -> phone (IndexedDB) -> shared server -> Overpass. In-flight downloads are shared,
+// so a background prefetch and a foreground request never download the same area twice.
+const memTiles = new Map(), inflight = new Map();
+const fresh = t => t && Date.now() - t.at < TILE_TTL;
+async function ensureTiles(keys, { bg = false, say = () => {} } = {}) {
+  const got = {}, stat = { phone: 0, shared: 0, osm: 0 };
+  for (const k of keys) if (fresh(memTiles.get(k))) { got[k] = memTiles.get(k); stat.phone++; }
+  let need = keys.filter(k => !got[k] && !inflight.has(k));
+  await Promise.all(need.map(async k => { const t = await idb.get(k); if (fresh(t)) { got[k] = t; memTiles.set(k, t); stat.phone++; } }));
+  need = need.filter(k => !got[k] && !inflight.has(k));
+  if (need.length && hasGroup()) {
+    if (!bg) say(`בודק ${need.length} אזורים במטמון המשותף…`);
+    await Promise.all(need.map(async k => { const t = await serverTile(k); if (t) { got[k] = t; memTiles.set(k, t); idb.set(k, t); stat.shared++; } }));
+    need = need.filter(k => !got[k] && !inflight.has(k));
+  }
+  if (need.length) {
+    let done = 0; const t0 = Date.now();
+    const tickTxt = () => say(`מוריד שבילים מ-OpenStreetMap: ${done} מתוך ${need.length} אזורים… ${Math.round((Date.now() - t0) / 1000)} שנ׳`);
+    const tick = bg ? null : setInterval(tickTxt, 1000); if (!bg) tickTxt();
+    // group areas in 2x2 blocks: few requests, each still light
+    const groups = {};
+    for (const k of need) { const [, i, j] = k.split('_').map(Number); (groups[`${i >> 1}_${j >> 1}`] ||= []).push(k); }
+    const queue = Object.values(groups);
+    const results = {};
+    const oneGroup = async ks => {
+      const ext = ks.map(tileBBox).reduce((x, y) => [Math.min(x[0], y[0]), Math.min(x[1], y[1]), Math.max(x[2], y[2]), Math.max(x[3], y[3])]);
+      const split = splitToTiles(await fetchOverpass(ext), ks), at = Date.now();
+      for (const k of ks) { const t = { ...split[k], at, key: k }; memTiles.set(k, t); idb.set(k, t); pushTile(k, t); done++; }
+      if (!bg) tickTxt();
+    };
+    const worker = async () => { while (queue.length) { const ks = queue.shift(); const pr = oneGroup(ks); for (const k of ks) results[k] = pr.then(() => memTiles.get(k)); try { await pr; } catch {} } };
+    const all = Promise.all([worker(), worker()]).finally(() => tick && clearInterval(tick));
+    for (const k of need) inflight.set(k, all.then(() => results[k]).finally(() => inflight.delete(k)));
+    stat.osm += need.length;
+  }
+  // wait for anything downloading (ours or a background one)
+  const waiting = keys.filter(k => !got[k]);
+  if (waiting.length) {
+    if (!bg && !need.length) say('מסיים הורדה שכבר התחילה ברקע…');
+    const res = await Promise.all(waiting.map(k => inflight.get(k) || Promise.resolve(memTiles.get(k))));
+    waiting.forEach((k, n) => { if (res[n]) got[k] = res[n]; });
+  }
+  return { tiles: got, stat };
 }
 async function loadGraph(bbox) {
   const keys = tilesFor(bbox);
   if (gcache && keys.every(k => gcache.keys.has(k))) return gcache.G;
-  const tiles = {}; const stat = { phone: 0, shared: 0, osm: 0 };
-  // 1. phone
-  await Promise.all(keys.map(async k => { const t = await idb.get(k); if (t && Date.now() - t.at < TILE_TTL) { tiles[k] = t; stat.phone++; } }));
-  // 2. shared server cache
-  let missing = keys.filter(k => !tiles[k]);
-  if (missing.length) {
-    status(`שבילים: ${stat.phone} אזורים מהטלפון, בודק ${missing.length} במטמון המשותף…`);
-    await Promise.all(missing.map(async k => { const t = await serverTile(k); if (t) { tiles[k] = t; stat.shared++; idb.set(k, t); } }));
-  }
-  // 3. Overpass for whatever is still missing (one query over the missing tiles' extent)
-  missing = keys.filter(k => !tiles[k]);
-  if (missing.length) {
-    status(`מוריד שבילים מ-OpenStreetMap ל-${missing.length} אזורים${stat.phone + stat.shared ? ` (${stat.phone + stat.shared} כבר במטמון)` : ''}…`);
-    const ext = missing.map(tileBBox).reduce((a, b) => [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])]);
-    const els = await fetchOverpass(ext);
-    status('שומר במטמון…');
-    const split = splitToTiles(els, missing);
-    const at = Date.now();
-    for (const k of missing) { const t = { ...split[k], at, key: k }; tiles[k] = t; idb.set(k, t); pushTile(k, t); stat.osm++; }
-  }
+  const { tiles, stat } = await ensureTiles(keys, { say: status });
+  if (keys.some(k => !tiles[k])) throw new Error('חלק מנתוני השבילים לא ירדו. נסו שוב.');
   status('מעבד את רשת השבילים…');
   await new Promise(r => setTimeout(r, 0));
   const G = buildGraph(tilesToElements(keys.map(k => tiles[k])));
@@ -595,10 +645,80 @@ async function loadGraph(bbox) {
   gcache = { keys: new Set(keys), G };
   return G;
 }
+
+// ---------- voice input (Web Speech API, Hebrew) ----------
+(() => {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const btn = $('micBtn');
+  let rec = null, listening = false, base = '', finalText = '', gotSpeech = false;
+  const stopUI = () => { listening = false; btn.classList.remove('on'); btn.setAttribute('aria-label', 'דברו במקום להקליד'); };
+  btn.onclick = () => {
+    if (!SR) { status('הדפדפן הזה לא תומך בזיהוי דיבור. השתמשו במיקרופון שבמקלדת של הטלפון.', true); $('prompt').focus(); return; }
+    if (listening) { rec && rec.stop(); return; }
+    rec = new SR(); rec.lang = 'he-IL'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+    base = $('prompt').value.trim(); finalText = ''; gotSpeech = false;
+    rec.onstart = () => { listening = true; btn.classList.add('on'); btn.setAttribute('aria-label', 'עצירת הקלטה'); status('מקשיב… ספרו מה בא לכם, ובסוף פשוט תשתקו.'); };
+    rec.onresult = ev => {
+      let interim = '';
+      for (let i = ev.resultIndex; i < ev.results.length; i++) { const t = ev.results[i][0].transcript; if (ev.results[i].isFinal) finalText += t + ' '; else interim += t; }
+      gotSpeech = true;
+      $('prompt').value = [base, (finalText + interim).trim()].filter(Boolean).join(' ');
+    };
+    rec.onerror = ev => {
+      stopUI();
+      const m = { 'not-allowed': 'אין הרשאה למיקרופון. אשרו גישה למיקרופון בהגדרות הדפדפן.', 'service-not-allowed': 'אין הרשאה למיקרופון. אשרו גישה למיקרופון בהגדרות הדפדפן.', 'no-speech': 'לא שמעתי כלום. נסו שוב.', 'network': 'זיהוי הדיבור צריך חיבור לאינטרנט.', 'audio-capture': 'לא נמצא מיקרופון.' }[ev.error];
+      if (ev.error !== 'aborted') status(m || 'זיהוי הדיבור נכשל. נסו שוב או הקלידו.', true);
+    };
+    rec.onend = () => {
+      const had = listening; stopUI();
+      if (!had) return;
+      if (gotSpeech && $('prompt').value.trim()) {
+        $('prompt').dispatchEvent(new Event('input')); // starts background trail download
+        status('הבנתי. בונה מסלול…'); run(true);
+      } else status('');
+    };
+    try { rec.start(); } catch { stopUI(); }
+  };
+})();
+
+// ---------- background prefetch ----------
+let busy = false, bgNote = '';
+function bgStatus(t) { bgNote = t; if (!busy && $('results').hidden) status(t); }
+async function prefetch(keys, label) {
+  if (busy || !keys.length || keys.length > 16) return;
+  const missing = [];
+  for (const k of keys) { if (fresh(memTiles.get(k)) || inflight.has(k)) continue; missing.push(k); }
+  if (!missing.length) return;
+  bgStatus(`מכין ברקע את השבילים ${label}…`);
+  try { await ensureTiles(keys, { bg: true }); if (bgNote) bgStatus(`השבילים ${label} מוכנים.`); } catch { bgStatus(''); }
+}
+let typeTimer = null;
+$('prompt').addEventListener('input', () => {
+  clearTimeout(typeTimer);
+  typeTimer = setTimeout(() => {
+    const p = parseLocal($('prompt').value);
+    const ll = lookupPlace(p.start?.name);
+    if (!ll) return;
+    const multi = (p.days || 1) > 1;
+    const L0 = multi ? targetLengthM({ ...p, duration_hours: p.hours_per_day || 6 }) * p.days : targetLengthM(p);
+    const radius = multi ? Math.min(50000, Math.max(15000, p.loop ? L0 / 3.2 : L0 * 0.45)) : Math.min(40000, Math.max(6000, p.loop ? L0 / 2.6 : L0 * 0.75));
+    prefetch(tilesFor(bboxFor([ll], radius)), 'באזור ' + p.start.name);
+  }, 900);
+});
+let moveTimer = null;
+map.on('moveend', () => {
+  clearTimeout(moveTimer);
+  moveTimer = setTimeout(() => {
+    if (map.getZoom() < 10) return;
+    const b = map.getBounds();
+    const keys = tilesFor([b.getSouth(), b.getWest(), b.getNorth(), b.getEast()]);
+    if (keys.length <= 6) prefetch(keys, 'באזור שעל המפה');
+  }, 1500);
+});
 // ---------- run ----------
 let current = null; // {p, plan, G}
 async function run(fromPrompt) {
-  const btns = [$('goBtn'), $('rebuildBtn')]; btns.forEach(b => b.disabled = true);
+  const btns = [$('goBtn'), $('rebuildBtn')]; btns.forEach(b => b.disabled = true); busy = true; bgNote = '';
   $('results').hidden = true;
   try {
     let p;
@@ -663,7 +783,7 @@ async function run(fromPrompt) {
     render(0);
   } catch (err) {
     status(err.message || String(err), true);
-  } finally { btns.forEach(b => b.disabled = false); }
+  } finally { btns.forEach(b => b.disabled = false); busy = false; }
 }
 $('goBtn').onclick = () => run(true);
 $('rebuildBtn').onclick = () => run(false);
@@ -780,14 +900,16 @@ async function fetchWx(points, from, to) {
     + `&start_date=${from}&end_date=${to}`;
   const r = await fetch(u); if (!r.ok) throw new Error('weather ' + r.status);
   let v = await r.json(); if (!Array.isArray(v)) v = [v];
+  if (!v[0]?.daily) throw new Error('weather empty');
   wxCache.set(key, { t: Date.now(), v }); return v;
 }
 const isoToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
 const daysBetween = (a, b) => Math.round((new Date(b + 'T12:00:00Z') - new Date(a + 'T12:00:00Z')) / 864e5);
 const hm = s => s ? s.slice(11, 16) : '';
 const heDay = iso => new Date(iso + 'T12:00:00Z').toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'numeric', timeZone: 'UTC' });
-function dayIdx(w, iso) { return w.daily.time.indexOf(iso); }
+function dayIdx(w, iso) { return w?.daily?.time ? w.daily.time.indexOf(iso) : -1; }
 function nightStats(w, iso) { // 20:00 that day -> 06:00 next morning
+  if (!w?.hourly?.time) return null;
   const t = w.hourly.time; const a = t.indexOf(iso + 'T20:00'); if (a < 0) return null;
   const sl = (arr) => arr.slice(a, Math.min(a + 11, arr.length));
   const temps = sl(w.hourly.temperature_2m), gust = sl(w.hourly.wind_gusts_10m), pr = sl(w.hourly.precipitation), pp = sl(w.hourly.precipitation_probability || []);
@@ -799,6 +921,7 @@ async function pointForecast(ll, el) {
   try {
     const from = isoToday(), to = addDays(from, 2);
     const [w] = await fetchWx([ll], from, to);
+    if (!w?.daily?.time) throw 0;
     el.innerHTML = w.daily.time.map((d, i) => { const [t] = WMO(w.daily.weather_code[i]); return `<div><b>${heDay(d)}</b>: ${t}, ${Math.round(w.daily.temperature_2m_min[i])}°–${Math.round(w.daily.temperature_2m_max[i])}°, גשם ${w.daily.precipitation_probability_max[i] ?? 0}%, משבים עד ${Math.round(w.daily.wind_gusts_10m_max[i])} קמ״ש</div>`; }).join('')
       + (() => { const n = nightStats(w, from); return n ? `<div><b>הלילה</b>: מינימום ${Math.round(n.min)}°, משבים עד ${Math.round(n.gust)} קמ״ש${n.rain > 0.2 ? `, גשם ${n.rain.toFixed(1)} מ״מ` : ''}</div>` : ''; })();
   } catch { el.textContent = 'אין חיבור לשירות מזג האוויר.'; }
@@ -1009,7 +1132,7 @@ function render(i, day = null) {
   const sv = current.saved;
   $('routeName').value = sv ? sv.name : routeTitle(r, p);
   $('saveRow').hidden = !!sv || !hasGroup();
-  $('savedActions').hidden = !sv; $('delConfirm').hidden = true;
+  $('savedActions').hidden = !sv; $('delConfirm').hidden = true; $('orHint').hidden = true;
   $('savedTag').hidden = !sv;
   if (sv) {
     $('savedTag').textContent = `${sv.source === 'imported' ? 'יובא' : 'נשמר'} ע״י ${sv.created_by || 'מישהו'} · ${new Date(sv.created_at).toLocaleDateString('he-IL')}${sv.driven ? ' · נסענו בזה ✓' : ''}`;
@@ -1184,18 +1307,35 @@ $('impUrlBtn').onclick = async () => {
   } catch (err) { $('libStatus').textContent = err.message; }
 };
 
-$('gpxBtn').onclick = async () => {
+function gpxFile() {
   const { res, sel, p } = current; const r = res.results[sel];
   const title = $('routeName').value.trim() || routeTitle(r, p);
-  const gpx = toGPX(r, title);
-  const fname = `offroad-${new Date().toISOString().slice(0, 10)}-${Math.round(r.len / 1000)}km.gpx`;
-  const file = new File([gpx], fname, { type: 'application/gpx+xml' });
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file], title }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  const safe = title.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'מסלול';
+  return { file: new File([toGPX(r, title)], `${safe}.gpx`, { type: 'application/gpx+xml' }), title };
+}
+function downloadFile(file) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = `offroad-${new Date().toISOString().slice(0, 10)}.gpx`; document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+// Off-Road has no public deep link, so we hand the GPX to it through the phone's share sheet.
+$('offroadBtn').onclick = async () => {
+  const { file, title } = gpxFile();
+  const canShareFile = navigator.canShare && (() => { try { return navigator.canShare({ files: [file] }); } catch { return false; } })();
+  if (canShareFile) {
+    $('orHint').hidden = false;
+    $('orHint').textContent = 'במסך השיתוף בחרו Off-Road. לא מופיע? גללו בשורת האפליקציות ולחצו "עוד".';
+    try { await navigator.share({ files: [file], title }); $('orHint').textContent = 'נשלח. ב-Off-Road המסלול מופיע ברשימת המסלולים המיובאים.'; }
+    catch (e) { if (e.name !== 'AbortError') { downloadFile(file); $('orHint').textContent = 'השיתוף לא נפתח, אז הקובץ ירד. פתחו אותו מהורדות ובחרו Off-Road.'; } else $('orHint').hidden = true; }
+    return;
   }
-  const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = fname; document.body.append(a); a.click(); a.remove();
-  status('הקובץ ירד. פתחו אותו מתוך Off-Road (ייבוא GPX).');
+  downloadFile(file);
+  $('orHint').hidden = false;
+  $('orHint').textContent = isIOS
+    ? 'הקובץ ירד. פתחו את אפליקציית קבצים ← הורדות ← לחיצה על הקובץ ← שיתוף ← Off-Road. ב-Safari זה עובד ישירות מהכפתור.'
+    : 'הקובץ ירד. פתחו אותו מההורדות ובחרו Off-Road, או ב-Off-Road: ייבוא GPX.';
 };
+$('gpxBtn').onclick = () => { const { file } = gpxFile(); downloadFile(file); status('קובץ ה-GPX ירד.'); };
 </script>
 </body>
 </html>
