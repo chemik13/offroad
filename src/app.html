@@ -180,6 +180,19 @@ ul.pois li{margin-bottom:8px}
 .stop .bt button:hover{background:var(--stone);color:var(--ink)}
 .refine{display:flex;gap:8px;margin-top:8px}
 .refine input{flex:1;min-width:0;font:inherit;font-size:15px;color:var(--ink);background:var(--stone);border:1px solid transparent;border-radius:8px;padding:9px 10px}
+#talkDlg{width:min(460px,calc(100vw - 16px));box-sizing:border-box;padding:14px;display:flex;flex-direction:column;gap:10px;max-height:min(70vh,560px)}
+#talkDlg:not([open]){display:none}
+#talkDlg::backdrop{background:rgba(20,30,25,.25)}
+.talkhead{display:flex;align-items:center;gap:12px}
+.talkhead small{display:block;color:var(--muted);font-size:12px}
+.orb{width:42px;height:42px;border-radius:50%;background:var(--accent);flex:none}
+.orb.listen{background:var(--danger)}.orb.think{background:#b8860b}.orb.speak{background:#2e9b4f}
+@media (prefers-reduced-motion:no-preference){.orb.listen,.orb.speak{animation:micpulse 1.2s ease-in-out infinite}.orb.think{animation:spin 1s linear infinite;border:4px solid #f2e2b0;border-top-color:#b8860b;background:none}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.talklog{overflow-y:auto;display:flex;flex-direction:column;gap:6px;min-height:60px}
+.bub{max-width:85%;padding:7px 10px;border-radius:12px;font-size:14px;line-height:1.45}
+.bub.me{align-self:flex-start;background:var(--accent-soft)}
+.bub.ai{align-self:flex-end;background:var(--stone)}
 .daychips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-top:8px}
 .daychips button{flex:none;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:7px 12px;font:500 13px var(--body);cursor:pointer;font-variant-numeric:tabular-nums}
 .daychips button[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
@@ -246,7 +259,7 @@ ul.pois li{margin-bottom:8px}
     <div class="promptrow">
       <div class="pwrap"> <textarea id="prompt" rows="3" placeholder="למשל: חצי יום בגולן מקצרין, בינוני, עם מעיין ותצפית"></textarea>
         <button class="mic" id="micBtn" type="button" aria-label="דברו במקום להקליד" title="דברו במקום להקליד"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg></button></div>
-      <button class="go" id="goBtn">בנה מסלול</button>
+      <div style="display:flex;flex-direction:column;gap:6px"><button class="go" id="goBtn">בנה מסלול</button><button class="ghost" id="talkBtn" title="מצב שיחה: מדברים והאפליקציה עונה בקול" style="padding:7px 8px;font-size:13px">שיחה</button></div>
     </div>
     <div class="examples" id="examples"></div>
     <div id="status" role="status"></div>
@@ -328,6 +341,12 @@ ul.pois li{margin-bottom:8px}
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
   <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה /*VERSION*/</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
+</dialog>
+
+<dialog id="talkDlg">
+  <div class="talkhead"><span class="orb" id="talkOrb"></span><div><b id="talkState">מקשיב…</b><small id="talkHint">דברו בחופשיות. "זהו" מסיים.</small></div></div>
+  <div class="talklog" id="talkLog"></div>
+  <div class="actions"><button class="ghost" id="talkSkip">דלג / דבר עכשיו</button><button class="danger" id="talkStop">סיום שיחה</button></div>
 </dialog>
 
 <dialog id="calDlg">
@@ -538,6 +557,12 @@ const SYSTEM = () => `Today is ${new Date().toISOString().slice(0, 10)} (${new D
 - Refinement requests come with the current parameters as JSON: return the full updated parameters, changing only what was asked.
 - If the user did not say where to start: for themed trips start at the theme's natural starting point; otherwise omit start. If they say "from my location", set from_my_location.
 - Defaults: omit vehicle unless stated, difficulty medium, point-to-point (loop=false). For several days set days, and include nightcamp in poi_types.`;
+const VOICE_SYSTEM = `
+VOICE CONVERSATION MODE: the user is talking and hears your text read aloud in Hebrew.
+- Keep spoken text to 1-2 short Hebrew sentences, no lists, no symbols, no markdown.
+- If something essential is missing (where to, how long), ask ONE short question instead of calling the tool. Otherwise call route_request right away; you may add one short sentence like "מתכנן לכם מסלול מ… ל…".
+- When the message includes the current trip as JSON, treat the request as a change to it: call route_request with the full updated parameters.
+- You will get the built route as a tool result; do not repeat it, the app reads it out.`;
 const PARSE_MODEL = 'claude-sonnet-5-5';
 const WEB_SEARCH = { type: 'web_search_20250305', name: 'web_search', max_uses: 3 };
 async function claudeCall(body) {
@@ -812,6 +837,118 @@ async function loadGraph(bboxOrKeys) {
   };
 })();
 
+// ---------- conversation mode (talk, it answers out loud, refine by voice) ----------
+const talk = (() => {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let on = false, messages = [], pendingTool = null, rec = null, speaking = false, skip = null;
+  const log = (who, t) => { const d = document.createElement('div'); d.className = 'bub ' + who; d.textContent = t; $('talkLog').append(d); $('talkLog').scrollTop = 1e9; };
+  const state = (k, t, h) => { $('talkOrb').className = 'orb ' + k; $('talkState').textContent = t; if (h != null) $('talkHint').textContent = h; };
+  const heVoice = () => (speechSynthesis.getVoices() || []).find(v => /^he/i.test(v.lang)) || null;
+  function say(text) {
+    return new Promise(res => {
+      if (!('speechSynthesis' in window) || !text) return res();
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text.replace(/ק"מ/g, 'קילומטר').replace(/[⚠•·]/g, ' '));
+      u.lang = 'he-IL'; const v = heVoice(); if (v) u.voice = v; u.rate = 1.05;
+      speaking = true; state('speak', 'מדבר…', 'לחיצה על "דלג" עוצרת ומקשיבה');
+      const done = () => { speaking = false; res(); };
+      u.onend = done; u.onerror = done; skip = () => { speechSynthesis.cancel(); done(); };
+      speechSynthesis.speak(u);
+      setTimeout(() => { if (speaking && !speechSynthesis.speaking) done(); }, 1500 + text.length * 120); // some browsers never fire onend
+    });
+  }
+  function listen() { // one utterance; ends after 2.5 s of silence
+    return new Promise(res => {
+      let said = '', interim = '', timer = null, ended = false;
+      const end = () => { if (ended) return; ended = true; clearTimeout(timer); try { rec.stop(); } catch {} res((said + ' ' + interim).trim()); };
+      const arm = ms => { clearTimeout(timer); timer = setTimeout(end, ms); };
+      skip = end;
+      const start = () => {
+        rec = new SR(); rec.lang = 'he-IL'; rec.interimResults = true; rec.continuous = true;
+        rec.onresult = ev => { interim = ''; for (let i = ev.resultIndex; i < ev.results.length; i++) { const t = ev.results[i][0].transcript.trim(); if (ev.results[i].isFinal) said = (said + ' ' + t).trim(); else interim += (interim ? ' ' : '') + t; } $('talkHint').textContent = (said + ' ' + interim).trim() || 'דברו בחופשיות. "זהו" מסיים.'; arm(2500); };
+        rec.onerror = ev => { if (['not-allowed', 'service-not-allowed', 'audio-capture'].includes(ev.error)) { ended = true; res(null); } };
+        rec.onend = () => { if (!ended && on) { if (interim) { said = (said + ' ' + interim).trim(); interim = ''; } try { start(); } catch { end(); } } };
+        rec.start();
+      };
+      state('listen', 'מקשיב…', 'דברו בחופשיות. "זהו" מסיים.'); arm(9000);
+      try { start(); } catch { res(null); }
+    });
+  }
+  function spokenHours(h) {
+    let hh = Math.floor(h), mm = Math.round((h - hh) * 60 / 5) * 5; if (mm === 60) { hh++; mm = 0; }
+    const H = hh === 0 ? '' : hh === 1 ? 'שעה' : hh === 2 ? 'שעתיים' : `${hh} שעות`;
+    const M = mm === 0 ? '' : mm === 30 ? 'חצי' : mm === 15 ? 'רבע' : `${mm} דקות`;
+    return H && M ? `${H} ו${M === 'חצי' || M === 'רבע' ? M : M}` : H || M || 'פחות מרבע שעה';
+  }
+  function routeSummary() {
+    if (!current) return '';
+    const r = current.res.results[current.sel], D = r.days && r.days.length > 1 ? r.days : null;
+    const parts = [`${D ? `טיול של ${D.length} ימים, ` : ''}${Math.round(r.len / 1000)} קילומטר, בערך ${spokenHours(r.hrs)} נסיעה${D ? ' בסך הכל' : ''}.`];
+    if (D) parts.push('לינה ב: ' + D.filter(d => d.camp).map(d => d.camp.name.replace(/^חניון( לילה)?\s*/, '')).join(', ') + '.');
+    const named = r.pois.filter(x => x.type !== 'nightcamp').map(x => x.name).slice(0, 3);
+    if (named.length) parts.push('עוברים ב' + named.join(', ') + '.');
+    if (r.mil > 1000) parts.push(`${Math.round(r.mil / 1000)} קילומטר בשטחי אש, צריך לוודא שפתוחים.`);
+    if (current.res.results.length > 1) parts.push(`יש עוד ${current.res.results.length - 1} חלופות על המסך.`);
+    return parts.join(' ');
+  }
+  async function turn(userText) {
+    const ctx = current && !current.saved ? `\n\n[הטיול הנוכחי על המסך, JSON: ${JSON.stringify(current.p, (k, v) => k.startsWith('_') || k === 'researched' ? undefined : v)}]` : '';
+    const content = [];
+    if (pendingTool) { content.push(pendingTool); pendingTool = null; }
+    content.push({ type: 'text', text: userText + ctx });
+    messages.push({ role: 'user', content });
+    state('think', 'חושב…', '');
+    let r;
+    for (let k = 0; k < 4; k++) {
+      r = await claudeCall({ system: SYSTEM() + VOICE_SYSTEM, messages, tools: [WEB_SEARCH, TOOL], tool_choice: { type: 'auto' }, max_tokens: 2000 });
+      if (r.stop_reason !== 'pause_turn') break;
+      messages.push({ role: 'assistant', content: r.content });
+    }
+    messages.push({ role: 'assistant', content: r.content });
+    const text = (r.content || []).filter(c => c.type === 'text').map(c => c.text).join(' ').trim();
+    const tu = (r.content || []).find(c => c.type === 'tool_use' && c.name === 'route_request');
+    if (text) log('ai', text);
+    if (!tu) { await say(text || 'לא הבנתי, אפשר לנסח שוב?'); return; }
+    if (text) await say(text);
+    state('think', 'בונה מסלול…', '');
+    const np = { allow_area_a: false, military_mode: 'auto', via: [], ...tu.input };
+    for (const pl of [np.start, np.end, ...(np.via || [])]) if (pl && pl.lat && pl.lon) pl.researched = true;
+    if (current?.p) { for (const k of ['start', 'end']) if (np[k] && current.p[k] && np[k].name === current.p[k].name && current.p[k].latlng) np[k].latlng = current.p[k].latlng; if (!np.date && current.p.date) np.date = current.p.date; }
+    if (!np.vehicle) np.vehicle = myVehicle();
+    await run(true, np);
+    const summary = lastRunErr ? 'לא הצלחתי לבנות מסלול: ' + lastRunErr : routeSummary();
+    pendingTool = { type: 'tool_result', tool_use_id: tu.id, content: lastRunErr ? 'נכשל: ' + lastRunErr : 'נבנה: ' + summary };
+    const spoken = summary + (lastRunErr ? ' מה לשנות?' : ' רוצים לשנות משהו?');
+    log('ai', spoken); await say(spoken);
+  }
+  async function loop() {
+    while (on) {
+      const heard = await listen();
+      if (!on) break;
+      if (heard === null) { state('', 'אין גישה למיקרופון', 'אשרו גישה למיקרופון בהגדרות הדפדפן.'); on = false; break; }
+      if (!heard) { await say('אני כאן. מה בא לכם?'); continue; }
+      log('me', heard);
+      if (/^(זהו|תודה|סיימנו|סיימתי|די|ביי|להתראות)[.! ]*$/.test(heard.trim()) || /^(זהו|תודה)\b.*(זהו|סיימנו)?$/.test(heard.trim()) && heard.length < 20) { await say('בכיף. נסיעה טובה!'); stop(); break; }
+      $('prompt').value = heard; growPrompt();
+      try { await turn(heard); } catch (e) { const m = 'משהו השתבש: ' + (e.detail || e.message); log('ai', m); await say('משהו השתבש. נסו שוב.'); }
+    }
+  }
+  function start() {
+    if (!SR) { status('הדפדפן הזה לא תומך בזיהוי דיבור, אז מצב שיחה לא זמין בו. נסו Safari או Chrome.', true); return; }
+    if (!hasGroup() && !store.get('apiKey')) { status('מצב שיחה צריך את הפענוח החכם: הכניסו קוד קבוצה ב-⚙.', true); return; }
+    try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch {} // unlock audio inside the tap (iOS)
+    on = true; messages = []; pendingTool = null; $('talkLog').innerHTML = '';
+    $('talkDlg').show(); // non-modal: the map stays visible
+    log('ai', 'היי! לאן נוסעים?');
+    say('היי! לאן נוסעים?').then(loop);
+  }
+  function stop() { on = false; try { rec && rec.stop(); } catch {} try { speechSynthesis.cancel(); } catch {} $('talkDlg').close(); state('', '', ''); }
+  $('talkBtn').onclick = start;
+  $('talkStop').onclick = stop;
+  $('talkSkip').onclick = () => skip && skip();
+  return { start, stop };
+})();
+
 // ---------- background prefetch ----------
 let busy = false, bgNote = '';
 function bgStatus(t) { bgNote = t; if (!busy && $('results').hidden) status(t); }
@@ -848,19 +985,20 @@ map.on('moveend', () => {
 });
 // ---------- run ----------
 let current = null; // {p, plan, G}
-async function run(fromPrompt) {
+let lastRunErr = null;
+async function run(fromPrompt, preset = null) {
   const btns = [$('goBtn'), $('rebuildBtn')]; btns.forEach(b => b.disabled = true); busy = true; bgNote = '';
   $('results').hidden = true;
   try {
     let p;
     const text = $('prompt').value.trim();
     if (fromPrompt) {
-      if (!text) { status('כתבו מה בא לכם לעשות.', true); return; }
-      store.set('lastPrompt', text);
+      if (!text && !preset) { status('כתבו מה בא לכם לעשות.', true); return; }
+      if (text) store.set('lastPrompt', text);
       const key = store.get('apiKey');
-      p = null;
+      p = preset;
       let smartErr = null;
-      if (hasGroup() || key) {
+      if (!p && (hasGroup() || key)) {
         status('מבין את הבקשה (ואם צריך, מחפש ברשת)…');
         try { p = await parseSmart(text); }
         catch (e) { smartErr = e.status === 401 ? 'קוד הקבוצה או המפתח לא נכונים.' : e.status === 503 ? 'מפתח Claude לא הוגדר בשרת.' : 'הפענוח החכם נכשל' + (e.detail ? ` (${e.detail})` : e.status ? ` (${e.status})` : '') + '.'; }
@@ -943,10 +1081,12 @@ async function run(fromPrompt) {
     if (!res.results.length && res.reason) throw new Error(res.reason);
     if (!res.results.length) throw new Error('לא מצאתי מסלול שעומד בתנאים. נסו לקצר, לשנות רמת קושי/רכב, או לבטל הימנעות מכבישים / שטחי אש.');
     if (res.note) setTimeout(() => status(res.note), 0);
+    lastRunErr = null;
     current = { p, res, G, sel: 0, saved: null, prompt: fromPrompt ? text : (current?.prompt || '') };
     status('');
     render(0);
   } catch (err) {
+    lastRunErr = err.message || String(err);
     status(err.message || String(err), true);
   } finally { btns.forEach(b => b.disabled = false); busy = false; }
 }
