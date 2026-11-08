@@ -1310,7 +1310,7 @@ $('impUrlBtn').onclick = async () => {
 function gpxFile() {
   const { res, sel, p } = current; const r = res.results[sel];
   const title = $('routeName').value.trim() || routeTitle(r, p);
-  const safe = title.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'מסלול';
+  const safe = title.replace(/ק"מ/g, 'קמ').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'מסלול';
   return { file: new File([toGPX(r, title)], `${safe}.gpx`, { type: 'application/gpx+xml' }), title };
 }
 function downloadFile(file) {
@@ -1324,8 +1324,11 @@ $('offroadBtn').onclick = async () => {
   const canShareFile = navigator.canShare && (() => { try { return navigator.canShare({ files: [file] }); } catch { return false; } })();
   if (canShareFile) {
     $('orHint').hidden = false;
-    $('orHint').textContent = 'במסך השיתוף בחרו Off-Road. לא מופיע? גללו בשורת האפליקציות ולחצו "עוד".';
-    try { await navigator.share({ files: [file], title }); $('orHint').textContent = 'נשלח. ב-Off-Road המסלול מופיע ברשימת המסלולים המיובאים.'; }
+    const howTo = isIOS
+      ? 'אם Off-Road לא מופיעה בשורת האפליקציות: לחצו "Save to Files", ואז באפליקציית Files לחצו על הקובץ והוא ייפתח ב-Off-Road. (אפשר גם לגלול את שורת האפליקציות עד "More" ולהפעיל שם את Off-Road, ואז היא תופיע תמיד.)'
+      : 'במסך השיתוף בחרו Off-Road. לא מופיעה? שמרו את הקובץ ופתחו אותו מההורדות.';
+    $('orHint').textContent = howTo;
+    try { await navigator.share({ files: [file], title }); }
     catch (e) { if (e.name !== 'AbortError') { downloadFile(file); $('orHint').textContent = 'השיתוף לא נפתח, אז הקובץ ירד. פתחו אותו מהורדות ובחרו Off-Road.'; } else $('orHint').hidden = true; }
     return;
   }
