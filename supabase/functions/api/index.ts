@@ -7,7 +7,8 @@ const MODEL = "claude-haiku-5-5";
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "content-type, x-group-code, authorization, apikey",
-  "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+  "Access-Control-Expose-Headers": "x-tile-updated",
 };
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "content-type": "application/json; charset=utf-8" } });
@@ -69,6 +70,25 @@ Deno.serve(async (req) => {
       if (buf.length > 8_000_000) return json({ error: "הקובץ גדול מדי" }, 413);
       const text = new TextDecoder().decode(buf);
       return json({ contentType: r.headers.get("content-type"), text, finalUrl: r.url });
+    }
+
+    // ---- shared OSM tile cache (compressed, pre-processed by the client) ----
+    const t = path.match(/^\/tiles\/(v\d+_-?\d{1,4}_-?\d{1,4})$/);
+    if (t) {
+      const key = t[1] + ".json.gz";
+      const bucket = db.storage.from("osm-tiles");
+      if (req.method === "GET") {
+        const { data, error } = await bucket.download(key);
+        if (error || !data) return json({ error: "miss" }, 404);
+        return new Response(data, { headers: { ...CORS, "content-type": "application/octet-stream", "cache-control": "private, max-age=3600" } });
+      }
+      if (req.method === "PUT") {
+        const buf = new Uint8Array(await req.arrayBuffer());
+        if (buf.length < 20 || buf.length > 20_000_000 || buf[0] !== 0x1f || buf[1] !== 0x8b) return json({ error: "bad tile" }, 400);
+        const { error } = await bucket.upload(key, buf, { upsert: true, contentType: "application/gzip" });
+        if (error) throw error;
+        return json({ ok: true });
+      }
     }
 
     // ---- route library ----

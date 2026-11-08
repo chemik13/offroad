@@ -437,6 +437,7 @@ const TOOL = {
       poi_types: { type: 'array', items: { type: 'string', enum: Object.keys(POI_TYPES) }, description: 'Kinds of stops wanted along the way. nightcamp = overnight camping site (חניון לילה); camp = day picnic site only.' },
       via: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, lat: { type: 'number' }, lon: { type: 'number' } } }, description: 'Specific named places that must be on the route, in order' },
       avoid_asphalt: { type: 'boolean' },
+      sunset: { type: 'boolean', description: 'True if the user wants a sunset stop (a viewpoint late in the day)' },
       date: { type: 'string', description: 'Trip date YYYY-MM-DD. Resolve relative words (מחר, שבת, בחג) against today. If not stated, the coming Saturday.' },
       allow_area_a: { type: 'boolean', description: 'True ONLY if the user explicitly asks to allow passing through Area A (Palestinian Authority areas). Default false.' },
       military_mode: { type: 'string', enum: ['auto', 'avoid', 'allow'], description: 'Firing zones: auto (default: allowed only on weekends/holidays), avoid, or allow if the user explicitly wants them' },
@@ -495,37 +496,91 @@ async function geocode(place) {
 
 // ---------- OSM data ----------
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
-let cache = null; // {bbox, G}
+// ---------- trail data: tile cache (phone IndexedDB -> shared server cache -> Overpass) ----------
+const TILE_TTL = 30 * 24 * 3600 * 1000;
+let gcache = null; // { keys:Set, G }
 function bboxFor(points, radiusM) {
   let s = 90, n = -90, w = 180, e = -180;
   for (const [a, o] of points) { s = Math.min(s, a); n = Math.max(n, a); w = Math.min(w, o); e = Math.max(e, o); }
   const dLat = radiusM / 111000, dLon = radiusM / 96000;
   return [s - dLat, w - dLon, n + dLat, e + dLon].map(x => +x.toFixed(4));
 }
-const inside = (a, b) => a[0] >= b[0] && a[1] >= b[1] && a[2] <= b[2] && a[3] <= b[3];
-async function loadGraph(bbox) {
-  if (cache && inside(bbox, cache.bbox)) return cache.G;
-  const bb = bbox.join(',');
-  const q = `[out:json][timeout:90];
-(way["highway"~"^(track|unclassified|tertiary|secondary)$"](${bb});way["highway"~"^(path|service)$"]["motor_vehicle"!~"no|private"]["surface"~"^(unpaved|gravel|fine_gravel|dirt|ground|sand|compacted|rock|pebblestone|earth|mud)$"](${bb});way["highway"="path"]["4wd_only"="yes"](${bb}););out geom qt;
+const idb = (() => {
+  let dbp = null;
+  const open = () => dbp || (dbp = new Promise((res, rej) => { try { const r = indexedDB.open('offroad', 1); r.onupgradeneeded = () => r.result.createObjectStore('tiles'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); } }));
+  const tx = async (mode, fn) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction('tiles', mode); const st = t.objectStore('tiles'); const out = fn(st); t.oncomplete = () => res(out.result); t.onerror = () => rej(t.error); }); };
+  return {
+    get: k => tx('readonly', st => st.get(k)).catch(() => undefined),
+    set: (k, v) => tx('readwrite', st => st.put(v, k)).catch(() => undefined),
+    keys: () => tx('readonly', st => st.getAllKeys()).catch(() => []),
+    clear: () => tx('readwrite', st => st.clear()).catch(() => undefined),
+  };
+})();
+const canGzip = typeof CompressionStream !== 'undefined' && typeof DecompressionStream !== 'undefined';
+async function gz(obj) { return new Uint8Array(await new Response(new Blob([JSON.stringify(obj)]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer()); }
+async function ungz(buf) { return JSON.parse(await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).text()); }
+async function serverTile(key) {
+  if (!hasGroup() || !canGzip) return null;
+  try {
+    const r = await fetch(API + '/tiles/' + key, { headers: { 'x-group-code': store.get('groupCode') } });
+    if (!r.ok) return null;
+    const t = await ungz(await r.arrayBuffer());
+    return t && t.at && Date.now() - t.at < TILE_TTL ? t : null;
+  } catch { return null; }
+}
+async function pushTile(key, tile) {
+  if (!hasGroup() || !canGzip) return;
+  try { await fetch(API + '/tiles/' + key, { method: 'PUT', headers: { 'x-group-code': store.get('groupCode') }, body: await gz(tile) }); } catch {}
+}
+function overpassQuery(bb) {
+  return `[out:json][timeout:120];
+(way["highway"~"^(track|unclassified|tertiary|secondary|primary|trunk|tertiary_link|secondary_link|primary_link|trunk_link)$"](${bb});way["highway"~"^(path|service)$"]["motor_vehicle"!~"no|private"]["surface"~"^(unpaved|gravel|fine_gravel|dirt|ground|sand|compacted|rock|pebblestone|earth|mud)$"](${bb});way["highway"="path"]["4wd_only"="yes"](${bb}););out geom qt;
 (${Object.values(POI_TYPES).map(p => p.q + `(${bb});`).join('')});out center qt;
 (way["landuse"="military"](${bb});relation["landuse"="military"](${bb});way["military"~"^(danger_area|training_area|range)$"](${bb});relation["military"~"^(danger_area|training_area|range)$"](${bb}););out geom qt;`;
+}
+async function fetchOverpass(bbox) {
+  const q = overpassQuery(bbox.join(','));
   let lastErr;
   for (const url of OVERPASS) {
     try {
       const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'content-type': 'application/x-www-form-urlencoded' } });
       if (!r.ok) throw new Error('Overpass ' + r.status);
-      status('מעבד את רשת השבילים…');
-      const j = await r.json();
-      const G = buildGraph(j.elements);
-      cache = { bbox, G };
-      return G;
+      return (await r.json()).elements;
     } catch (e) { lastErr = e; }
   }
-  if (lastErr instanceof TypeError) throw new Error('אין גישה לרשת בתצוגה הזו. פתחו את האפליקציה בדפדפן רגיל (Safari / Chrome) דרך הלינק.');
+  if (lastErr instanceof TypeError) throw new Error('אין גישה לרשת. פתחו את האפליקציה בדפדפן רגיל (Safari / Chrome) דרך הלינק.');
   throw new Error('לא הצלחתי להוריד נתוני שבילים מ-OSM. נסו שוב בעוד דקה.');
 }
-
+async function loadGraph(bbox) {
+  const keys = tilesFor(bbox);
+  if (gcache && keys.every(k => gcache.keys.has(k))) return gcache.G;
+  const tiles = {}; const stat = { phone: 0, shared: 0, osm: 0 };
+  // 1. phone
+  await Promise.all(keys.map(async k => { const t = await idb.get(k); if (t && Date.now() - t.at < TILE_TTL) { tiles[k] = t; stat.phone++; } }));
+  // 2. shared server cache
+  let missing = keys.filter(k => !tiles[k]);
+  if (missing.length) {
+    status(`שבילים: ${stat.phone} אזורים מהטלפון, בודק ${missing.length} במטמון המשותף…`);
+    await Promise.all(missing.map(async k => { const t = await serverTile(k); if (t) { tiles[k] = t; stat.shared++; idb.set(k, t); } }));
+  }
+  // 3. Overpass for whatever is still missing (one query over the missing tiles' extent)
+  missing = keys.filter(k => !tiles[k]);
+  if (missing.length) {
+    status(`מוריד שבילים מ-OpenStreetMap ל-${missing.length} אזורים${stat.phone + stat.shared ? ` (${stat.phone + stat.shared} כבר במטמון)` : ''}…`);
+    const ext = missing.map(tileBBox).reduce((a, b) => [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])]);
+    const els = await fetchOverpass(ext);
+    status('שומר במטמון…');
+    const split = splitToTiles(els, missing);
+    const at = Date.now();
+    for (const k of missing) { const t = { ...split[k], at, key: k }; tiles[k] = t; idb.set(k, t); pushTile(k, t); stat.osm++; }
+  }
+  status('מעבד את רשת השבילים…');
+  await new Promise(r => setTimeout(r, 0));
+  const G = buildGraph(tilesToElements(keys.map(k => tiles[k])));
+  G.cacheStat = stat;
+  gcache = { keys: new Set(keys), G };
+  return G;
+}
 // ---------- run ----------
 let current = null; // {p, plan, G}
 async function run(fromPrompt) {
@@ -588,6 +643,7 @@ async function run(fromPrompt) {
     const res = multi ? planMulti(G, p, { s, e, vias, viaPois }, m => status(m)) : plan(G, p, { s, e, vias, viaPois }, m => status(m));
     if (!res.results.length && res.reason) throw new Error(res.reason);
     if (!res.results.length) throw new Error('לא מצאתי מסלול שעומד בתנאים. נסו לקצר, לשנות רמת קושי/רכב, או לבטל הימנעות מכבישים / שטחי אש.');
+    if (res.note) setTimeout(() => status(res.note), 0);
     current = { p, res, G, sel: 0, saved: null, prompt: fromPrompt ? text : (current?.prompt || '') };
     status('');
     render(0);
@@ -809,7 +865,7 @@ function render(i, day = null) {
     for (const x of r.pois) {
       const li = document.createElement('li');
       li.innerHTML = `<span></span> <span style="color:var(--muted)"></span><div class="thumbs"></div>`;
-      li.children[0].textContent = x.name; li.children[1].textContent = '· ' + (x.type === 'nightcamp' ? campSub(x) : (POI_TYPES[x.type]?.he || 'נקודת חובה'));
+      li.children[0].textContent = x.name; li.children[1].textContent = '· ' + (x.type === 'nightcamp' ? campSub(x) : (x.sunset ? 'תצפית לשקיעה' : (POI_TYPES[x.type]?.he || 'נקודת חובה')));
       ul.append(li); fillThumbs(li.querySelector('.thumbs'), x);
     }
     $('poiList').append(ul);

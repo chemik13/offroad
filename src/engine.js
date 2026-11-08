@@ -350,7 +350,14 @@ function overlapRatio(a, b) {
 }
 
 // Main planner. p: params; nodes: {s, e (or -1), vias: [node]}
+function noRouteReason(G, R0) {
+  const far = maxReach(G, R0);
+  if (far < 1500) return 'נקודת ההתחלה מחוברת רק לקטע שבילים קטן מאוד (לפי הסינון של רמת הרכב, שטחי אש ושטחי A). נסו נקודת התחלה אחרת או רכב עם רמה גבוהה יותר.';
+  return `מנקודת ההתחלה אפשר להגיע רק עד כ-${(far / 1000).toFixed(0)} ק"מ בשבילים שמתאימים לתנאים. נסו לקצר, לשנות רמת קושי או רכב, או לאפשר שטחי אש.`;
+}
+function maxReach(G, R) { let m = 0; for (let i = 0; i < G.N; i++) if (isFinite(R.len[i]) && R.len[i] > m) m = R.len[i]; return m; }
 function plan(G, p, nodes, onProgress = () => {}) {
+  let note = null;
   const fac = factors(G, { ...p, avoid_military: resolveMilitary(p).avoid });
   const L = targetLengthM(p);
   const maxCost = Math.max(L, 20000) * 6;
@@ -377,11 +384,19 @@ function plan(G, p, nodes, onProgress = () => {}) {
   if (!p.loop && nodes.e < 0) {
     // Open-ended one-way: pick a good end point about L away (prefer POIs / authorized night camps)
     const types = p.poi_types || [];
-    let ends = snapPois(G, fac, types, R0, L * 0.55, L * 1.15).map(c => ({ ...c, w: c.type === 'nightcamp' ? 0.5 : 0.35 }));
+    const wantCamp = types.includes('nightcamp');
+    let ends = snapPois(G, fac, types.filter(t => t !== 'nightcamp'), R0, L * 0.55, L * 1.15).map(c => ({ ...c, w: 0.35 }));
+    if (wantCamp) ends.push(...snapPois(G, fac, ['nightcamp'], R0, L * 0.35, L * 1.5).map(c => ({ ...c, w: 0.9 })));
     ends.push(...genericCands(G, s, R0, L * 0.9, 8).map(c => ({ ...c, w: 0 })));
     const crowOk = c => hav(G.lat[s], G.lon[s], G.lat[c.node], G.lon[c.node]) > R0.len[c.node] * 0.35;
     ends = ends.filter(crowOk);
-    const mids = types.length ? snapPois(G, fac, types, R0, L * 0.2, L * 0.7) : [];
+    if (!ends.length) { // small or fragmented network: aim for what is reachable
+      const far = maxReach(G, R0);
+      if (far > 2000) ends = genericCands(G, s, R0, Math.min(L * 0.9, far * 0.75), 8).map(c => ({ ...c, w: 0 }));
+      if (ends.length) note = `ברשת השבילים שמחוברת לנקודת ההתחלה אפשר להגיע עד כ-${(far / 1000).toFixed(0)} ק"מ, אז המסלול קצר מהמבוקש.`;
+    }
+    let mids = types.length ? snapPois(G, fac, types.filter(t => t !== 'nightcamp'), R0, L * 0.2, L * 0.7) : [];
+    if (p.sunset) mids = snapPois(G, fac, ['viewpoint', 'peak'], R0, L * 0.5, L * 0.97).map(m => ({ ...m, sunset: true }));
     onProgress(`בודק ${ends.length} נקודות סיום…`);
     const options = [];
     for (const en of ends) {
@@ -406,7 +421,11 @@ function plan(G, p, nodes, onProgress = () => {}) {
     cands.sort((a, b) => Math.abs(R0.len[a.node] - L * 0.3) - Math.abs(R0.len[b.node] - L * 0.3));
     cands = cands.slice(0, 9);
     cands.push(...genericCands(G, s, R0, L * 0.33, Math.max(3, 12 - cands.length)));
-    if (!cands.length) return { results, L };
+    if (!cands.length) {
+      const far = maxReach(G, R0);
+      if (far > 1500) { cands = genericCands(G, s, R0, Math.min(L * 0.33, far * 0.7), 8); note = `ברשת השבילים שמחוברת לנקודת ההתחלה אפשר להגיע עד כ-${(far / 1000).toFixed(0)} ק"מ, אז הלופ קצר מהמבוקש.`; }
+    }
+    if (!cands.length) return { results, L, reason: noRouteReason(G, R0) };
     onProgress(`בודק ${cands.length} נקודות ביניים…`);
     const Rc = cands.map(c => dijkstra(G, c.node, fac, null, maxCost));
     const combos = [];
@@ -466,7 +485,8 @@ function plan(G, p, nodes, onProgress = () => {}) {
       if (results.every(q => overlapRatio(q.edges, r.edges) < 0.7)) results.push(r);
     }
   }
-  return { results, L };
+  if (!results.length && !note && R0) return { results, L, reason: noRouteReason(G, R0) };
+  return { results, L, note };
 }
 
 // Firing zones: usually open on Fri/Sat and Jewish holidays (incl. chol hamoed). Must still be verified per date.
@@ -543,7 +563,7 @@ function lookupPlace(name) {
 }
 
 // ---------- OSM tile cache: compact format + splitting ----------
-const TILE = 0.25, TILE_VER = 'v1';
+const TILE = 0.25, TILE_VER = 'v2';
 const tileKey = (i, j) => `${TILE_VER}_${i}_${j}`;
 function tilesFor(bbox) { // bbox [s,w,n,e]
   const keys = [];
@@ -757,6 +777,8 @@ function parseLocal(text) {
   if (/סטוק|מקורי|רכב רגיל|פנאי/.test(t)) p.vehicle = 'stock';
   if (/נעילות|נעילה|ספיישל|ספישל/.test(t)) p.vehicle = 'lockers';
   if (/תצפית|נוף/.test(t)) p.poi_types.push('viewpoint');
+  if (/שקיעה/.test(t)) { p.sunset = true; if (!p.poi_types.includes('viewpoint')) p.poi_types.push('viewpoint'); }
+  if (/אוהל גג|גג אוהל|rooftop|אוהל על הגג/.test(t) || /בסוף היום.*חניון|לסיים בחניון|לינה בסוף/.test(t)) { if (!p.poi_types.includes('nightcamp')) p.poi_types.push('nightcamp'); }
   if (/מעיין|עין /.test(t)) p.poi_types.push('spring');
   if (/חניון לילה|חניוני לילה|לינה|ללון|קמפינג|לישון/.test(t)) p.poi_types.push('nightcamp');
   if (/פיקניק|חניון יום|(?<!חניון )חניון(?! לילה)/.test(t) && !/חניון לילה/.test(t)) p.poi_types.push('camp');
@@ -783,6 +805,7 @@ function parseLocal(text) {
   const viaIdx = t.search(/\sדרך\s/);
   if (viaIdx >= 0) for (const h of hits) if (h.i > viaIdx && !REGIONS.includes(h.k) && h.k !== p.start?.name && h.k !== p.end?.name) p.via.push({ name: h.k });
   p.loop = /לופ|מעגל|מעגלי|חזרה ל|חוזר ל|הלוך.?חזור/.test(t) && !p.end;
+  p.poi_types = [...new Set(p.poi_types)];
   const today = new Date(); const iso = d => d.toISOString().slice(0, 10);
   if (/היום/.test(t)) p.date = iso(today);
   else if (/מחר/.test(t)) { const d = new Date(today); d.setDate(d.getDate() + 1); p.date = iso(d); }
