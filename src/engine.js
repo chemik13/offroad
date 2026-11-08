@@ -542,6 +542,58 @@ function lookupPlace(name) {
   return best;
 }
 
+// ---------- OSM tile cache: compact format + splitting ----------
+const TILE = 0.25, TILE_VER = 'v1';
+const tileKey = (i, j) => `${TILE_VER}_${i}_${j}`;
+function tilesFor(bbox) { // bbox [s,w,n,e]
+  const keys = [];
+  for (let i = Math.floor(bbox[0] / TILE); i <= Math.floor(bbox[2] / TILE); i++)
+    for (let j = Math.floor(bbox[1] / TILE); j <= Math.floor(bbox[3] / TILE); j++) keys.push(tileKey(i, j));
+  return keys;
+}
+function tileBBox(key) { const [, i, j] = key.split('_').map(Number); return [i * TILE, j * TILE, (i + 1) * TILE, (j + 1) * TILE]; }
+const WAY_TAGS = ['highway', 'tracktype', 'surface', 'smoothness', '4wd_only', 'access', 'motor_vehicle', 'motorcar', 'vehicle', 'oneway', 'name', 'name:he', 'ref'];
+const POI_TAGS = ['tourism', 'natural', 'historic', 'name', 'name:he', 'image', 'wikimedia_commons', 'wikidata', 'operator', 'owner', 'operator:he', 'operator:en', 'fee', 'drinking_water', 'toilets'];
+const MIL_TAGS = ['landuse', 'military', 'name', 'name:en'];
+const pick = (t, keys) => { const o = {}; for (const k of keys) if (t[k] != null) o[k] = t[k]; return o; };
+const r6 = x => Math.round(x * 1e6) / 1e6;
+const flatGeom = g => { const f = []; for (const p of g || []) if (p) f.push(r6(p.lat), r6(p.lon)); return f; };
+const unflat = f => { const g = []; for (let i = 0; i < f.length; i += 2) g.push({ lat: f[i], lon: f[i + 1] }); return g; };
+const geomBox = f => { let s = 90, n = -90, w = 180, e = -180; for (let i = 0; i < f.length; i += 2) { if (f[i] < s) s = f[i]; if (f[i] > n) n = f[i]; if (f[i + 1] < w) w = f[i + 1]; if (f[i + 1] > e) e = f[i + 1]; } return [s, w, n, e]; };
+const boxHit = (a, b) => a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
+// Overpass elements -> per-tile compact objects {w:[[id,nodes,flat,tags]], p:[[type,id,lat,lon,tags]], m:[[id,[flatRings],tags]]}
+function splitToTiles(elements, keys) {
+  const out = {}; const boxes = {};
+  for (const k of keys) { out[k] = { w: [], p: [], m: [] }; boxes[k] = tileBBox(k); }
+  const isMil = t => t && (t.landuse === 'military' || t.military);
+  for (const el of elements) {
+    const t = el.tags || {};
+    if (el.type === 'way' && t.highway && el.geometry) {
+      const f = flatGeom(el.geometry), bx = geomBox(f);
+      for (const k of keys) if (boxHit(bx, boxes[k])) out[k].w.push([el.id, el.nodes, f, pick(t, WAY_TAGS)]);
+    } else if (isMil(t) && (el.geometry || el.members)) {
+      const rings = el.type === 'way' ? [flatGeom(el.geometry)] : (el.members || []).filter(m => m.role !== 'inner' && m.geometry && m.geometry.length > 3).map(m => flatGeom(m.geometry));
+      if (!rings.length) continue;
+      const bx = geomBox(rings.flat());
+      for (const k of keys) if (boxHit(bx, boxes[k])) out[k].m.push([el.type[0] + el.id, rings, pick(t, MIL_TAGS)]);
+    } else if (el.type === 'node' || el.center) {
+      const la = el.type === 'node' ? el.lat : el.center.lat, lo = el.type === 'node' ? el.lon : el.center.lon;
+      for (const k of keys) { const b = boxes[k]; if (la >= b[0] && la < b[2] && lo >= b[1] && lo < b[3]) { out[k].p.push([el.type[0], el.id, r6(la), r6(lo), pick(t, POI_TAGS)]); break; } }
+    }
+  }
+  return out;
+}
+// merge compact tiles back into Overpass-shaped elements (deduped) for buildGraph
+function tilesToElements(tiles) {
+  const seenW = new Set(), seenP = new Set(), seenM = new Set(), els = [];
+  for (const tl of tiles) {
+    for (const [id, nodes, f, tags] of tl.w) { if (seenW.has(id)) continue; seenW.add(id); els.push({ type: 'way', id, nodes, geometry: unflat(f), tags }); }
+    for (const [ty, id, lat, lon, tags] of tl.p) { const k = ty + id; if (seenP.has(k)) continue; seenP.add(k); els.push(ty === 'n' ? { type: 'node', id, lat, lon, tags } : { type: ty === 'w' ? 'way' : 'relation', id, center: { lat, lon }, tags }); }
+    for (const [id, rings, tags] of tl.m) { if (seenM.has(id)) continue; seenM.add(id); els.push({ type: 'relation', id, members: rings.map(r => ({ role: 'outer', geometry: unflat(r) })), tags }); }
+  }
+  return els;
+}
+
 // ---------- multi-day planning ----------
 // Beam search over authorized night camps. Day k ends at a camp ~dayLen away; last day ends at the
 // destination (given), back at the start (loop) or at a good open end. Returns up to 3 alternatives.
@@ -742,5 +794,5 @@ function parseLocal(text) {
   return p;
 }
 
-if (typeof module !== 'undefined') module.exports = { planMulti, addDays, campAuth, KNOWN_CAMPS, AREA_A, inAreaA, lookupPlace, dayInfo, resolveMilitary, nextSaturday, buildGraph, plan, nearestNode, factors, toGPX, parseLocal, targetLengthM, wayInfo, POI_TYPES };
+if (typeof module !== 'undefined') module.exports = { TILE, tileKey, tilesFor, tileBBox, splitToTiles, tilesToElements, planMulti, addDays, campAuth, KNOWN_CAMPS, AREA_A, inAreaA, lookupPlace, dayInfo, resolveMilitary, nextSaturday, buildGraph, plan, nearestNode, factors, toGPX, parseLocal, targetLengthM, wayInfo, POI_TYPES };
 // ===== END ENGINE =====
