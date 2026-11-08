@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#1f6fd6"/>
+  <path d="M0 388 C90 356 170 372 256 350 S420 334 512 352 V512 H0Z" fill="#185bb0"/>
+  <!-- roof rack with load -->
+  <rect x="120" y="112" width="262" height="12" rx="6" fill="#ffffff"/>
+  <rect x="150" y="96" width="70" height="16" rx="4" fill="#f2b632"/>
+  <rect x="136" y="124" width="10" height="22" fill="#ffffff"/><rect x="246" y="124" width="10" height="22" fill="#ffffff"/><rect x="356" y="124" width="10" height="22" fill="#ffffff"/>
+  <!-- tall boxy body, flat nose -->
+  <path d="M80 296 V214 Q80 200 94 198 L118 196 L134 154 Q138 144 150 144 H378 Q390 144 394 156 L410 200 L424 202 Q436 206 436 220 V296 Q436 308 424 308 H92 Q80 308 80 296Z" fill="#ffffff"/>
+  <!-- windows (three, upright) -->
+  <path d="M146 162 H206 V202 H134Z" fill="#1f6fd6"/>
+  <rect x="218" y="162" width="78" height="40" fill="#1f6fd6"/>
+  <path d="M308 162 H378 L392 202 H308Z" fill="#1f6fd6"/>
+  <!-- rear spare wheel, front light, bumper -->
+  <circle cx="74" cy="250" r="26" fill="#11233d"/><circle cx="74" cy="250" r="10" fill="#c9d4e3"/>
+  <rect x="410" y="222" width="22" height="14" rx="4" fill="#f2b632"/>
+  <rect x="404" y="282" width="44" height="16" rx="6" fill="#11233d"/>
+  <!-- big off-road wheels -->
+  <circle cx="164" cy="318" r="54" fill="#11233d"/><circle cx="164" cy="318" r="20" fill="#c9d4e3"/>
+  <circle cx="358" cy="318" r="54" fill="#11233d"/><circle cx="358" cy="318" r="20" fill="#c9d4e3"/>
+</svg>
