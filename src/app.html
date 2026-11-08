@@ -78,10 +78,10 @@ textarea:focus,select:focus,input:focus,button:focus-visible{outline:2px solid v
 #status:empty{display:none}
 details.params{border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:#fff}
 details.params summary{cursor:pointer;font-weight:500;font-size:14px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
-.grid label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:500}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-top:10px}
+.grid label{min-width:0;display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:500}
 .grid label.full{grid-column:1/-1}
-.grid select,.grid input[type=number],.grid input[type=text],.grid input[type=date]{font:inherit;font-size:15px;color:var(--ink);background:var(--stone);border:1px solid transparent;border-radius:8px;padding:7px 9px;width:100%}
+.grid select,.grid input[type=number],.grid input[type=text],.grid input[type=date]{font:inherit;font-size:15px;color:var(--ink);background:var(--stone);border:1px solid transparent;border-radius:8px;padding:7px 9px;width:100%;min-width:0;max-width:100%;box-sizing:border-box}
 .checks{display:flex;flex-wrap:wrap;gap:6px}
 .checks label{flex-direction:row;align-items:center;gap:5px;background:var(--stone);border-radius:999px;padding:4px 10px;color:var(--ink);font-size:13px;font-weight:400}
 .understood{font-size:14px;background:var(--accent-soft);color:var(--ink);border-radius:8px;padding:8px 10px;line-height:1.45}
@@ -455,6 +455,7 @@ const EXAMPLES = [
 ];
 EXAMPLES.forEach(t => { const b = document.createElement('button'); b.textContent = t; b.onclick = () => { $('prompt').value = t; }; $('examples').append(b); });
 for (const [k, v] of Object.entries(POI_TYPES)) {
+  if (v.safety) continue; // fuel / water are shown along the route, not chosen as stops
   const l = document.createElement('label'); l.innerHTML = `<input type="checkbox" value="${k}"> ${v.he}`; $('pPois').append(l);
 }
 // grip: normal → full → collapsed → normal
@@ -553,7 +554,7 @@ const TOOL = {
       distance_km: { type: 'number', description: 'Total distance in km, if stated' },
       difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'] },
       vehicle: { type: 'string', enum: ['stock', 'raised', 'lockers'], description: 'ONLY if the user states the vehicle for this trip: stock = standard SUV, raised = lifted with low range, lockers = lifted with diff lockers. Omit otherwise (the user has a saved default).' },
-      poi_types: { type: 'array', items: { type: 'string', enum: Object.keys(POI_TYPES) }, description: 'Kinds of stops wanted along the way. nightcamp = overnight camping site (חניון לילה); camp = day picnic site only.' },
+      poi_types: { type: 'array', items: { type: 'string', enum: Object.keys(POI_TYPES).filter(k => !POI_TYPES[k].safety) }, description: 'Kinds of stops wanted along the way. nightcamp = overnight camping site (חניון לילה); camp = day picnic site only.' },
       via: { type: 'array', items: { type: 'object', properties: { name: { type: 'string', description: 'Hebrew name as on a map' }, lat: { type: 'number' }, lon: { type: 'number' }, note: { type: 'string', description: 'One short Hebrew line: why this stop (what happened here / what to see)' } }, required: ['name', 'lat', 'lon'] }, description: 'Ordered stops the route must pass (max 8). For themed trips these are the theme sites.' },
       story_he: { type: 'string', description: 'For themed trips: 2-4 Hebrew sentences telling the story the trip follows. Omit otherwise.' },
       from_my_location: { type: 'boolean', description: 'True if the user says to start from their current location (מהמיקום שלי / מכאן)' },
@@ -1007,7 +1008,10 @@ async function renderElevation(r) {
     <div class="wxrow" style="grid-template-columns:1fr 1fr 1fr;text-align:center"><span><b>↑ ${A.up}</b><br><small>מ׳ עלייה מצטברת</small></span><span><b>↓ ${A.down}</b><br><small>מ׳ ירידה מצטברת</small></span><span><b>${A.steep.length}</b><br><small>קטעים תלולים (15%+)</small></span></div></div>`;
   if (A.steep.length) {
     elevLayer = L.layerGroup().addTo(map);
-    for (const s of A.steep) L.marker([s.lat, s.lon], { icon: L.divIcon({ className: '', html: `<div class="steepic">${s.grade > 0 ? '⬈' : '⬊'} ${Math.abs(Math.round(s.grade))}%</div>`, iconSize: null, iconAnchor: [0, 0] }) }).addTo(elevLayer).bindTooltip(`${s.grade > 0 ? 'עלייה' : 'ירידה'} תלולה של ${Math.abs(Math.round(s.grade))}% לאורך כ-${Math.round(s.to - s.from)} מ׳, בק"מ ${(s.from / 1000).toFixed(1)}`);
+    // at most 8 labels, steepest first, at least 1.5 km apart: dense clusters would cover the route on a phone
+    const show = [];
+    for (const s of A.steep.slice().sort((a, b) => Math.abs(b.grade) - Math.abs(a.grade))) { if (show.length >= 8) break; if (show.every(o => Math.abs(o.from - s.from) > 1500)) show.push(s); }
+    for (const s of show) L.marker([s.lat, s.lon], { icon: L.divIcon({ className: '', html: `<div class="steepic">${s.grade > 0 ? '⬈' : '⬊'} ${Math.abs(Math.round(s.grade))}%</div>`, iconSize: null, iconAnchor: [0, 0] }) }).addTo(elevLayer).bindTooltip(`${s.grade > 0 ? 'עלייה' : 'ירידה'} תלולה של ${Math.abs(Math.round(s.grade))}% לאורך כ-${Math.round(s.to - s.from)} מ׳, בק"מ ${(s.from / 1000).toFixed(1)}`);
     if (worst && Math.abs(worst.grade) >= 25) $('warns').insertAdjacentHTML('afterbegin', `<div class="warn">${worst.grade > 0 ? 'עלייה' : 'ירידה'} תלולה מאוד (${Math.abs(Math.round(worst.grade))}%) בק"מ ${(worst.from / 1000).toFixed(1)}. בהילוך כוח, ועדיף שמישהו ייצא לכוון. ייתכן שזו טעות במודל הגובה בקצה מצוק: הסתכלו בשטח.</div>`);
   }
 }
