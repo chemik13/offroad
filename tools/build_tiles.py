@@ -7,7 +7,9 @@ Output matches the app's compact tile format v3 (see splitToTiles in src/engine.
 (m holds military areas and nature reserves; p includes fuel, drinking water and caravan sites)
 plus out/index.json. The selection mirrors overpassQuery() in src/app.html.
 
-usage: build_tiles.py <extract.osm.pbf> <out_dir>
+usage: build_tiles.py <extract.osm.pbf> <out_dir> [--world] [--merge]
+  --world  no Israel bounding box (Europe extracts)
+  --merge  merge into tiles already in out_dir (several countries share border tiles)
 """
 import gzip, json, math, os, sys, time
 import osmium
@@ -33,6 +35,8 @@ def key(i, j): return f"{VER}_{i}_{j}"
 def keep_way(t):
     hw = t.get("highway")
     if not hw: return False
+    work = ("no", "private", "agricultural", "forestry", "agricultural;forestry")
+    if t.get("motor_vehicle") in work or t.get("access") in ("no", "private", "agricultural", "forestry"): return False  # same as the app's Overpass query
     if hw in MAIN_HW: return True
     if hw in ("path", "service") and t.get("motor_vehicle") not in ("no", "private") and t.get("surface") in UNPAVED: return True
     if hw == "path" and t.get("4wd_only") == "yes": return True
@@ -113,7 +117,16 @@ class Builder(osmium.SimpleHandler):
             self.T(*tile_of(la, lo))["p"].append([tp, a.orig_id(), r6(la), r6(lo), pick(t, POI_TAGS)])
 
 
-def main(src, out):
+def merge_into(old, new):
+    for part, idf in (("w", lambda r: r[0]), ("p", lambda r: (r[0], r[1])), ("m", lambda r: r[0])):
+        seen = {idf(r) for r in old[part]}
+        old[part] += [r for r in new[part] if idf(r) not in seen]
+    return old
+
+
+def main(src, out, world=False, merge=False):
+    global BBOX
+    if world: BBOX = (-90, -180, 90, 180)
     os.makedirs(out, exist_ok=True)
     t0 = time.time()
     b = Builder()
@@ -121,14 +134,19 @@ def main(src, out):
     at = int(time.time() * 1000)
     keys, total = [], 0
     for k, tl in sorted(b.tiles.items()):
+        fn = os.path.join(out, k + ".json.gz")
+        if merge and os.path.exists(fn):
+            with gzip.open(fn, "rt", encoding="utf-8") as f: tl = merge_into(json.load(f), tl)
         tl.update({"at": at, "key": k})
         data = gzip.compress(json.dumps(tl, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), 9)
         with open(os.path.join(out, k + ".json.gz"), "wb") as f: f.write(data)
         keys.append(k); total += len(data)
+    if merge:  # index covers every tile in the folder
+        keys = sorted(fn[:-8] for fn in os.listdir(out) if fn.endswith(".json.gz"))
     with open(os.path.join(out, "index.json"), "w") as f:
         json.dump({"version": VER, "at": at, "built": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "source": os.path.basename(src), "keys": keys}, f)
     print(f"{len(keys)} tiles, {total / 1e6:.1f} MB, {time.time() - t0:.0f}s")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1], sys.argv[2], world="--world" in sys.argv, merge="--merge" in sys.argv)

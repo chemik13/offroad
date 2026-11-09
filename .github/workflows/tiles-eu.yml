@@ -1,0 +1,44 @@
+# Monthly: trail tiles for the countries in tools/eu_extracts.txt, published on the orphan branch "tiles-eu".
+# Same format as the Israel tiles; border tiles shared by two countries are merged.
+name: Build trail tiles (Europe)
+on:
+  schedule:
+    - cron: "41 3 2 * *"   # 2nd of every month, 03:41 UTC
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["tools/eu_extracts.txt", ".github/workflows/tiles-eu.yml"]
+permissions:
+  contents: write
+concurrency: { group: tiles-eu, cancel-in-progress: true }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install osmium==3.7.0
+      - name: Build each country (download, build, delete)
+        run: |
+          mkdir -p out
+          grep -v '^#' tools/eu_extracts.txt | grep . | while read path; do
+            echo "::group::$path"
+            curl -fsSL --retry 3 -o x.osm.pbf "https://download.geofabrik.de/$path" && ls -lh x.osm.pbf
+            python tools/build_tiles.py x.osm.pbf out --world --merge
+            rm -f x.osm.pbf
+            du -sh out
+            echo "::endgroup::"
+          done
+          ls out | wc -l; du -sh out
+      - name: Publish to branch "tiles-eu" (history not kept)
+        run: |
+          cd out
+          git init -q -b tiles-eu
+          git config user.name "tiles-bot"
+          git config user.email "tiles-bot@users.noreply.github.com"
+          git config http.postBuffer 1048576000
+          git add -A
+          git commit -qm "Europe trail tiles $(date -u +%Y-%m-%d)"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" tiles-eu

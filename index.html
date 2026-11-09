@@ -351,7 +351,7 @@ ul.pois li{margin-bottom:8px}
       <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off"></details>
   </div>
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.31 · 09.11.2026 17:38</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.32 · 09.11.2026 17:46</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -1720,7 +1720,7 @@ async function geocode(place) {
 // ---------- OSM data ----------
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
 // ---------- trail data: tile cache (phone IndexedDB -> shared server cache -> Overpass) ----------
-const TILE_TTL = 30 * 24 * 3600 * 1000;
+const TILE_TTL = 45 * 24 * 3600 * 1000; // Europe tiles are rebuilt monthly
 let gcache = null; // { keys:Set, G }
 function bboxFor(points, radiusM) {
   let s = 90, n = -90, w = 180, e = -180;
@@ -1744,11 +1744,21 @@ async function gz(obj) { return new Uint8Array(await new Response(new Blob([JSON
 async function ungz(buf) { return JSON.parse(await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).text()); }
 // Weekly-built tiles from the full OSM extract (GitHub Actions -> branch "tiles"). No key needed.
 const STATIC_TILES = 'https://raw.githubusercontent.com/chemik13/offroad/tiles/';
+// Monthly-built tiles for chosen European countries (tools/eu_extracts.txt -> branch "tiles-eu"); its index says which exist
+const STATIC_EU = 'https://raw.githubusercontent.com/chemik13/offroad/tiles-eu/';
+let euIndex = null;
+async function euKeys() {
+  if (!euIndex) euIndex = fetch(STATIC_EU + 'index.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : { keys: [] }).then(j => new Set(j.keys || [])).catch(() => { euIndex = null; return new Set(); });
+  return euIndex;
+}
 async function staticTile(key) {
   if (!canGzip) return null;
-  { const b = tileBBox(key); if (!inIsrael((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) && !inIsrael(b[0], b[1]) && !inIsrael(b[2], b[3])) return null; } // weekly tiles cover Israel only
+  const b = tileBBox(key);
+  const il = inIsrael((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) || inIsrael(b[0], b[1]) || inIsrael(b[2], b[3]);
+  const base = il ? STATIC_TILES : (await euKeys()).has(key) ? STATIC_EU : null;
+  if (!base) return null;
   try {
-    const r = await fetch(STATIC_TILES + key + '.json.gz', { cache: 'no-cache' });
+    const r = await fetch(base + key + '.json.gz', { cache: 'no-cache' });
     if (!r.ok) return null;
     const t = await ungz(await r.arrayBuffer());
     return t && t.at && Date.now() - t.at < TILE_TTL ? t : null;

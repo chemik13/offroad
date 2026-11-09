@@ -1,0 +1,11 @@
+# Geofabrik extracts built into the "tiles-eu" branch (one path per line, relative to download.geofabrik.de)
+europe/greece-latest.osm.pbf
+europe/macedonia-latest.osm.pbf
+europe/albania-latest.osm.pbf
+europe/montenegro-latest.osm.pbf
+europe/bosnia-herzegovina-latest.osm.pbf
+europe/croatia-latest.osm.pbf
+europe/romania-latest.osm.pbf
+europe/italy-latest.osm.pbf
+europe/portugal-latest.osm.pbf
+europe/georgia-latest.osm.pbf
