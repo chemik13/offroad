@@ -22,11 +22,11 @@ const line=(a,b,n=200)=>Array.from({length:n+1},(_,i)=>[a[1]+(b[1]-a[1])*i/n,a[0
  await p.route(/tile\.|arcgis|fonts/,r=>r.abort());
  await p.goto('file://'+process.argv[2]);
  // simulate a smart-parse result (what Claude returns) through the params form path
- await p.evaluate(()=>{window.__p={start:{name:'Thessaloniki',lat:40.64,lon:22.94,country:'GR'},end:{name:'Dolomites',lat:46.41,lon:11.84,country:'IT'},via:[{name:'Ohrid',lat:41.11,lon:20.80,country:'MK'},{name:'Bled',lat:46.37,lon:14.11,country:'SI'}],days:8,max_km_per_day:250,night_near_water:true,resupply_every_days:2,country:'IT',loop:false};});
+ await p.evaluate(()=>{window.__p={start:{name:'Thessaloniki',lat:40.64,lon:22.94,country:'GR'},end:{name:'Dolomites',lat:46.41,lon:11.84,country:'IT'},via:[{name:'Ohrid',lat:41.11,lon:20.80,country:'MK'},{name:'Bled',lat:46.37,lon:14.11,country:'SI'}],days:3,night_near_water:true,resupply_every_days:2,country:'IT',loop:false};});
  const t0=Date.now();
- await p.fill('#prompt','תתכנן לי טיול מסלוניקי לדולומיטים, שינה על שפת אגמים');await p.evaluate(()=>run(true,window.__p));
+ await p.fill('#prompt','תתכנן לי טיול מסלוניקי לדולומיטים לא יותר מ70-100 ק״מ ביום, שינה על שפת אגמים');await p.evaluate(()=>run(true,window.__p));
  await p.waitForFunction(()=>!busy,null,{timeout:120000});
- const o=await p.evaluate(()=>{const r=current?.res?.results?.[0];return {status:document.querySelector('#status')?.textContent.slice(0,300),overland:r?.overland,days:r?.days?.length,km:r&&Math.round(r.len/1000),pois:r?.pois.map(x=>x.type+':'+x.name).slice(0,20),dayKm:r?.days?.map(d=>Math.round(d.len/1000))}});
+ const o=await p.evaluate(()=>{const r=current?.res?.results?.[0];return {status:document.querySelector('#status')?.textContent.slice(0,300),overland:r?.overland,days:r?.days?.length,km:r&&Math.round(r.len/1000),pois:r?.pois.map(x=>x.type+':'+x.name).slice(0,20),dayKm:r?.days?.map(d=>Math.round(d.len/1000)+'/'+Math.round((d.off||0)/1000)).join(' '),stats:document.querySelector('#stats').textContent.replace(/\s+/g,' ').slice(0,200),chips:document.querySelector('#dayChips').textContent.slice(0,120)}});
  console.log(JSON.stringify(o,null,1),'\ntiles',tileReq,'osrm',osrmReq,'campq',campReq,'ms',Date.now()-t0);
  await p.screenshot({path:process.argv[3]||'/tmp/ov.png'});
  console.log(errs.join('\n')||'no page errors');await b.close();if(!o.overland||!(o.days>1))process.exit(1);})();

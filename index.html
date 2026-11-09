@@ -178,7 +178,7 @@ ul.pois li{margin-bottom:8px}
 .stop .bt{display:flex;gap:2px}
 .stop .bt button{border:0;background:none;color:var(--muted);font-size:15px;width:28px;height:28px;border-radius:6px;cursor:pointer}
 .stop .bt button:hover{background:var(--stone);color:var(--ink)}
-.refine{display:flex;gap:8px;margin-top:8px}
+.refine{margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff}.refine input{flex:1;min-width:0}
 .refine input{flex:1;min-width:0;font:inherit;font-size:15px;color:var(--ink);background:var(--stone);border:1px solid transparent;border-radius:8px;padding:9px 10px}
 #talkDlg{width:min(460px,calc(100vw - 16px));box-sizing:border-box;padding:14px;display:flex;flex-direction:column;gap:10px;max-height:min(70vh,560px)}
 #talkDlg:not([open]){display:none}
@@ -307,10 +307,10 @@ ul.pois li{margin-bottom:8px}
       <div class="daychips" id="dayChips" hidden></div>
       <div class="stats" id="stats" style="margin-top:8px"></div>
       <div style="margin-top:8px"><div class="bar" id="bar"></div><div class="legend" id="legend"></div></div>
+      <div class="refine" id="refineRow"><label for="refineIn" style="display:block;font-size:13px;font-weight:600;margin-bottom:4px">✏️ לשנות את המסלול: כתבו מה לשנות, או ערכו את רשימת התחנות למטה</label><div style="display:flex;gap:8px"><input type="text" id="refineIn" placeholder="&quot;יותר שטח&quot;, &quot;תוסיף יום באלבניה&quot;, &quot;עד 100 ק&quot;מ ביום&quot;"><button class="ghost" id="refineBtn">עדכון</button></div></div>
       <div id="warns" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
       <div id="dayPlan"></div>
       <div id="stopsBox"></div>
-      <div class="refine" id="refineRow"><input type="text" id="refineIn" placeholder="שיפור במילים: &quot;תסיים באילת&quot;, &quot;תוסיף עצירה בעין עבדת&quot;, &quot;פחות כביש&quot;"><button class="ghost" id="refineBtn">עדכון</button></div>
       <div id="safe"></div>
       <div id="elev"></div>
       <div id="wx"></div>
@@ -351,7 +351,7 @@ ul.pois li{margin-bottom:8px}
       <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off"></details>
   </div>
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.28 · 09.11.2026 16:43</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.29 · 09.11.2026 17:02</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2085,6 +2085,11 @@ async function renderElevation(r) {
   }
 }
 
+// "לא יותר מ-70-100 ק"מ ביום" -> 100 (upper bound of a range)
+function maxKmPerDay(t) {
+  const m = (t || '').replace(/[״"׳']/g, '').match(/(?:לא יותר מ|עד|מקסימום|מקס|max|up to)\s*-?\s*(\d{2,4})(?:\s*[-–]\s*(\d{2,4}))?\s*(?:קמ|ק מ|km|קילומטר)\w*\s*(?:ב|ל|per |a )(?:יום|day)/i);
+  return m ? +(m[2] || m[1]) : null;
+}
 // ---------- long journeys: road legs (OSRM) + off-road loops at the highlights + campsites + resupply ----------
 async function osrm(pts) {
   const u = 'https://router.project-osrm.org/route/v1/driving/' + pts.map(q => q[1].toFixed(5) + ',' + q[0].toFixed(5)).join(';') + '?overview=full&geometries=geojson&steps=false';
@@ -2140,14 +2145,14 @@ async function planOverland(p, sLL, eLL, viaLL) {
   for (let i = 0; i < vias.length; i++) {
     status(`מתכנן קטע שטח ${i + 1} מתוך ${vias.length}: ${vias[i].name}…`);
     try {
-      const G = await loadGraph(tilesFor(bboxFor([vias[i].ll], offKm * 1000 / 3)));
+      const G = await Promise.race([loadGraph(tilesFor(bboxFor([vias[i].ll], Math.min(9000, offKm * 1000 / 3.5)))), new Promise((_, rj) => setTimeout(() => rj(new Error('timeout')), 90000))]);
       const fac = factors(G, { ...p, avoid_military: true });
       const s = nearestNode(G, vias[i].ll[0], vias[i].ll[1], fac, 5000);
       if (s < 0) throw 0;
       const res = plan(G, { ...p, loop: true, days: 1, via: [], distance_km: offKm, duration_hours: null }, { s, e: -1, vias: [], viaPois: [] }, () => {});
       const r = res.results[0]; if (!r || r.len < 3000) throw 0;
       pieces[i] = { coords: r.coords, segs: r.segs, len: r.len, hrs: r.hrs, byD: r.byD, maxD: r.maxD, asph: r.asph, unk: r.unk, res: r.res || 0, at: [G.lat[s], G.lon[s]], pois: r.pois.filter(x => x.type !== 'nightcamp') };
-    } catch (e) { if (e) console.warn("offroad piece", e); notes.push(`לא מצאתי קטע שטח מתאים ליד ${vias[i].name}; עוברים שם בכביש.`); }
+    } catch (e) { if (e) console.warn('offroad piece', e); notes.push(e?.message === 'timeout' ? `הורדת השבילים ליד ${vias[i].name} לקחה יותר מדי זמן; עוברים שם בכביש.` : `לא מצאתי קטע שטח מתאים ליד ${vias[i].name}; עוברים שם בכביש.`); }
   }
   // 2. road skeleton and day cut points (by time and km)
   status('מחשב את קטעי הכביש…');
@@ -2168,14 +2173,28 @@ async function planOverland(p, sLL, eLL, viaLL) {
   }
   timeline.push({ i: sk.coords.length - 1, km, h, c: sk.coords[sk.coords.length - 1] });
   let N = p.days > 1 ? p.days : Math.max(1, Math.ceil(h / maxH), maxKm ? Math.ceil(km / maxKm) : 1);
-  if (p.days > 1 && (h / N > maxH * 1.25 || (maxKm && km / N > maxKm * 1.15))) {
-    const need = Math.max(Math.ceil(h / maxH), maxKm ? Math.ceil(km / maxKm) : 1);
-    notes.push(`המרחק הכולל הוא כ-${Math.round(km)} ק"מ: ב-${p.days} ימים זה ${Math.round(km / p.days)} ק"מ ליום. כדי לעמוד במגבלה צריך כ-${need} ימים, אז חילקתי ל-${need}.`);
-    N = need;
-  }
-  N = Math.min(N, 30);
-  const cuts = [];
-  for (let k = 1; k < N; k++) { const target = h * k / N; cuts.push(timeline.find(t => t.h >= target) || timeline[timeline.length - 1]); }
+  const need = Math.max(Math.ceil(h / maxH), maxKm ? Math.ceil(km / maxKm) : 1);
+  const askedDays = p.days > 1 ? p.days : null;
+  if (askedDays && need > N) N = need;
+  if (N > 30) { notes.push(`לפי ${maxKm || ''} ק"מ ליום הטיול יוצא ${N} ימים; קיצרתי ל-30. שקלו יעד קרוב יותר או יותר ק"מ ליום.`); N = 30; }
+  p.days = N; if ($('pDays')) $('pDays').value = N;
+  let cuts = [];
+  if (maxKm) {
+    // greedy: each day ends at the last point still inside the km / hours cap
+    let st = timeline[0];
+    for (let i = 1; i < timeline.length; i++) {
+      const t = timeline[i];
+      if (t.km - st.km > maxKm * 0.92 || /* room for the detour to the campsite */ t.h - st.h > maxH * 1.15) {
+        const prev = timeline[i - 1].km - st.km > 5 ? timeline[i - 1] : t; // an off-road loop longer than the gap: end after it
+        if (km - prev.km < 5) break;
+        cuts.push(prev); st = prev; if (prev === t) continue;
+        i--; // re-test this point against the new day
+      }
+    }
+    if (cuts.length + 1 > 30) cuts = cuts.slice(0, 29);
+    p.days = cuts.length + 1; if ($('pDays')) $('pDays').value = p.days;
+  } else for (let k = 1; k < N; k++) { const target = h * k / N; cuts.push(timeline.find(t => t.h >= target) || timeline[timeline.length - 1]); }
+  if (askedDays && cuts.length + 1 > askedDays) notes.push(`ביקשתם ${askedDays} ימים, אבל ${Math.round(km)} ק"מ ב-${askedDays} ימים זה ${Math.round(km / askedDays)} ק"מ ליום. כדי לעמוד ב${maxKm ? `-${maxKm} ק"מ` : ` ${maxH} שעות נסיעה`} ליום חילקתי ל-${cuts.length + 1} ימים.`);
   // 3. campsites near each cut (lakeside first when asked), fuel + food every few days
   status(`מחפש ${cuts.length} חניוני לילה בדרך…`);
   const wantLake = !!p.night_near_water || /אגם|lake|lago|jezero/i.test(current?.prompt || '') || /אגם/.test($('prompt').value);
@@ -2202,7 +2221,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
   const li = legSplit(fin.coords, seq.map(x => x.ll));
   // 5. assemble coords + segments, splicing each off-road loop in at its highlight
   const coords = [], segs = [], days = [], pois = [];
-  let dayFrom = 0, roadM = 0, dKm = 0, dH = 0;
+  let dayFrom = 0, dKm = 0, dH = 0, dOff = 0;
   const byD = [0, 0, 0, 0, 0, 0]; let len = 0, hrs = 0, asph = 0, unk = 0, res = 0, maxD = 0;
   const pushRoad = (a, b, sp) => {
     const part = thin(fin.coords.slice(a, b + 1));
@@ -2221,17 +2240,17 @@ async function planOverland(p, sLL, eLL, viaLL) {
       if (pc) {
         coords.push(...pc.coords.slice(1)); segs.push(...pc.segs);
         len += pc.len; hrs += pc.hrs; asph += pc.asph; unk += pc.unk; res += pc.res; maxD = Math.max(maxD, pc.maxD); pc.byD.forEach((x, d) => byD[d] += x);
-        dKm += pc.len; dH += pc.hrs; pois.push(...pc.pois);
+        dKm += pc.len; dH += pc.hrs; dOff += pc.len - pc.asph; pois.push(...pc.pois);
       }
     }
     if (nx.k != null) {
       const camp = nx.night;
-      days.push({ from: dayFrom, to: coords.length - 1, len: dKm, hrs: dH, camp: camp ? { ...camp, day: days.length + 1 } : null });
+      days.push({ from: dayFrom, to: coords.length - 1, len: dKm, hrs: dH, off: dOff, camp: camp ? { ...camp, day: days.length + 1 } : null });
       if (camp) pois.push({ ...camp, day: days.length });
-      dayFrom = coords.length - 1; dKm = 0; dH = 0;
+      dayFrom = coords.length - 1; dKm = 0; dH = 0; dOff = 0;
     }
   }
-  days.push({ from: dayFrom, to: coords.length - 1, len: dKm, hrs: dH, camp: null });
+  days.push({ from: dayFrom, to: coords.length - 1, len: dKm, hrs: dH, off: dOff, camp: null });
   // resupply: every N nights, nearest fuel + food to that camp
   const every = Math.max(1, Math.round(p.resupply_every_days || 2));
   days.forEach((d, k) => {
@@ -2418,6 +2437,7 @@ async function run(fromPrompt, preset = null) {
           ? 'לא הבנתי מאיפה יוצאים. הפענוח הבסיסי לא מכיר נושאים כמו "בעקבות מבצע…". הגדירו מפתח Claude (⚙) כדי שאחפש ואתכנן לבד, או כתבו מקום, "מהמיקום שלי", או לחצו על המפה.'
           : 'לא כתבתם מאיפה יוצאים. כתבו מקום, "מהמיקום שלי", או עשו זום לאזור במפה.');
       }
+      { const mk = maxKmPerDay(text); if (mk && !p.max_km_per_day) p.max_km_per_day = mk; }
       fillForm(p);
       const und = [p.summary_he ? 'הבנתי: ' + p.summary_he : null, p.story_he || null, p._searched ? '(חיפשתי ברשת כדי לתכנן)' : null].filter(Boolean).join('\n');
       $('understood').hidden = !und; $('understood').textContent = und; $('understood').style.whiteSpace = 'pre-line';
@@ -2874,7 +2894,7 @@ function render(i, day = null) {
   if (D) {
     const mk = (label, k) => { const b = document.createElement('button'); b.textContent = label; b.setAttribute('aria-pressed', k === day); b.onclick = () => render(i, k); $('dayChips').append(b); };
     mk(`כל הטיול · ${D.length} ימים`, null);
-    D.forEach((d, k) => mk(`יום ${k + 1} · ${(d.len / 1000).toFixed(0)} ק"מ`, k));
+    D.forEach((d, k) => mk(`יום ${k + 1} · ${(d.len / 1000).toFixed(0)} ק"מ${r.overland ? ` (שטח ${((d.off || 0) / 1000).toFixed(0)})` : ''}`, k));
     [...$('dayChips').children].slice(1).forEach((b, k) => { b.style.borderInlineStart = `4px solid ${DAYC[k % DAYC.length]}`; });
   }
   if (startMarker) { startMarker.remove(); startMarker = null; }
@@ -2914,11 +2934,13 @@ function render(i, day = null) {
     <div class="stat"><b>${(dv.len / 1000).toFixed(1)}</b><span>ק"מ ביום ${day + 1}</span></div>
     <div class="stat"><b>${fmtH(dv.hrs + (dv.mid ? 0.25 : 0))}</b><span>שעות נסיעה</span></div>
     <div class="stat"><b>${dv.camp ? 'לילה' : 'סיום'}</b><span>${dv.camp ? dv.camp.name : 'נקודת הסיום'}</span></div>`;
+    if (r.overland) $('stats').insertAdjacentHTML('beforeend', `<div class="stat" style="grid-column:1/-1"><b>${((dv.off || 0) / 1000).toFixed(0)} ק"מ שטח · ${((dv.len - (dv.off || 0)) / 1000).toFixed(0)} ק"מ כביש</b><span>חלוקת היום</span></div>`);
   }
   if (!dv) $('stats').innerHTML = `
     <div class="stat"><b>${(r.len / 1000).toFixed(1)}</b><span>ק"מ${D ? ' בסה״כ' : ''}</span></div>
     <div class="stat"><b>${fmtH(r.hrs + stopH)}</b><span>${D ? 'שעות נסיעה בסה״כ' : 'שעות (כולל עצירות)'}</span></div>
     <div class="stat"><b>${r.unrated ? 'לא מדורג' : (DIFF[r.maxD]?.he || '—').replace(/ \(.*\)/, '')}</b><span>הקטע הקשה ביותר</span></div>`;
+  if (!dv && r.overland) $('stats').insertAdjacentHTML('beforeend', `<div class="stat" style="grid-column:1/-1"><b>${((r.len - r.asph) / 1000).toFixed(0)} ק"מ שטח · ${(r.asph / 1000).toFixed(0)} ק"מ כביש</b><span>${r.len - r.asph < 1000 ? 'לא נמצאו קטעי שטח: הוסיפו אזורי שטח בדרך (בתיבת השינוי למעלה)' : 'שטח באזורים שנבחרו, כבישים ביניהם'}</span></div>`);
   $('bar').innerHTML = ''; $('legend').innerHTML = '';
   r.byD.forEach((m, d) => {
     if (!m) return;
@@ -3023,7 +3045,7 @@ function packRoute(r) {
     coords: r.coords.map(([a, o]) => [R5(a), R5(o)]),
     waypoints: r.pois.map(x => ({ lat: R5(x.lat), lon: R5(x.lon), name: x.name, type: x.type, auth: x.auth || null, fee: x.fee, water: x.water, toilets: x.toilets, img: x.img, commons: x.commons, wd: x.wd })),
     stats: { len: Math.round(r.len), hrs: +r.hrs.toFixed(2), maxD: r.maxD, byD: r.byD.map(Math.round), unk: Math.round(r.unk), mil: Math.round(r.mil), aa: Math.round(r.aa), js: Math.round(r.js), reuse: Math.round(r.reuse), runs, unrated: !!r.unrated,
-      days: r.days && r.days.length > 1 ? r.days.map(d => ({ from: d.from, to: d.to, len: Math.round(d.len), hrs: +d.hrs.toFixed(2), camp: d.camp ? { name: d.camp.name, lat: R5(d.camp.lat), lon: R5(d.camp.lon), auth: d.camp.auth, type: 'nightcamp', fee: d.camp.fee, water: d.camp.water, toilets: d.camp.toilets } : null, mid: d.mid ? { name: d.mid.name, type: d.mid.type } : null })) : null },
+      overland: !!r.overland, asph: Math.round(r.asph || 0), days: r.days && r.days.length > 1 ? r.days.map(d => ({ from: d.from, to: d.to, len: Math.round(d.len), off: Math.round(d.off || 0), hrs: +d.hrs.toFixed(2), camp: d.camp ? { name: d.camp.name, lat: R5(d.camp.lat), lon: R5(d.camp.lon), auth: d.camp.auth, type: 'nightcamp', fee: d.camp.fee, water: d.camp.water, toilets: d.camp.toilets } : null, mid: d.mid ? { name: d.mid.name, type: d.mid.type } : null })) : null },
   };
 }
 function unpackRoute(row) {
@@ -3033,7 +3055,7 @@ function unpackRoute(row) {
     let i = 0;
     st.runs.forEach(([d, n], k) => { const startI = k === 0 ? 0 : i - 1; const endI = k === 0 ? n : i + n; segs.push({ d, pts: coords.slice(Math.max(0, startI), endI) }); i = endI; });
   } else segs.push({ d: -1, pts: coords });
-  return { coords, segs, pois: row.waypoints || [], len: st.len || pathLen(coords), hrs: st.hrs || pathLen(coords) / 1000 / 15, maxD: st.maxD ?? 0, byD: st.byD || [0, 0, 0, 0, 0, 0], unk: st.unk || 0, mil: st.mil || 0, aa: st.aa || 0, js: st.js || 0, reuse: st.reuse || 0, unrated: !!st.unrated || !st.runs, days: st.days || null };
+  return { coords, segs, pois: row.waypoints || [], len: st.len || pathLen(coords), hrs: st.hrs || pathLen(coords) / 1000 / 15, maxD: st.maxD ?? 0, byD: st.byD || [0, 0, 0, 0, 0, 0], unk: st.unk || 0, mil: st.mil || 0, aa: st.aa || 0, js: st.js || 0, reuse: st.reuse || 0, unrated: !!st.unrated || !st.runs, days: st.days || null, overland: !!st.overland, asph: st.asph || 0 };
 }
 function pathLen(c) { let s = 0; for (let i = 1; i < c.length; i++) s += hav(c[i - 1][0], c[i - 1][1], c[i][0], c[i][1]); return s; }
 function showSaved(row) {
