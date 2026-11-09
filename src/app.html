@@ -57,6 +57,11 @@ header button{pointer-events:auto;margin-inline-start:auto}
 .grip::after{content:"";position:absolute;inset:-12px -40px}
 .grip{width:40px;height:4px;border-radius:2px;background:var(--stone-2);margin:4px auto 10px;cursor:pointer;border:0;display:block}
 #body{overflow-y:auto;display:flex;flex-direction:column;gap:12px;min-height:0}
+#body>*,#results>*{flex-shrink:0}
+.poi-dot{width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid var(--ink);transform:translate(-6px,-6px)}
+details.more{font-size:13px;color:var(--muted)}
+details.more summary{cursor:pointer;font-weight:500;color:var(--ink)}
+details.more ul{margin:6px 0 0;padding-inline-start:18px;line-height:1.5}
 .promptrow{display:flex;gap:8px;align-items:stretch}
 textarea{flex:1;min-width:0;resize:none;min-height:76px;max-height:40vh;overflow-y:auto;font:inherit;font-size:16px;color:var(--ink);background:var(--stone);border:1px solid transparent;border-radius:10px;padding:10px 12px;line-height:1.45}
 textarea:focus{background:#fff;border-color:var(--accent)}
@@ -303,11 +308,11 @@ ul.pois li{margin-bottom:8px}
     </details>
 
     <div id="results" hidden>
+      <div class="refine" id="refineRow"><label for="refineIn" style="display:block;font-size:13px;font-weight:600;margin-bottom:4px">✏️ רוצים לשנות? כתבו כאן מה לשנות</label><div style="display:flex;gap:8px"><input type="text" id="refineIn" placeholder="&quot;יותר שטח&quot;, &quot;תוסיף יום באלבניה&quot;, &quot;עד 100 ק&quot;מ ביום&quot;"><button class="ghost" id="refineBtn">עדכון</button></div></div>
       <div class="tabs" id="tabs"></div>
       <div class="daychips" id="dayChips" hidden></div>
       <div class="stats" id="stats" style="margin-top:8px"></div>
       <div style="margin-top:8px"><div class="bar" id="bar"></div><div class="legend" id="legend"></div></div>
-      <div class="refine" id="refineRow"><label for="refineIn" style="display:block;font-size:13px;font-weight:600;margin-bottom:4px">✏️ לשנות את המסלול: כתבו מה לשנות, או ערכו את רשימת התחנות למטה</label><div style="display:flex;gap:8px"><input type="text" id="refineIn" placeholder="&quot;יותר שטח&quot;, &quot;תוסיף יום באלבניה&quot;, &quot;עד 100 ק&quot;מ ביום&quot;"><button class="ghost" id="refineBtn">עדכון</button></div></div>
       <div id="warns" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
       <div id="dayPlan"></div>
       <div id="stopsBox"></div>
@@ -1258,7 +1263,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
   });
   const off = len - asph;
   notes.unshift(`טיול ארוך: ${days.length} ימים, כ-${Math.round(len / 1000)} ק"מ: כ-${Math.round(off / 1000)} ק"מ שטח (${Math.round(off / len * 100)}%) וכ-${Math.round((len - off) / 1000)} ק"מ כביש. בכל יום מחפשים קטע שטח פתוח לרכב ליד הדרך.`);
-  return { coords, segs, pois, stops: [], len, hrs, asph, unk, res, maxD, byD, mil: 0, aa: 0, js: 0, reuse: 0, days: days.length > 1 ? days : null, overland: true, note: notes.join(' ') };
+  return { coords, segs, pois, stops: [], len, hrs, asph, unk, res, maxD, byD, mil: 0, aa: 0, js: 0, reuse: 0, days: days.length > 1 ? days : null, overland: true, note: notes[0], issues: notes.slice(1) };
 }
 
 // ---------- abroad: legality differs a lot by country ----------
@@ -1864,7 +1869,7 @@ function render(i, day = null) {
   const D = r.days && r.days.length > 1 ? r.days : null;
   const dv = D && day != null ? D[day] : null;
   $('tabs').innerHTML = '';
-  $('tabs').hidden = !!current.saved;
+  $('tabs').hidden = !!current.saved || current.res.results.length < 2;
   res.results.forEach((x, k) => {
     const b = document.createElement('button');
     b.setAttribute('aria-pressed', k === i); b.innerHTML = `<span>חלופה ${k + 1}</span><small>${(x.len / 1000).toFixed(0)} ק"מ</small>`;
@@ -1911,9 +1916,12 @@ function render(i, day = null) {
     L.marker([c.lat, c.lon], { icon: tentIcon(!!c.auth), zIndexOffset: c.auth ? 500 : 0 }).addTo(markLayer).bindPopup(pp.div, { maxWidth: 320, minWidth: 220 }).on('popupopen', pp.load);
   }
   drawReports(L.latLngBounds(r.coords).pad(0.15));
+  const dayBox = dv ? L.latLngBounds(r.coords.slice(dv.from, dv.to + 1)).pad(0.05) : null;
+  const crowded = D && r.pois.length > 10;
   r.pois.forEach(pt => {
-    const ic = L.divIcon({ className: '', html: `<div class="poi-ic"></div>`, iconSize: null, iconAnchor: [0, 0] });
-    const m = L.marker([pt.lat, pt.lon], { icon: ic }).addTo(markLayer);
+    const label = !crowded || (dayBox && dayBox.contains([pt.lat, pt.lon]));
+    const ic = L.divIcon({ className: '', html: label ? `<div class="poi-ic"></div>` : `<div class="poi-dot"></div>`, iconSize: null, iconAnchor: [0, 0] });
+    const m = L.marker([pt.lat, pt.lon], { icon: ic, title: pt.name }).addTo(markLayer);
     m.getElement()?.querySelector('.poi-ic')?.append(document.createTextNode((D && pt.type === 'nightcamp' && pt.day ? `לילה ${pt.day}: ` : '') + pt.name));
     const pp = placePopup(pt, pt.name, pt.type === 'nightcamp' ? campSub(pt) : (pt.note || POI_TYPES[pt.type]?.he || 'נקודת חובה'));
     m.bindPopup(pp.div, { maxWidth: 320, minWidth: 220 }).on('popupopen', pp.load);
@@ -1965,6 +1973,7 @@ function render(i, day = null) {
   if (SF && SF.fuelGap > 200 && (D || r.len > 150000)) w.push(`הקטע הארוך ביותר בלי תחנת דלק ליד המסלול: כ-${SF.fuelGap.toFixed(0)} ק"מ. בשטח רכב צורך פי 1.5–2 מבכביש: מלאו מיכל לפני, ושקלו ג'ריקן.`);
   w.push('המסלול מבוסס על נתוני OSM. מצב השטח בפועל (שיטפונות, חסימות, סגירת שמורות) יכול להשתנות: בדקו לפני יציאה.');
   $('warns').innerHTML = w.map(t => `<div class="warn">${t}</div>`).join('');
+  if (r.issues?.length) { const d = document.createElement('details'); d.className = 'more'; d.innerHTML = `<summary>הערות לתכנון (${r.issues.length})</summary><ul>${r.issues.map(t => `<li>${t.replace(/</g, '&lt;')}</li>`).join('')}</ul>`; $('warns').prepend(d); }
   if (!current.saved && IL) { // quick firing-zone switch, works without a date
     const row = document.createElement('div'); row.className = 'milsw';
     row.innerHTML = '<span>שטחי אש:</span>';
