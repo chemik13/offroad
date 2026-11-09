@@ -20,25 +20,22 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: pip install osmium==3.7.0
-      - name: Build each country (download, build, delete)
+      - name: Build and publish country by country (each one is usable as soon as it is pushed)
+        env:
+          REMOTE: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
         run: |
-          mkdir -p out
-          grep -v '^#' tools/eu_extracts.txt | grep . | while read path; do
+          mkdir -p out && cd out
+          git init -q -b tiles-eu
+          git config user.name "tiles-bot"; git config user.email "tiles-bot@users.noreply.github.com"
+          git config http.postBuffer 1048576000
+          first=1
+          grep -v '^#' ../tools/eu_extracts.txt | grep . | while read path; do
             echo "::group::$path"
-            curl -fsSL --retry 3 -o x.osm.pbf "https://download.geofabrik.de/$path" && ls -lh x.osm.pbf
-            python tools/build_tiles.py x.osm.pbf out --world --merge
-            rm -f x.osm.pbf
-            du -sh out
+            curl -fsSL --retry 3 -o ../x.osm.pbf "https://download.geofabrik.de/$path" && ls -lh ../x.osm.pbf
+            python ../tools/build_tiles.py ../x.osm.pbf . --world --merge
+            rm -f ../x.osm.pbf
+            git add -A; git commit -qm "$(basename $path .osm.pbf) $(date -u +%Y-%m-%d)"
+            if [ $first = 1 ]; then git push -qf "$REMOTE" tiles-eu; first=0; else git push -q "$REMOTE" tiles-eu; fi
+            echo "published $(basename $path -latest.osm.pbf): $(ls *.json.gz | wc -l) tiles, $(du -sh . --exclude=.git | cut -f1)"
             echo "::endgroup::"
           done
-          ls out | wc -l; du -sh out
-      - name: Publish to branch "tiles-eu" (history not kept)
-        run: |
-          cd out
-          git init -q -b tiles-eu
-          git config user.name "tiles-bot"
-          git config user.email "tiles-bot@users.noreply.github.com"
-          git config http.postBuffer 1048576000
-          git add -A
-          git commit -qm "Europe trail tiles $(date -u +%Y-%m-%d)"
-          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" tiles-eu
