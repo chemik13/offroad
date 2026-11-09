@@ -351,7 +351,7 @@ ul.pois li{margin-bottom:8px}
       <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off"></details>
   </div>
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.29 · 09.11.2026 17:02</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.30 · 09.11.2026 17:10</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2184,7 +2184,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
     let st = timeline[0];
     for (let i = 1; i < timeline.length; i++) {
       const t = timeline[i];
-      if (t.km - st.km > maxKm * 0.92 || /* room for the detour to the campsite */ t.h - st.h > maxH * 1.15) {
+      if (t.km - st.km > maxKm * 0.85 || /* room for the detour to the campsite */ t.h - st.h > maxH * 1.15) {
         const prev = timeline[i - 1].km - st.km > 5 ? timeline[i - 1] : t; // an off-road loop longer than the gap: end after it
         if (km - prev.km < 5) break;
         cuts.push(prev); st = prev; if (prev === t) continue;
@@ -2195,6 +2195,42 @@ async function planOverland(p, sLL, eLL, viaLL) {
     p.days = cuts.length + 1; if ($('pDays')) $('pDays').value = p.days;
   } else for (let k = 1; k < N; k++) { const target = h * k / N; cuts.push(timeline.find(t => t.h >= target) || timeline[timeline.length - 1]); }
   if (askedDays && cuts.length + 1 > askedDays) notes.push(`ביקשתם ${askedDays} ימים, אבל ${Math.round(km)} ק"מ ב-${askedDays} ימים זה ${Math.round(km / askedDays)} ק"מ ליום. כדי לעמוד ב${maxKm ? `-${maxKm} ק"מ` : ` ${maxH} שעות נסיעה`} ליום חילקתי ל-${cuts.length + 1} ימים.`);
+  // 2b. an off-road stretch every day: replace part of the day's road with trails between two road points
+  const dayOff = [];
+  {
+    const bounds = [timeline[0], ...cuts, timeline[timeline.length - 1]];
+    const jobs = [];
+    for (let d = 0; d < bounds.length - 1; d++) {
+      const st = bounds[d], en = bounds[d + 1], spanKm = en.km - st.km;
+      if (spanKm < 25 || vias.some((_, l) => pieces[l] && legIdx0[l + 1] > st.i && legIdx0[l + 1] <= en.i)) continue; // this day already has a highlight piece
+      const want = Math.min(35, spanKm * 0.5); // road km to swap for trails
+      const A = timeline.find(t => t.km >= st.km + spanKm * 0.2), B = timeline.find(t => t.km >= A.km + want);
+      if (!A || !B || B.i >= en.i) continue;
+      jobs.push({ d, A, B });
+    }
+    let done = 0; const deadline = Date.now() + 240000; // first-time downloads abroad are slow: cap the search at 4 minutes
+    const one = async j => {
+      try {
+        if (Date.now() > deadline) { j.late = true; return; }
+        const pad = 4000, a = j.A.c, b = j.B.c;
+        const G = await Promise.race([loadGraph(tilesFor(bboxFor([a, b], pad))), new Promise((_, rj) => setTimeout(() => rj(new Error('timeout')), 75000))]);
+        const fac = factors(G, { ...p, avoid_asphalt: true, avoid_military: true }); // trails preferred, roads only as connectors
+        const s0 = nearestNode(G, a[0], a[1], fac, 3000), e0 = nearestNode(G, b[0], b[1], fac, 3000);
+        if (s0 < 0 || e0 < 0 || s0 === e0) return;
+        const straight = hav(a[0], a[1], b[0], b[1]) / 1000;
+        const edges = pathEdges(G, dijkstra(G, s0, fac, null, Infinity, e0), e0);
+        if (!edges || !edges.length) return;
+        const r = routeStats(G, edges, s0);
+        if ((r.len - r.asph) / r.len < 0.35 || r.len > straight * 3000) return;
+        dayOff[j.d] = { ...j, coords: r.coords, segs: r.segs, len: r.len, hrs: r.hrs, byD: r.byD, maxD: r.maxD, asph: r.asph, unk: r.unk, res: r.res || 0, pois: [] };
+      } catch {} finally { status(`מחפש קטעי שטח לכל יום… ${++done}/${jobs.length}`); }
+    };
+    status(`מחפש קטעי שטח לכל יום… 0/${jobs.length}`);
+    for (let k = 0; k < jobs.length; k += 2) await Promise.all(jobs.slice(k, k + 2).map(one));
+    const miss = jobs.filter(j => !dayOff[j.d] && !j.late).map(j => j.d + 1), late = jobs.filter(j => j.late).map(j => j.d + 1);
+    if (miss.length) notes.push(`בימים ${miss.join(', ')} לא מצאתי שטח פתוח לרכב ליד הדרך, אז הם בכביש.`);
+    if (late.length) notes.push(`הורדת השבילים לקחה יותר מ-4 דקות, אז ימים ${late.join(', ')} עדיין בכביש. לחצו "בנה שוב": מה שכבר ירד שמור בטלפון, והחיפוש ימשיך מהר יותר.`);
+  }
   // 3. campsites near each cut (lakeside first when asked), fuel + food every few days
   status(`מחפש ${cuts.length} חניוני לילה בדרך…`);
   const wantLake = !!p.night_near_water || /אגם|lake|lago|jezero/i.test(current?.prompt || '') || /אגם/.test($('prompt').value);
@@ -2207,15 +2243,12 @@ async function planOverland(p, sLL, eLL, viaLL) {
   });
   if (wantLake && nights.some(n => n && !n.lake)) notes.push('לא בכל לילה יש קמפינג על שפת אגם; במקומות האלה בחרתי את הקרוב לדרך.');
   // 4. final road route through highlights and camps, in order
-  const seq = [{ ll: sLL }];
-  let ci = 0;
-  const legPos = l => timeline.find(t => t.i >= legIdx0[l]);
-  for (let l = 0; l <= vias.length; l++) {
-    const until = l < vias.length ? legIdx0[l + 1] : Infinity;
-    while (ci < cuts.length && cuts[ci].i < until) { if (nights[ci]) seq.push({ ll: [nights[ci].lat, nights[ci].lon], night: nights[ci], k: ci }); else seq.push({ ll: cuts[ci].c, night: null, k: ci }); ci++; }
-    if (l < vias.length) seq.push({ ll: wp0[l + 1], via: l });
-  }
-  seq.push({ ll: end });
+  const marks = [];
+  vias.forEach((_, l) => marks.push({ i: legIdx0[l + 1], o: 1, ll: wp0[l + 1], via: l }));
+  cuts.forEach((c, k) => marks.push({ i: c.i, o: 2, ll: nights[k] ? [nights[k].lat, nights[k].lon] : c.c, night: nights[k], k }));
+  dayOff.forEach((x, d) => { if (!x) return; marks.push({ i: x.A.i, o: 0, ll: x.coords[0], offA: d }); marks.push({ i: x.B.i, o: 0, ll: x.coords[x.coords.length - 1], offB: d }); });
+  marks.sort((a, b) => a.i - b.i || a.o - b.o);
+  const seq = [{ ll: sLL }, ...marks, { ll: end }];
   status('מחשב את המסלול הסופי…');
   const fin = await osrm(seq.map(x => x.ll));
   const li = legSplit(fin.coords, seq.map(x => x.ll));
@@ -2232,7 +2265,12 @@ async function planOverland(p, sLL, eLL, viaLL) {
   };
   for (let k = 0; k < seq.length - 1; k++) {
     const sp = fin.legs[k].s / Math.max(1, fin.legs[k].m);
-    pushRoad(li[k], li[k + 1], sp);
+    const off = seq[k].offA != null && seq[k + 1].offB === seq[k].offA ? dayOff[seq[k].offA] : null;
+    if (off) { // trails instead of the road between A and B
+      coords.push(...off.coords.slice(1)); segs.push(...off.segs);
+      len += off.len; hrs += off.hrs; asph += off.asph; unk += off.unk; res += off.res; maxD = Math.max(maxD, off.maxD); off.byD.forEach((x, d) => byD[d] += x);
+      dKm += off.len; dH += off.hrs; dOff += off.len - off.asph; pois.push(...off.pois);
+    } else pushRoad(li[k], li[k + 1], sp);
     const nx = seq[k + 1];
     if (nx.via != null) {
       const pc = pieces[nx.via], v = vias[nx.via];
@@ -2263,7 +2301,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
     }
   });
   const off = len - asph;
-  notes.unshift(`טיול ארוך: ${days.length} ימים, כ-${Math.round(len / 1000)} ק"מ, מתוכם כ-${Math.round(off / 1000)} ק"מ שטח באזורים הנבחרים והשאר כבישים ביניהם.`);
+  notes.unshift(`טיול ארוך: ${days.length} ימים, כ-${Math.round(len / 1000)} ק"מ: כ-${Math.round(off / 1000)} ק"מ שטח (${Math.round(off / len * 100)}%) וכ-${Math.round((len - off) / 1000)} ק"מ כביש. בכל יום מחפשים קטע שטח פתוח לרכב ליד הדרך.`);
   return { coords, segs, pois, stops: [], len, hrs, asph, unk, res, maxD, byD, mil: 0, aa: 0, js: 0, reuse: 0, days: days.length > 1 ? days : null, overland: true, note: notes.join(' ') };
 }
 
@@ -2940,7 +2978,7 @@ function render(i, day = null) {
     <div class="stat"><b>${(r.len / 1000).toFixed(1)}</b><span>ק"מ${D ? ' בסה״כ' : ''}</span></div>
     <div class="stat"><b>${fmtH(r.hrs + stopH)}</b><span>${D ? 'שעות נסיעה בסה״כ' : 'שעות (כולל עצירות)'}</span></div>
     <div class="stat"><b>${r.unrated ? 'לא מדורג' : (DIFF[r.maxD]?.he || '—').replace(/ \(.*\)/, '')}</b><span>הקטע הקשה ביותר</span></div>`;
-  if (!dv && r.overland) $('stats').insertAdjacentHTML('beforeend', `<div class="stat" style="grid-column:1/-1"><b>${((r.len - r.asph) / 1000).toFixed(0)} ק"מ שטח · ${(r.asph / 1000).toFixed(0)} ק"מ כביש</b><span>${r.len - r.asph < 1000 ? 'לא נמצאו קטעי שטח: הוסיפו אזורי שטח בדרך (בתיבת השינוי למעלה)' : 'שטח באזורים שנבחרו, כבישים ביניהם'}</span></div>`);
+  if (!dv && r.overland) $('stats').insertAdjacentHTML('beforeend', `<div class="stat" style="grid-column:1/-1"><b>${((r.len - r.asph) / 1000).toFixed(0)} ק"מ שטח · ${(r.asph / 1000).toFixed(0)} ק"מ כביש</b><span>${r.len - r.asph < 1000 ? 'לא נמצאו קטעי שטח: הוסיפו אזורי שטח בדרך (בתיבת השינוי למעלה)' : `${Math.round((r.len - r.asph) / r.len * 100)}% שטח · לכל יום רואים את החלוקה בכפתורי הימים`}</span></div>`);
   $('bar').innerHTML = ''; $('legend').innerHTML = '';
   r.byD.forEach((m, d) => {
     if (!m) return;
