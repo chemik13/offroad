@@ -351,7 +351,7 @@ ul.pois li{margin-bottom:8px}
       <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off"></details>
   </div>
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.30 · 09.11.2026 17:10</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.31 · 09.11.2026 17:38</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2092,11 +2092,13 @@ function maxKmPerDay(t) {
 }
 // ---------- long journeys: road legs (OSRM) + off-road loops at the highlights + campsites + resupply ----------
 async function osrm(pts) {
-  const u = 'https://router.project-osrm.org/route/v1/driving/' + pts.map(q => q[1].toFixed(5) + ',' + q[0].toFixed(5)).join(';') + '?overview=full&geometries=geojson&steps=false';
+  const path = pts.map(q => q[1].toFixed(5) + ',' + q[0].toFixed(5)).join(';');
+  const u = 'https://router.project-osrm.org/route/v1/driving/' + path + '?overview=full&geometries=geojson&steps=false';
   let lastErr;
-  for (let a = 0; a < 3; a++) {
+  for (let a = 0; a < 4; a++) {
     try {
-      const r = await fetch(u, { signal: AbortSignal.timeout(30000) });
+      const viaServer = a % 2 === 1 && hasGroup(); // every other try through our server (another network path)
+      const r = await fetch(viaServer ? API + '/osrm?path=' + encodeURIComponent(path) : u, { signal: AbortSignal.timeout(30000), ...(viaServer ? { headers: { 'x-group-code': store.get('groupCode') || '' } } : {}) });
       const j = await r.json();
       if (j.code === 'Ok') return { coords: j.routes[0].geometry.coordinates.map(c => [c[1], c[0]]), legs: j.routes[0].legs.map(l => ({ m: l.distance, s: l.duration })) };
       lastErr = j.message || j.code; if (j.code === 'NoRoute') break;
@@ -2142,18 +2144,23 @@ async function planOverland(p, sLL, eLL, viaLL) {
   // 1. off-road pieces at each highlight (small trail download each), in parallel pairs
   const offKm = Math.max(12, Math.min(40, (maxKm || 200) * 0.35));
   const pieces = new Array(vias.length).fill(null);
-  for (let i = 0; i < vias.length; i++) {
-    status(`מתכנן קטע שטח ${i + 1} מתוך ${vias.length}: ${vias[i].name}…`);
+  const T0 = Date.now(); let pDone = 0;
+  status(`מתכנן קטעי שטח באזורים שבדרך (0/${vias.length})…`);
+  // all highlights at once (3 in parallel), one shared 2-minute budget: a busy OSM server must not stall the whole plan
+  const pieceJob = async i => {
     try {
-      const G = await Promise.race([loadGraph(tilesFor(bboxFor([vias[i].ll], Math.min(9000, offKm * 1000 / 3.5)))), new Promise((_, rj) => setTimeout(() => rj(new Error('timeout')), 90000))]);
+      if (Date.now() - T0 > 120000) throw new Error('timeout');
+      const G = await Promise.race([loadGraph(tilesFor(bboxFor([vias[i].ll], Math.min(9000, offKm * 1000 / 3.5)))), new Promise((_, rj) => setTimeout(() => rj(new Error('timeout')), Math.max(5000, 120000 - (Date.now() - T0))))]);
       const fac = factors(G, { ...p, avoid_military: true });
       const s = nearestNode(G, vias[i].ll[0], vias[i].ll[1], fac, 5000);
       if (s < 0) throw 0;
       const res = plan(G, { ...p, loop: true, days: 1, via: [], distance_km: offKm, duration_hours: null }, { s, e: -1, vias: [], viaPois: [] }, () => {});
       const r = res.results[0]; if (!r || r.len < 3000) throw 0;
       pieces[i] = { coords: r.coords, segs: r.segs, len: r.len, hrs: r.hrs, byD: r.byD, maxD: r.maxD, asph: r.asph, unk: r.unk, res: r.res || 0, at: [G.lat[s], G.lon[s]], pois: r.pois.filter(x => x.type !== 'nightcamp') };
-    } catch (e) { if (e) console.warn('offroad piece', e); notes.push(e?.message === 'timeout' ? `הורדת השבילים ליד ${vias[i].name} לקחה יותר מדי זמן; עוברים שם בכביש.` : `לא מצאתי קטע שטח מתאים ליד ${vias[i].name}; עוברים שם בכביש.`); }
-  }
+    } catch (e) { if (e) console.warn('offroad piece', e); notes.push(e?.message === 'timeout' ? `שרתי OpenStreetMap איטיים כרגע, אז ליד ${vias[i].name} עוברים בכביש.` : `לא מצאתי קטע שטח מתאים ליד ${vias[i].name}; עוברים שם בכביש.`); }
+    finally { status(`מתכנן קטעי שטח באזורים שבדרך (${++pDone}/${vias.length})…`); }
+  };
+  for (let k = 0; k < vias.length; k += 3) await Promise.all(vias.slice(k, k + 3).map((_, d) => pieceJob(k + d)));
   // 2. road skeleton and day cut points (by time and km)
   status('מחשב את קטעי הכביש…');
   const wp0 = [sLL, ...vias.map((v, i) => pieces[i]?.at || v.ll), end];
@@ -2226,7 +2233,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
       } catch {} finally { status(`מחפש קטעי שטח לכל יום… ${++done}/${jobs.length}`); }
     };
     status(`מחפש קטעי שטח לכל יום… 0/${jobs.length}`);
-    for (let k = 0; k < jobs.length; k += 2) await Promise.all(jobs.slice(k, k + 2).map(one));
+    for (let k = 0; k < jobs.length; k += 3) await Promise.all(jobs.slice(k, k + 3).map(one));
     const miss = jobs.filter(j => !dayOff[j.d] && !j.late).map(j => j.d + 1), late = jobs.filter(j => j.late).map(j => j.d + 1);
     if (miss.length) notes.push(`בימים ${miss.join(', ')} לא מצאתי שטח פתוח לרכב ליד הדרך, אז הם בכביש.`);
     if (late.length) notes.push(`הורדת השבילים לקחה יותר מ-4 דקות, אז ימים ${late.join(', ')} עדיין בכביש. לחצו "בנה שוב": מה שכבר ירד שמור בטלפון, והחיפוש ימשיך מהר יותר.`);
