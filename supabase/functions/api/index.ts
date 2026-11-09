@@ -63,13 +63,14 @@ Deno.serve(async (req) => {
       const r = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({ model: MODEL, max_tokens: Math.min(2500, b.max_tokens || 1500), system: String(b.system || "").slice(0, 6000), messages: b.messages, tools, ...(b.tool_choice?.type === "auto" ? { tool_choice: { type: "auto" } } : {}) }), // this model rejects forced tool_choice
+        body: JSON.stringify({ model: MODEL, max_tokens: Math.min(8000, b.max_tokens || 1500), system: String(b.system || "").slice(0, 6000), messages: b.messages, tools, ...(b.tool_choice?.type === "auto" ? { tool_choice: { type: "auto" } } : {}) }), // this model rejects forced tool_choice
       });
       const j = await r.json();
       if (!r.ok) {
         console.error("claude error", r.status, MODEL, JSON.stringify(j?.error || j).slice(0, 800), "tools:", tools.map((t: any) => t.type || t.name).join(","));
         return json({ error: "שגיאה מ-Claude", status: r.status, detail: j?.error?.message }, r.status === 400 ? 400 : 502);
       }
+      console.log("claude ok", j?.stop_reason, JSON.stringify(j?.usage || {}), (j?.content || []).map((c: any) => c.type).join(","));
       return json(j);
     }
 

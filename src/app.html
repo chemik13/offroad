@@ -549,7 +549,7 @@ const TOOL = {
       end: { type: 'object', properties: { name: { type: 'string' }, lat: { type: 'number' }, lon: { type: 'number' } }, description: 'Destination for point-to-point routes. Omit for loops.' },
       loop: { type: 'boolean', description: 'True ONLY if the user asks for a loop / circular route / to return to the start. Default false (point-to-point). If no destination is given, leave end empty and the planner picks one.' },
       duration_hours: { type: 'number', description: 'Total trip duration in hours, if stated (single-day trips only)' },
-      days: { type: 'integer', description: 'Number of trip days for multi-day trips (2-7). סופ"ש / weekend = 2. Omit for a single day.' },
+      days: { type: 'integer', description: 'Number of trip days for multi-day trips (2-30; for long journeys = total km / max_km_per_day). סופ"ש / weekend = 2. Omit for a single day.' },
       hours_per_day: { type: 'number', description: 'Driving hours per day for multi-day trips, if stated' },
       max_km_per_day: { type: 'number', description: 'Maximum driving distance per day in km, if stated (use the upper bound of a range)' },
       night_near_water: { type: 'boolean', description: 'User wants to sleep by lakes / water' },
@@ -575,7 +575,7 @@ const SYSTEM = () => `Today is ${new Date().toISOString().slice(0, 10)} (${new D
 - Include lat/lon for every place and set country.
 - Long journeys (hundreds of km, e.g. between countries): put 1 off-road highlight area per day or two in via, in driving order (real dirt-road areas: TET sections, mountain gravel roads), and set days so each day respects max_km_per_day.
 - Europe: names in the local/English form. Prefer regions and routes where driving unpaved public roads is legal (e.g. known overland/4x4 routes, TET sections), start at a town, and for several days rely on official campsites (nightcamp). Israeli rules (firing zones, Area A) do not apply abroad. Use web_search when you are not sure of a place's location or when the request is themed.
-- Themed requests (a historical event or military operation, a book, a person, a named trail, "in the footsteps of", "בעקבות"): research the theme, then choose the real sites in order as start, via and end. Prefer points reachable by 4x4 (trailheads, memorial sites, viewpoints, ruins) over city centers, and skip sites that are now inside military bases or Area A. Add a short Hebrew note per via and a 2-4 sentence Hebrew story_he. Keep at most 8 vias. The theme's final destination MUST be "end" (with lat/lon), never left out or put only in via.
+- Themed requests (a historical event or military operation, a book, a person, a named trail, "in the footsteps of", "בעקבות"): research the theme, then choose the real sites in order as start, via and end. Prefer points reachable by 4x4 (trailheads, memorial sites, viewpoints, ruins) over city centers, and skip sites that are now inside military bases or Area A. Add a short Hebrew note per via and a 2-4 sentence Hebrew story_he. Keep at most 8 vias and keep notes short. The theme's final destination MUST be "end" (with lat/lon), never left out or put only in via.
 - Refinement requests come with the current parameters as JSON: return the full updated parameters, changing only what was asked.
 - If the user did not say where to start: for themed trips start at the theme's natural starting point; otherwise omit start. If they say "from my location", set from_my_location.
 - Defaults: omit vehicle unless stated, difficulty medium, point-to-point (loop=false). For several days set days, and include nightcamp in poi_types.`;
@@ -603,18 +603,22 @@ async function claudeCall(body) {
 async function parseSmart(text) {
   const messages = [{ role: 'user', content: text }];
   let tools = [WEB_SEARCH, TOOL];
-  const call = () => claudeCall({ system: SYSTEM(), messages, tools, tool_choice: { type: 'auto' }, max_tokens: 2500 });
+  const call = () => claudeCall({ system: SYSTEM(), messages, tools, tool_choice: { type: 'auto' }, max_tokens: 6000 });
   let r;
   try { r = await call(); }
   catch (e) { if (e.status === 400 && /web_search/i.test(e.detail || '')) { tools = [TOOL]; r = await call(); } else throw e; }
   for (let k = 0; r.stop_reason === 'pause_turn' && k < 3; k++) { messages.push({ role: 'assistant', content: r.content }); r = await call(); } // long web search: let it continue
   let searched = (r.content || []).some(c => c.type === 'server_tool_use') || messages.length > 1;
   let tu = (r.content || []).find(c => c.type === 'tool_use' && c.name === 'route_request');
+  if (tu && r.stop_reason === 'max_tokens') tu = null; // cut off mid-call: its parameters are incomplete (e.g. only the start), never plan from them
   for (let k = 0; !tu && k < 2; k++) {
-    messages.push({ role: 'assistant', content: r.content }, { role: 'user', content: 'עכשיו קרא לכלי route_request עם הפרמטרים של הטיול. אל תכתוב טקסט.' });
+    const cut = r.stop_reason === 'max_tokens';
+    if (cut) { const kept = (r.content || []).filter(c => c.type !== 'tool_use' && !(c.type === 'text' && !c.text.trim())); messages.push({ role: 'assistant', content: kept.length ? kept : [{ type: 'text', text: '…' }] }, { role: 'user', content: 'התשובה נקטעה. קרא עכשיו לכלי route_request בקצרה: עד 6 נקודות via, הערות של כמה מילים, בלי טקסט.' }); }
+    else messages.push({ role: 'assistant', content: r.content }, { role: 'user', content: 'עכשיו קרא לכלי route_request עם הפרמטרים של הטיול. אל תכתוב טקסט.' });
     r = await call();
     searched = searched || (r.content || []).some(c => c.type === 'server_tool_use');
     tu = (r.content || []).find(c => c.type === 'tool_use' && c.name === 'route_request');
+    if (tu && r.stop_reason === 'max_tokens') tu = null;
   }
   if (!tu) throw Object.assign(new Error('לא התקבל פענוח'), { detail: 'Claude לא החזיר פרמטרים' });
   const out = { allow_area_a: false, military_mode: 'auto', via: [], ...tu.input, _searched: searched };
@@ -1429,7 +1433,7 @@ async function run(fromPrompt, preset = null) {
       }
       { const mk = maxKmPerDay(text); if (mk && !p.max_km_per_day) p.max_km_per_day = mk; }
       fillForm(p);
-      const und = [p.summary_he ? 'הבנתי: ' + p.summary_he : null, p.story_he || null, p._searched ? '(חיפשתי ברשת כדי לתכנן)' : null].filter(Boolean).join('\n');
+      const und = [p._smartErr ? '⚠️ ' + p._smartErr + ' תכננתי לפי פענוח בסיסי, שמבין רק מקום התחלה פשוט. נסו "בנה מסלול" שוב.' : null, p.summary_he ? 'הבנתי: ' + p.summary_he : null, p.story_he || null, p._searched ? '(חיפשתי ברשת כדי לתכנן)' : null].filter(Boolean).join('\n');
       $('understood').hidden = !und; $('understood').textContent = und; $('understood').style.whiteSpace = 'pre-line';
     } else {
       p = readForm(current?.p || {});
