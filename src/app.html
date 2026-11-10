@@ -11,6 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="מסלולי שטח">
 <meta name="format-detection" content="telephone=no">
 <link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.png">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
@@ -2498,7 +2499,7 @@ async function flyOver(coords, title, marks = []) {
       [-0.6, 0, 3.0, 1.82, 1.74, 1.88, '#17191c'],
       [-0.6, 0.78, 2.6, 0.08, 1.88, 1.96, '#b9c0c8'], [-0.6, -0.78, 2.6, 0.08, 1.88, 1.96, '#b9c0c8'],
     ];
-    const SC = 7;
+    const SC = 15;
     const carGeo = (lon, lat, hdg) => {
       const r = hdg * Math.PI / 180, fx = Math.sin(r), fy = Math.cos(r), lx = -fy, ly = fx; // forward and left in east/north metres
       const mx = 1 / (111320 * Math.cos(lat * Math.PI / 180)), my = 1 / 110540;
@@ -2520,7 +2521,7 @@ async function flyOver(coords, title, marks = []) {
       if (heading == null) heading = hd; heading += (((hd - heading + 540) % 360) - 180) * Math.min(1, dt * 6);
       car.setLngLat([here[0], here[1]]).setRotation(heading);
       const look = at(Math.min(total, flyState.t + 220)); // the camera looks a little ahead, so the car sits low in the view
-      map3.jumpTo({ center: [look[0], look[1]], bearing, pitch: 68, zoom: 14.3 });
+      map3.jumpTo({ center: [look[0], look[1]], bearing, pitch: 66, zoom: 14.7 });
       const pc = (flyState.t / total * 100).toFixed(2); $('flyProg').style.width = pc + '%'; $('flyKnob').style.insetInlineStart = pc + '%'; bar.setAttribute('aria-valuenow', Math.round(pc));
       $('flyKm').textContent = `${(flyState.t / 1000).toFixed(1)} / ${(total / 1000).toFixed(0)} ק"מ`;
       if (flyState.t >= total && flyState.playing) { flyState.playing = false; flyBtn('replay'); }
