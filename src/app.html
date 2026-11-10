@@ -611,6 +611,8 @@ const TOOL = {
       hours_per_day: { type: 'number', description: 'Driving hours per day for multi-day trips, if stated' },
       max_km_per_day: { type: 'number', description: 'Maximum driving distance per day in km, if stated (use the upper bound of a range)' },
       offroad_share: { type: 'number', description: 'Wanted off-road share of the driving, 0-1 ("30-40% שטח" = 0.35)' },
+      wild_camping: { type: 'boolean', description: 'User is fine sleeping outside campsites (in nature, by a lake, in a forest)' },
+      camp_every_days: { type: 'number', description: 'If wild nights are fine: an official campsite every N nights' },
       night_near_water: { type: 'boolean', description: 'User wants to sleep by lakes / water' },
       resupply_every_days: { type: 'number', description: 'Plan fuel + food stops every N days, if asked' },
       distance_km: { type: 'number', description: 'Total distance in km, if stated' },
@@ -1195,8 +1197,44 @@ async function poisFromTiles(points, radius) {
       }
     }
   });
-  return { camps, supply, miss };
+  // wild-night spots: a lake shore, viewpoint or picnic spot that a dirt track reaches (no campsite needed)
+  const wild = [];
+  points.forEach((q, n) => {
+    if (miss.includes(n)) return;
+    const grid = new Map(), g = (la, lo) => Math.floor(la / 0.0015) + ',' + Math.floor(lo / 0.002);
+    for (const k of keysBy[n]) for (const [, , f, t] of tiles[k].w || []) if (t && (t.highway === 'track' || (t.highway === 'unclassified' && t.surface && !/asphalt|paved|concrete/.test(t.surface))))
+      for (let i = 0; i < f.length; i += 2) if (hav(q[0], q[1], f[i], f[i + 1]) < radius) grid.set(g(f[i], f[i + 1]), [f[i], f[i + 1]]);
+    const onTrack = (la, lo) => { let best = null, bd = 160; const a = Math.floor(la / 0.0015), b = Math.floor(lo / 0.002); for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) { const c = grid.get((a + x) + ',' + (b + y)); if (c) { const d = hav(la, lo, c[0], c[1]); if (d < bd) { bd = d; best = c; } } } return best; };
+    for (const { nm, ring } of lakes.values()) for (let i = 0; i < ring.length; i += 2) {
+      if (hav(q[0], q[1], ring[i], ring[i + 1]) > radius) continue;
+      const c = onTrack(ring[i], ring[i + 1]); if (c) { wild.push({ kind: 'lake', name: nm ? `שפת ${nm}` : 'שפת אגם', lat: c[0], lon: c[1] }); i += 20; }
+    }
+    for (const k of keysBy[n]) for (const [, , la, lo, t] of tiles[k].p || []) {
+      if (!t || !(t.tourism === 'viewpoint' || t.tourism === 'picnic_site') || hav(q[0], q[1], la, lo) > radius) continue;
+      const c = onTrack(la, lo); if (c) wild.push({ kind: t.tourism === 'viewpoint' ? 'view' : 'picnic', name: (t.tourism === 'viewpoint' ? 'תצפית' : 'חניון יום') + (t.name ? ' ' + t.name : ''), lat: c[0], lon: c[1] });
+    }
+  });
+  return { camps, supply, miss, wild };
 }
+// a day that ends with no campsite on the trail network: suggest the nearest campsite, or a spot in nature when that is fine
+async function fillDayEnds(p, r) {
+  const D = r.days || []; const ends = D.map((d, k) => k < D.length - 1 && d.camp && d.camp.type === 'dayend' ? k : -1).filter(k => k >= 0);
+  if (!ends.length) return;
+  const pts = ends.map(k => [D[k].camp.lat, D[k].camp.lon]);
+  const t = await poisFromTiles(pts, 25000);
+  const places = [p.start, p.end, ...(p.via || [])].filter(x => x && x.country && x.lat);
+  const countryAt = ll => { let b = null, bd = Infinity; for (const x of places) { const d = hav(ll[0], ll[1], x.lat, x.lon); if (d < bd) { bd = d; b = x.country; } } return b || p.country; };
+  ends.forEach((k, n) => {
+    const q = pts[n], rule = WILD_NIGHT[countryAt(q)] || 'no';
+    const near = (list, max) => { let b = null, bd = max; for (const x of list) { const d = hav(q[0], q[1], x.lat, x.lon); if (d < bd) { bd = d; b = x; } } return b && { x: b, km: Math.round(bd / 1000) }; };
+    const w = p.wild_camping && rule !== 'no' ? near(t.wild || [], 8000) : null;
+    const c = near(t.camps, 25000);
+    if (w) D[k].camp = { ...D[k].camp, type: 'nightcamp', wild: true, name: `🌲 לינת שטח: ${w.x.name}`, lat: w.x.lat, lon: w.x.lon, auth: `לינת שטח, ${w.km} ק"מ מסוף היום. אין קמפינג רשמי קרוב.` };
+    else if (c) D[k].camp = { ...D[k].camp, ...c.x, auth: `${c.x.auth} · ${c.km} ק"מ מסוף היום (נסיעה הלוך-חזור לא כלולה במסלול)` };
+  });
+}
+// sleeping outside campsites with a car: allowed or tolerated (yes), illegal but often tolerated (grey), fined (no)
+const WILD_NIGHT = { AL: 'yes', BA: 'yes', ME: 'yes', MK: 'yes', RO: 'yes', GE: 'yes', RS: 'yes', BG: 'yes', XK: 'yes', GR: 'grey', TR: 'yes', IT: 'no', HR: 'no', SI: 'no', AT: 'no', PT: 'no', ES: 'grey', FR: 'grey', CH: 'no', DE: 'no', IL: 'yes' };
 // split a geometry into legs: index in coords nearest to each intermediate waypoint, searching forward
 function legSplit(coords, wps) {
   const idx = [0]; let from = 0;
@@ -1302,7 +1340,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
   });
   p.days = cuts.length + 1; if ($('pDays')) $('pDays').value = p.days;
   // 2b. an off-road stretch every day: replace part of the day's road with trails between two road points
-  const dayOff = [], dayLoop = [];
+  const dayOff = [], dayLoop = [], gotDay = new Set();
   {
     const bounds = [timeline[0], ...cuts, timeline[timeline.length - 1]];
     const jobs = [];
@@ -1316,27 +1354,35 @@ async function planOverland(p, sLL, eLL, viaLL) {
         if (A && B && B.i < en.i && !timeline.some(t => t.sea && t.i >= A.i && t.i <= B.i)) tries.push({ A, B });
       }
       const M = timeline.find(t => t.km >= st.km + spanKm * 0.5 && !t.sea && t.i < en.i);
-      if (tries.length || M) jobs.push({ d, tries, M, loopKm: Math.max(8, Math.min(40, want, (maxKm || want * 2) - spanKm + 10)) });
+      if (tries.length || M) jobs.push({ d, tries, M, target: spanKm * share, loopKm: Math.max(8, Math.min(40, want, (maxKm || want * 2) - spanKm + 10)) });
     }
     let done = 0; const deadline = Date.now() + 100000; // prebuilt tiles load in seconds; never let this stall the plan
     const one = async j => {
       try {
+        const found = [];
         for (const { A, B } of j.tries) {
-          if (Date.now() > deadline) { j.late = true; return; }
+          if (Date.now() > deadline) { j.late = !found.length; break; }
           const pad = 5000, a = A.c, b = B.c;
           const G = await Promise.race([loadGraph(tilesFor(bboxFor([a, b], pad)), { quiet: true, noOsm: 'outside' }), new Promise((_, rj) => setTimeout(() => rj(new Error('timeout')), 40000))]).catch(() => null);
           if (!G) break; // no prebuilt trails here: skip fast instead of waiting on OSM servers
           const fac = factors(G, { ...p, avoid_asphalt: true, avoid_military: true }); // trails preferred, roads only as connectors
           const s0 = nearestNode(G, a[0], a[1], fac, 3000), e0 = nearestNode(G, b[0], b[1], fac, 3000);
           if (s0 < 0 || e0 < 0 || s0 === e0) continue;
-          const straight = hav(a[0], a[1], b[0], b[1]) / 1000;
           const edges = pathEdges(G, dijkstra(G, s0, fac, null, Infinity, e0), e0);
           if (!edges || !edges.length) continue;
           const r = routeStats(G, edges, s0);
-          if ((r.len - r.asph) / r.len < 0.35 || r.len > straight * 3000) continue;
-          dayOff[j.d] = { d: j.d, A, B, coords: r.coords, segs: r.segs, len: r.len, hrs: r.hrs, byD: r.byD, maxD: r.maxD, asph: r.asph, unk: r.unk, res: r.res || 0, pois: [] };
-          return;
+          if ((r.len - r.asph) / r.len < 0.35 || r.len > (B.km - A.km) * 1800 + 3000) continue; // mostly trail, and not a huge detour
+          found.push({ A, B, r, off: r.len - r.asph });
         }
+        // the best stretches that do not overlap, until the day reaches its off-road share (at most 2)
+        found.sort((x, y) => y.off - x.off);
+        const used = []; let offSum = 0;
+        for (const f of found) {
+          if (used.some(u => !(f.B.i < u.A.i || f.A.i > u.B.i))) continue;
+          used.push(f); offSum += f.off; if (offSum >= j.target * 1000 || used.length >= 2) break;
+        }
+        for (const { A, B, r } of used) dayOff.push({ d: j.d, A, B, coords: r.coords, segs: r.segs, len: r.len, hrs: r.hrs, byD: r.byD, maxD: r.maxD, asph: r.asph, unk: r.unk, res: r.res || 0, pois: [] });
+        if (used.length) { gotDay.add(j.d); return; }
         // no trail runs alongside the road here (mountain tracks are often dead ends): an off-road loop from the road instead
         if (j.M && Date.now() < deadline) {
           const c = j.M.c;
@@ -1346,13 +1392,13 @@ async function planOverland(p, sLL, eLL, viaLL) {
           const s0 = nearestNode(G, c[0], c[1], fac, 4000); if (s0 < 0) return;
           const r = plan(G, { ...p, avoid_asphalt: true, loop: true, days: 1, via: [], distance_km: j.loopKm, duration_hours: null }, { s: s0, e: -1, vias: [], viaPois: [] }, () => {}).results[0];
           if (!r || r.len < 5000 || (r.len - r.asph) / r.len < 0.3) return;
-          dayLoop[j.d] = { M: j.M, coords: r.coords, segs: r.segs, len: r.len, hrs: r.hrs, byD: r.byD, maxD: r.maxD, asph: r.asph, unk: r.unk, res: r.res || 0, pois: r.pois.filter(x => x.type !== 'nightcamp') };
+          gotDay.add(j.d); dayLoop[j.d] = { M: j.M, coords: r.coords, segs: r.segs, len: r.len, hrs: r.hrs, byD: r.byD, maxD: r.maxD, asph: r.asph, unk: r.unk, res: r.res || 0, pois: r.pois.filter(x => x.type !== 'nightcamp') };
         }
       } catch (e) { console.warn("day stretch", j.d, e?.message || e); } finally { status(`מחפש קטעי שטח לכל יום… ${++done}/${jobs.length}`); }
     };
     status(`מחפש קטעי שטח לכל יום… 0/${jobs.length}`);
     { const q = jobs.slice(); await Promise.all(Array.from({ length: 4 }, async () => { while (q.length) await one(q.shift()); })); }
-    const miss = jobs.filter(j => !dayOff[j.d] && !dayLoop[j.d] && !j.late).map(j => j.d + 1), late = jobs.filter(j => j.late).map(j => j.d + 1);
+    const miss = jobs.filter(j => !gotDay.has(j.d) && !j.late).map(j => j.d + 1), late = jobs.filter(j => j.late).map(j => j.d + 1);
     if (miss.length) notes.push(`בימים ${miss.join(', ')} לא מצאתי שטח פתוח לרכב ליד הדרך, אז הם בכביש.`);
     if (late.length) notes.push(`החיפוש לקח יותר מדי זמן, אז ימים ${late.join(', ')} עדיין בכביש.`);
   }
@@ -1360,21 +1406,39 @@ async function planOverland(p, sLL, eLL, viaLL) {
   status(`מחפש ${cuts.length} חניוני לילה בדרך…`);
   const wantLake = !!p.night_near_water || /אגם|lake|lago|jezero/i.test(current?.prompt || '') || /אגם/.test($('prompt').value);
   const land = cuts.map((c, k) => c.ferryNight ? null : k).filter(k => k != null);
-  const fromT = land.length ? await poisFromTiles(land.map(k => cuts[k].c), wantLake ? 25000 : 16000) : { camps: [], supply: [], miss: [] };
+  const fromT = land.length ? await poisFromTiles(land.map(k => cuts[k].c), 16000) : { camps: [], supply: [], miss: [] };
   const camps = fromT.camps, supply = fromT.supply;
   const slow = fromT.miss.map(n => cuts[land[n]].c);
   if (slow.length) { // areas without prebuilt tiles: ask OSM, but never wait long
     const more = await Promise.race([nightCandidates(slow, wantLake), new Promise(r => setTimeout(() => r(null), 25000))]).catch(() => null);
     if (more) { camps.push(...more.camps); supply.push(...more.supply); }
   }
+  const wildOk = !!p.wild_camping;
+  const every = Math.max(1, Math.round(p.camp_every_days || p.resupply_every_days || 2));
+  const places = [p.start, p.end, ...(p.via || [])].filter(x => x && x.country && x.lat);
+  const countryAt = ll => { let b = null, bd = Infinity; for (const x of places) { const d = hav(ll[0], ll[1], x.lat, x.lon); if (d < bd) { bd = d; b = x.country; } } return b || p.country; };
+  let sinceCamp = 0;
   const nights = cuts.map((c, k) => {
-    if (c.ferryNight) return { type: 'nightcamp', name: '⛴ לילה על המעבורת', lat: c.c[0], lon: c.c[1], auth: 'מעבורת לילה: הזמינו תא או מושבים ומקום לרכב', ferry: true };
+    if (c.ferryNight) { sinceCamp = 0; return { type: 'nightcamp', name: '⛴ לילה על המעבורת', lat: c.c[0], lon: c.c[1], auth: 'מעבורת לילה: הזמינו תא או מושבים ומקום לרכב', ferry: true }; }
+    const rule = WILD_NIGHT[countryAt(c.c)] || 'no';
+    if (wildOk && rule !== 'no' && sinceCamp + 1 < every) { // a night in nature, then a campsite every few nights (showers, water, laundry)
+      let w = null, ws = Infinity;
+      for (const x of fromT.wild || []) { const d = hav(c.c[0], c.c[1], x.lat, x.lon); if (d > 15000) continue; const sc = d - (x.kind === 'lake' ? 9000 : x.kind === 'view' ? 4000 : 2000); if (sc < ws) { ws = sc; w = x; } }
+      if (w) { sinceCamp++; return { type: 'nightcamp', wild: true, lake: w.kind === 'lake', name: `🌲 לינת שטח: ${w.name}`, lat: w.lat, lon: w.lon,
+        auth: rule === 'yes' ? 'לינת שטח (לא קמפינג). מקובלת כאן מחוץ לשמורות. בלי מדורה בקיץ, השאירו נקי.' : 'לינת שטח (לא קמפינג). רשמית אסורה כאן אבל נסבלת לרוב: לילה אחד, רחוק מחופים ואתרים, בלי לפרוש מחנה.' }; }
+    }
+    sinceCamp = 0;
+    return pickCamp(c, k);
+  });
+  function pickCamp(c, k) {
     let best = null, bs = Infinity;
-    for (const cp of camps) { const d = hav(c.c[0], c.c[1], cp.lat, cp.lon); if (d > (wantLake ? 25000 : 16000)) continue; const sc = d - (cp.lake ? (wantLake ? 22000 : 8000) : 0) - (cp.name !== 'קמפינג' && cp.name !== 'חניון קרוואנים' ? 1500 : 0); if (sc < bs) { bs = sc; best = cp; } }
+    for (const cp of camps) { const d = hav(c.c[0], c.c[1], cp.lat, cp.lon); if (d > 16000) continue; const sc = d - (cp.lake ? (wantLake ? 10000 : 5000) : 0) - (cp.name !== 'קמפינג' && cp.name !== 'חניון קרוואנים' ? 1500 : 0); if (sc < bs) { bs = sc; best = cp; } }
     if (!best) { notes.push(`לילה ${k + 1}: לא מצאתי קמפינג רשמי ב-15 ק"מ מנקודת סוף היום.`); return { type: 'dayend', name: 'סוף היום: אין קמפינג רשמי קרוב', lat: c.c[0], lon: c.c[1] }; }
     return best;
-  });
-  if (wantLake && nights.some(n => n && !n.lake && !n.ferry && n.type !== 'dayend')) notes.push('לא בכל לילה יש קמפינג על שפת אגם; במקומות האלה בחרתי את הקרוב לדרך.');
+  }
+  if (wildOk && nights.some(n => n?.wild)) notes.push(`לינות שטח: נקודות על שפת אגם, בתצפית או בחניון יום שדרך עפר מגיעה אליהם. קמפינג מסודר כל ${every} לילות. לא בדקתי את המקום בשטח: הגיעו לפני החושך.`);
+  if (wildOk && cuts.some(c => !c.ferryNight && (WILD_NIGHT[countryAt(c.c)] || 'no') === 'no')) notes.push('באיטליה, קרואטיה, סלובניה, אוסטריה ופורטוגל לינה מחוץ לקמפינג אסורה ונאכפת בקנסות, אז שם יש רק קמפינגים.');
+  if (wantLake && nights.some(n => n && !n.lake && !n.ferry && !n.wild && n.type !== 'dayend')) notes.push('לא בכל לילה יש קמפינג על שפת אגם; במקומות האלה בחרתי את הקרוב לדרך.');
   // 4. final road route through highlights and camps, in order
   const marks = [];
   vias.forEach((_, l) => marks.push({ i: legIdx0[l + 1], o: 1, ll: wp0[l + 1], via: l }));
@@ -1444,9 +1508,9 @@ async function planOverland(p, sLL, eLL, viaLL) {
   }
   days.push({ from: dayFrom, to: coords.length - 1, len: dKm, hrs: dH, off: dOff, camp: null });
   // resupply: every N nights, nearest fuel + food to that camp
-  const every = Math.max(1, Math.round(p.resupply_every_days || 2));
+  const supEvery = Math.max(1, Math.round(p.resupply_every_days || 2));
   days.forEach((d, k) => {
-    if (!d.camp || d.camp.ferry || (k + 1) % every) return;
+    if (!d.camp || d.camp.ferry || (k + 1) % supEvery) return;
     for (const kind of ['fuel', 'food']) {
       let best = null, bd = 8000;
       for (const sp of supply) if (sp.kind === kind) { const dd = hav(d.camp.lat, d.camp.lon, sp.lat, sp.lon); if (dd < bd) { bd = dd; best = sp; } }
@@ -1456,6 +1520,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
   });
   for (const x of ferries) pois.push({ type: 'via', name: '⛴ מעבורת' + (x.f.name ? ': ' + x.f.name : ''), note: `מעבורת ביום ${x.day}: כ-${Math.round(x.m / 1000)} ק"מ בים, כ-${fmtH(x.h)} שעות שיט. בדקו לוח זמנים והזמינו מקום לרכב מראש.`, lat: x.lat, lon: x.lon });
   if (ferries.length) notes.push(`המסלול כולל ${ferries.length === 1 ? 'מעבורת' : ferries.length + ' מעבורות'} (כ-${Math.round(sea / 1000)} ק"מ בים). זמני השיט משוערים ולא כוללים המתנה: בדקו לוח זמנים, והזמינו מקום לרכב בעונה.`);
+  if (maxKm) { const over = days.map((d, k) => d.len > maxKm * 1000 * 1.15 ? k + 1 : 0).filter(Boolean); if (over.length) notes.push(`⚠ ימים ${over.join(', ')} עוברים את ${maxKm} ק"מ ליום (עד ${Math.round(Math.max(...days.map(d => d.len)) / 1000)} ק"מ), בגלל קטעי השטח והדרך ללינה. אפשר לבקש יום נוסף או פחות עצירות.`); }
   const off = len - asph;
   notes.unshift(`טיול ארוך: ${days.length} ימים, כ-${Math.round(len / 1000)} ק"מ: כ-${Math.round(off / 1000)} ק"מ שטח (${Math.round(off / len * 100)}%) וכ-${Math.round((len - off) / 1000)} ק"מ כביש${ferries.length ? `, ועוד ${ferries.length === 1 ? 'מעבורת' : ferries.length + ' מעבורות'}` : ''}. בכל יום מחפשים קטע שטח פתוח לרכב ליד הדרך.`);
   return { coords, segs, pois, stops: [], len, hrs, asph, unk, res, maxD, byD, mil: 0, aa: 0, js: 0, reuse: 0, days: days.length > 1 ? days : null, overland: true, note: notes[0], issues: notes.slice(1) };
@@ -1633,6 +1698,7 @@ async function run(fromPrompt, preset = null) {
       }
       { const mk = maxKmPerDay(text); if (mk && !p.max_km_per_day) p.max_km_per_day = mk; }
       { const sh = offroadShare(text); if (sh && !p.offroad_share) p.offroad_share = sh; }
+      if (p.wild_camping == null && /בלי קמפינג|לא חייב(ים)? (להיות )?קמפינג|לינת שטח|לינה בטבע|ביער|wild camp/i.test(text)) p.wild_camping = true;
       fillForm(p);
       const und = [p._smartErr ? '⚠️ ' + p._smartErr + ' תכננתי לפי פענוח בסיסי, שמבין רק מקום התחלה פשוט. נסו "בנה מסלול" שוב.' : null, p.summary_he ? 'הבנתי: ' + p.summary_he : null, p.story_he || null, p._searched ? '(חיפשתי ברשת כדי לתכנן)' : null].filter(Boolean).join('\n');
       $('understood').hidden = !und; $('understood').textContent = und; $('understood').style.whiteSpace = 'pre-line';
@@ -1648,6 +1714,8 @@ async function run(fromPrompt, preset = null) {
       ? `לא מצאתי את "${p.start?.name}". הפענוח החכם לא פעיל: הכניסו קוד קבוצה ב-⚙ כדי שאבין בקשות כמו "בעקבות מבצע…" ואחפש ברשת.`
       : `לא מצאתי את "${p.start?.name}". נסו שם אחר, או לחצו על המפה ובחרו "התחלה מכאן".`);
     setStart(sLL);
+    const abroadTrip = !inIsrael(sLL[0], sLL[1]);
+    if (abroadTrip && p.avoid_asphalt == null && fromPrompt) { p.avoid_asphalt = true; $('pAsph').checked = true; } // abroad: dirt first, roads only to connect
     let eLL = null;
     if (!p.loop && p.end) { eLL = await geocode(p.end); if (!eLL) throw new Error(`לא מצאתי את היעד "${p.end.name}".`); setEnd(eLL); }
     else if (endMarker) { endMarker.remove(); endMarker = null; }
@@ -1668,12 +1736,13 @@ async function run(fromPrompt, preset = null) {
     const keys = spread ? corridorTiles(ordered, multi ? 14000 : 10000) : tilesFor(bboxFor(pts, radius));
     // a long journey (e.g. between countries) is not one trail network: road legs + off-road pieces at the highlights
     const span = ordered.reduce((a, q, i) => i ? a + hav(q[0], q[1], ordered[i - 1][0], ordered[i - 1][1]) : 0, 0);
-    if (span > 300000 || (keys.length > 36 && !keys.every(k => { const b = tileBBox(k); return inIsrael((b[0] + b[2]) / 2, (b[1] + b[3]) / 2); }))) {
+    const overland = async () => {
       const r = await planOverland(p, sLL, eLL, viaLL);
       lastRunErr = null;
       current = { p, res: { results: [r], L: r.len, note: r.note }, G: null, sel: 0, saved: null, prompt: fromPrompt ? text : (current?.prompt || '') };
-      status(r.note || ''); render(0); return;
-    }
+      status(r.note || ''); render(0);
+    };
+    if (p._forceOverland || span > 300000 || (keys.length > 36 && !keys.every(k => { const b = tileBBox(k); return inIsrael((b[0] + b[2]) / 2, (b[1] + b[3]) / 2); }))) return await overland();
     status('מוריד שבילים מ-OpenStreetMap (בפעם הראשונה זה לוקח כמה שניות)…');
     const G = await loadGraph(keys);
     if (!G.N) throw new Error('לא נמצאו שבילים באזור.');
@@ -1702,10 +1771,12 @@ async function run(fromPrompt, preset = null) {
         alt.res.note = '⚠ אי אפשר לתכנן את זה בלי לעבור בשטחי אש, אז המסלול עובר בהם. בתאריך שבחרתם (יש בו יום חול) הם כנראה סגורים: תכננו לסופ"ש או חג, או ודאו מול פרסומי צה"ל לשטחי אש. ' + (alt.res.note || '');
       }
     }
+    if (multi && abroadTrip && (out.err || !out.res.results.length)) return await overland(); // the trail network alone does not connect: roads + off-road stretches
     if (out.err) throw new Error(out.err);
     const res = out.res;
     if (!res.results.length && res.reason) throw new Error(res.reason);
     if (!res.results.length) throw new Error('לא מצאתי מסלול שעומד בתנאים. נסו לקצר, לשנות רמת קושי/רכב, או לבטל הימנעות מכבישים / שטחי אש.');
+    if (multi && abroadTrip) { status('מחפש לינה לימים שנגמרים בלי קמפינג…'); for (const r of res.results) await fillDayEnds(p, r).catch(() => {}); }
     if (res.note) setTimeout(() => status(res.note), 0);
     lastRunErr = null;
     current = { p, res, G, sel: 0, saved: null, prompt: fromPrompt ? text : (current?.prompt || '') };
@@ -2152,6 +2223,7 @@ function render(i, day = null) {
   const w = [];
   if (!current.saved && p._lost?.length) w.push(`לא מצאתי במפה את ${p._lost.map(n => '"' + n + '"').join(', ')}, אז דילגתי. כתבו בתיבת השינוי מקום קרוב אחר אם חשוב לכם.`);
   if (!current.saved && current.res.note && /^⚠/.test(current.res.note)) w.push(current.res.note);
+  for (const t of r.issues || []) if (/^⚠/.test(t)) w.push(t); // important planning notes are not hidden in the list
   if (current.G?.eRep && r.edges) { const hit = r.edges.filter(e => current.G.eRep[e]).length; if (hit) w.push(`המסלול עובר ליד דיווחים מהשטח של החבורה (קושי שונה מהמפה). לחצו על הסימנים במפה לפרטים.`); }
   if (r.unrated) w.push('המסלול יובא מקובץ. לא בדקתי לו קושי ושטחי אש, רק שטחי A. סעו בו בזהירות כמו במסלול לא מוכר.');
   if (!r.unrated && r.unk / r.len > 0.3) w.push(`ל-${Math.round(r.unk / r.len * 100)}% מהדרך אין דירוג קושי ב-OSM. ההערכה שם שמרנית (בינוני).`);
@@ -2172,7 +2244,7 @@ function render(i, day = null) {
   if (SF && SF.fuelGap > 200 && (D || r.len > 150000)) w.push(`הקטע הארוך ביותר בלי תחנת דלק ליד המסלול: כ-${SF.fuelGap.toFixed(0)} ק"מ. בשטח רכב צורך פי 1.5–2 מבכביש: מלאו מיכל לפני, ושקלו ג'ריקן.`);
   w.push('המסלול מבוסס על נתוני OSM. מצב השטח בפועל (שיטפונות, חסימות, סגירת שמורות) יכול להשתנות: בדקו לפני יציאה.');
   $('warns').innerHTML = w.map(t => `<div class="warn">${t}</div>`).join('');
-  if (r.issues?.length) { const d = document.createElement('details'); d.className = 'more'; d.innerHTML = `<summary>הערות לתכנון (${r.issues.length})</summary><ul>${r.issues.map(t => `<li>${t.replace(/</g, '&lt;')}</li>`).join('')}</ul>`; $('warns').prepend(d); }
+  const minor = (r.issues || []).filter(t => !/^⚠/.test(t)); if (minor.length) { const d = document.createElement('details'); d.className = 'more'; d.innerHTML = `<summary>הערות לתכנון (${minor.length})</summary><ul>${minor.map(t => `<li>${t.replace(/</g, '&lt;')}</li>`).join('')}</ul>`; $('warns').prepend(d); }
   if (!current.saved && IL) { // quick firing-zone switch, works without a date
     const row = document.createElement('div'); row.className = 'milsw';
     row.innerHTML = '<span>שטחי אש:</span>';
