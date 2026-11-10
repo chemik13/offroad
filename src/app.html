@@ -71,7 +71,6 @@ header button{pointer-events:auto;margin-inline-start:auto}
 .flykm{color:#fff;font:600 13px var(--body);font-variant-numeric:tabular-nums;min-width:62px;text-align:center}
 .flymsg{position:absolute;inset:0;display:grid;place-items:center;color:#fff;font:500 15px var(--body);pointer-events:none}
 .flymsg:empty{display:none}
-.flycar{filter:drop-shadow(0 2px 3px rgba(0,0,0,.55));pointer-events:none}
 .fly3d{border:0;background:#1b2a22;color:#ffd23f;border-radius:999px;padding:4px 11px;font:600 12px var(--body);cursor:pointer;display:inline-flex;align-items:center;margin-top:6px}
 .plinks .fly3d{margin-top:0}
 .gate{position:fixed;inset:0;z-index:50;background:linear-gradient(160deg,#eef3ee,#fff 60%);display:grid;place-items:center;padding:20px}
@@ -2488,10 +2487,26 @@ async function flyOver(coords, title, marks = []) {
     map3.addLayer({ id: 'trk-c', type: 'line', source: 'trk', paint: { 'line-color': '#000', 'line-width': 8, 'line-opacity': 0.45 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
     map3.addLayer({ id: 'trk', type: 'line', source: 'trk', paint: { 'line-color': '#ffd23f', 'line-width': 4.5 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
     $('flyMsg').textContent = '';
-    // a small black 4x4 drives the track (seen from above, nose up)
-    const carEl = document.createElement('div'); carEl.className = 'flycar';
-    carEl.innerHTML = '<svg viewBox="0 0 24 44" width="24" height="44" aria-hidden="true"><rect x="2.5" y="2" width="19" height="40" rx="5" fill="#17191c" stroke="#fff" stroke-width="1.6"/><path d="M5 11.5 Q12 8.5 19 11.5 L18 16 H6Z" fill="#7f8c99"/><rect x="6" y="18" width="12" height="15" rx="1.5" fill="#2b3036"/><rect x="5.5" y="19" width="1.2" height="13" fill="#b9c0c8"/><rect x="17.3" y="19" width="1.2" height="13" fill="#b9c0c8"/><path d="M6 36 H18 L17 39.5 H7Z" fill="#7f8c99"/><rect x="4" y="2.6" width="4" height="2" rx="1" fill="#fff6c8"/><rect x="16" y="2.6" width="4" height="2" rx="1" fill="#fff6c8"/></svg>';
-    const car = new ml.Marker({ element: carEl, rotationAlignment: 'map', pitchAlignment: 'viewport' }).setLngLat([pts[0][0], pts[0][1]]).addTo(map3);
+    // a small 3D black 4x4 drives the track: boxes for wheels, body, glass, roof and rails (scaled up so it reads from the air)
+    map3.addSource('car', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map3.addLayer({ id: 'car', type: 'fill-extrusion', source: 'car', paint: { 'fill-extrusion-color': ['get', 'c'], 'fill-extrusion-height': ['get', 'h'], 'fill-extrusion-base': ['get', 'b'], 'fill-extrusion-opacity': 1, 'fill-extrusion-vertical-gradient': true } });
+    const CAR = [ // [x from centre forward, y to the left, length, width, base, top, colour], metres of a real car
+      ...[[1.5, 0.82], [1.5, -0.82], [-1.5, 0.82], [-1.5, -0.82]].map(([x, y]) => [x, y, 0.82, 0.34, 0, 0.82, '#111']),
+      [0, 0, 4.95, 1.98, 0.42, 1.22, '#17191c'],
+      [2.38, 0.68, 0.06, 0.34, 0.86, 1.04, '#f4f7fb'], [2.38, -0.68, 0.06, 0.34, 0.86, 1.04, '#f4f7fb'],
+      [-0.55, 0, 3.2, 1.86, 1.22, 1.74, '#3d4752'],
+      [-0.6, 0, 3.0, 1.82, 1.74, 1.88, '#17191c'],
+      [-0.6, 0.78, 2.6, 0.08, 1.88, 1.96, '#b9c0c8'], [-0.6, -0.78, 2.6, 0.08, 1.88, 1.96, '#b9c0c8'],
+    ];
+    const SC = 7;
+    const carGeo = (lon, lat, hdg) => {
+      const r = hdg * Math.PI / 180, fx = Math.sin(r), fy = Math.cos(r), lx = -fy, ly = fx; // forward and left in east/north metres
+      const mx = 1 / (111320 * Math.cos(lat * Math.PI / 180)), my = 1 / 110540;
+      const pt = (x, y) => [lon + (fx * x + lx * y) * mx * SC, lat + (fy * x + ly * y) * my * SC];
+      return { type: 'FeatureCollection', features: CAR.map(([x, y, l, w, b, h, c]) => ({ type: 'Feature', properties: { b: b * SC, h: h * SC, c },
+        geometry: { type: 'Polygon', coordinates: [[pt(x + l / 2, y + w / 2), pt(x + l / 2, y - w / 2), pt(x - l / 2, y - w / 2), pt(x - l / 2, y + w / 2), pt(x + l / 2, y + w / 2)]] } })) };
+    };
+    const car = { setLngLat([lo, la]) { this.ll = [lo, la]; return this; }, setRotation(h) { map3.getSource('car')?.setData(carGeo(this.ll[0], this.ll[1], h)); return this; } };
     let bearing = null, heading = null;
     const frame = now => {
       if (!flyState || flyState.map !== map3) return;
