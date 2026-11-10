@@ -389,7 +389,7 @@ ul.pois li{margin-bottom:8px}
       <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off"></details>
   </div>
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.37 · 10.11.2026 09:46</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.38 · 10.11.2026 09:46</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -1552,8 +1552,8 @@ const EXAMPLES = [
   'ממצפה רמון עד חניון בארות, בינוני, עם תצפית',
   'חצי יום בגולן מקצרין, קל, עם מעיין',
   'ממצדה עד עין גדי דרך מדבר יהודה, רכב מוגבה',
-  'לופ של 3 שעות ביער יתיר, קל, רכב רגיל',
-  'יום שלם קשה בהרי אילת, נעילות, בלי כבישים',
+  'לופ של 3 שעות ביער יתיר, קל',
+  'יום שלם קשה בהרי אילת, בלי כבישים',
   'שעתיים ברמת מנשה עם תצפית',
 ];
 EXAMPLES.forEach(t => { const b = document.createElement('button'); b.textContent = t; b.onclick = () => { $('prompt').value = t; }; $('examples').append(b); });
