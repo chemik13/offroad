@@ -433,13 +433,13 @@ function routeStats(G, edges, startNode) {
   return { len, hrs, asph, mil, unk, aa, js, res, maxD, reuse, byD, coords, segs };
 }
 
-function snapPois(G, fac, types, R0, minL, maxL, authOnly = true) {
+function snapPois(G, fac, types, R0, minL, maxL, authOnly = true, snapM = 500) {
   const out = [];
   for (const p of G.pois) {
     if (types.length ? !types.includes(p.type) : SAFETY_TYPES.includes(p.type)) continue;
     if (p.type === 'nightcamp' && !p.auth && authOnly) continue;
     if (p.type !== 'nightcamp' && (!p.name || p.name === POI_TYPES[p.type]?.he)) continue; // unnamed stops are not worth a detour
-    const n = nearestNode(G, p.lat, p.lon, fac, 500);
+    const n = nearestNode(G, p.lat, p.lon, fac, snapM);
     if (n < 0 || R0.len[n] < minL || R0.len[n] > maxL) continue;
     if (out.some(o => o.node === n)) continue;
     out.push({ ...p, node: n });
@@ -579,22 +579,33 @@ function plan(G, p, nodes, onProgress = () => {}) {
     const direct = R0.len[e];
     if (!isFinite(direct)) return { results, L };
     const budget = p.duration_hours || p.distance_km ? Math.max(L, direct * 1.05) : direct * 1.5;
+    const want = (p.poi_types || []).filter(t => t !== 'nightcamp');
     let cands = snapPois(G, fac, p.poi_types || [], R0, 0, budget);
     onProgress(`בודק ${cands.length} נקודות עניין בדרך…`);
     const Re = dijkstra(G, e, fac, null, maxCost);
-    cands = cands.filter(c => R0.len[c.node] + Re.len[c.node] <= budget * 1.15)
-      .sort((a, b) => (R0.len[a.node] + Re.len[a.node]) - (R0.len[b.node] + Re.len[b.node])).slice(0, 8);
+    const fits = c => R0.len[c.node] + Re.len[c.node] <= budget * 1.15;
+    cands = cands.filter(fits);
+    const midway = c => { const f = R0.len[c.node] / (R0.len[c.node] + Re.len[c.node]); return f > 0.25 && f < 0.75; };
+    if (want.includes('camp') && !cands.some(c => c.type === 'camp' && midway(c))) // no picnic site on the way: a viewpoint or spring is a fine place to stop and eat
+      cands.push(...snapPois(G, fac, ['viewpoint', 'spring', 'peak', 'historic'], R0, 0, budget, true, 1500).filter(fits).map(c => ({ ...c, note: 'מקום טוב לעצור לאכול', picnic: true })));
+    const mid = c => Math.abs(R0.len[c.node] / (R0.len[c.node] + Re.len[c.node]) - 0.5); // stops are best around the middle of the way
+    cands = cands.sort((a, b) => (R0.len[a.node] + Re.len[a.node]) * (1 + mid(a)) - (R0.len[b.node] + Re.len[b.node]) * (1 + mid(b))).slice(0, 8);
     const options = [{ stops: [s, e], pois: [] }];
+    const picked = [];
     if ((p.duration_hours || p.distance_km) && L > direct * 1.3) {
       // asked for longer than the direct way: detour through points whose way there + onward ≈ the asked length
       const pool = [];
       for (let v = 0; v < G.N; v += 2) { const t = R0.len[v] + Re.len[v]; if (isFinite(t) && t > L * 0.75 && t < L * 1.12 && !G.mil?.[v]) pool.push(v); }
       pool.sort((a, b) => Math.abs(R0.len[a] + Re.len[a] - L) - Math.abs(R0.len[b] + Re.len[b] - L));
-      const picked = [];
       for (const v of pool) { if (picked.length >= 10) break; if (picked.every(u => hav(G.lat[u], G.lon[u], G.lat[v], G.lon[v]) > 4000)) picked.push(v); }
       for (const v of picked) options.push({ stops: [s, v, e], pois: [] });
     }
     for (const c of cands) options.push({ stops: [s, c.node, e], pois: [c] });
+    for (const c of cands.slice(0, 4)) for (const v of picked.slice(0, 5)) { // the asked length and the stop together: detour point + the stop, in driving order
+      if (hav(G.lat[c.node], G.lon[c.node], G.lat[v], G.lon[v]) < 3000) continue;
+      const rv = R0.len[v], rc = R0.len[c.node]; if (!isFinite(rv) || !isFinite(rc)) continue;
+      options.splice(1, 0, { stops: rc < rv ? [s, c.node, v, e] : [s, v, c.node, e], pois: [c] });
+    }
     for (let i = 0; i < cands.length; i++) for (let j = i + 1; j < cands.length; j++) {
       const [a, b] = R0.len[cands[i].node] < R0.len[cands[j].node] ? [cands[i], cands[j]] : [cands[j], cands[i]];
       options.push({ stops: [s, a.node, b.node, e], pois: [a, b] });
@@ -604,7 +615,10 @@ function plan(G, p, nodes, onProgress = () => {}) {
       const r = mk(o.stops, o.pois);
       if (!r) continue;
       const tgt = p.duration_hours || p.distance_km ? L : direct;
-      r.score = (p.duration_hours || p.distance_km ? 2 : 1) * Math.abs(r.len - tgt) / tgt + (r.reuse / r.len) * 1.2 - 0.3 * o.pois.length + (r.len > budget * 1.2 ? 1 : 0) + (r.asph / r.len) * 0.8 + ((r.js || 0) / r.len) * 0.6;
+      const kinds = new Set(o.pois.map(x => x.picnic ? 'camp' : x.type));
+      let midPen = 0; // a stop is a break: best around the middle of the drive, not just before the end
+      for (const x of o.pois) { let acc = 0, at = null; for (const ed of r.edges) { acc += G.eLen[ed]; if (G.eA[ed] === x.node || G.eB[ed] === x.node) { at = acc; break; } } if (at != null) midPen += Math.max(0, Math.abs(at / r.len - 0.5) - 0.15) * 2; }
+      r.score = (p.duration_hours || p.distance_km ? 2 : 1) * Math.abs(r.len - tgt) / tgt + (r.reuse / r.len) * 1.2 + midPen - 0.45 * kinds.size - 0.1 * (o.pois.length - kinds.size) + (want.length && !o.pois.length ? 0.35 : 0) + (r.len > budget * 1.2 ? 1 : 0) + (r.asph / r.len) * 0.8 + ((r.js || 0) / r.len) * 0.6;
       built.push(r);
     }
     built.sort((x, y) => x.score - y.score);

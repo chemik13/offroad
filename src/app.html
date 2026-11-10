@@ -2578,7 +2578,7 @@ function renderStops(p, r) {
     if (t.v) { const { v, i } = t; row('', String(n), stopName(v), [v.note, t.m != null && !multiDay ? when(t.m) : null].filter(Boolean).join(' · '), [
       ['↑', 'להקדים', () => moveStop(i, -1)], ['↓', 'לאחר', () => moveStop(i, 1)], ['✕', 'להסיר', () => removeStop(i)],
     ].filter(([tt]) => !(tt === '↑' && i === 0) && !(tt === '↓' && i === vias.length - 1))); }
-    else { const x = t.x; row('pk', String(n), x.name, [x.sunset ? 'תצפית לשקיעה' : (x.type === 'camp' ? 'עצירת פיקניק' : POI_TYPES[x.type]?.he), when(t.m)].filter(Boolean).join(' · '), [['⌖', 'להראות במפה', () => { map.setView([x.lat, x.lon], 15); if (innerWidth < 900) $('sheet').classList.add('min'); }]]); }
+    else { const x = t.x; row('pk', String(n), x.name, [x.sunset ? 'תצפית לשקיעה' : (x.type === 'camp' ? 'עצירת פיקניק' : x.picnic ? 'עצירת פיקניק · ' + POI_TYPES[x.type]?.he : POI_TYPES[x.type]?.he), when(t.m)].filter(Boolean).join(' · '), [['⌖', 'להראות במפה', () => { map.setView([x.lat, x.lon], 15); if (innerWidth < 900) $('sheet').classList.add('min'); }]]); }
   }
   row('en', '■', p.loop ? stopName(p.start) + ' (לופ)' : p.end ? stopName(p.end) : 'נבחר אוטומטית', p.loop ? 'חזרה להתחלה' : p.end ? 'סיום' : 'אין יעד: המערכת בחרה סיום', []);
   box.append(el);
@@ -2752,7 +2752,13 @@ function render(i, day = null) {
   else if (!r.unrated && r.mil > 0) w.push(`${(r.mil / 1000).toFixed(1)} ק"מ עוברים בשטח אש${mr.info?.open ? ` (${mr.info.why})` : ''}.${!p.date && (p.military_mode || 'auto') === 'auto' ? ' עוד לא נבחר תאריך, אז הם נכללו.' : ''} בדרך כלל פתוחים בסופ"ש ובחגים, אבל הפתיחה משתנה: ודאו מול פרסומי צה"ל לשטחי אש לתאריך הספציפי לפני יציאה.`);
   else if (!current.saved && mr.avoid && mr.info && !mr.info.open) w.push(`התאריך הוא ${mr.info.why}, אז שטחי אש לא נכללו. בסופ"ש יהיו יותר אפשרויות.`);
   if (r.reuse / r.len > 0.15) w.push(`${(r.reuse / 1000).toFixed(1)} ק"מ נוסעים פעמיים באותו קטע (הלוך-חזור).`);
-  if (!current.saved && current.res.L && (p.duration_hours || p.distance_km) && Math.abs(r.len - current.res.L) / current.res.L > 0.35) w.push('לא מצאתי מסלול באורך המבוקש בדיוק. זה הקרוב ביותר.');
+  if (!current.saved && !(r.days && r.days.length > 1)) {
+    const hAll = r.hrs + r.pois.filter(x => x.type !== 'nightcamp').length * 0.25;
+    const off = p.duration_hours ? (hAll < p.duration_hours * 0.75 || hAll > p.duration_hours * 1.3) : p.distance_km ? Math.abs(r.len / 1000 - p.distance_km) / p.distance_km > 0.35 : false;
+    if (off) w.push(p.duration_hours ? `ביקשתם ${p.duration_hours} שעות, ויצא בערך ${(Math.round(hAll * 2) / 2)} (כולל עצירות). זה הכי קרוב שמצאתי ברשת השבילים כאן.` : 'לא מצאתי מסלול באורך המבוקש בדיוק. זה הקרוב ביותר.');
+    const miss = (p.poi_types || []).filter(t => t !== 'nightcamp' && POI_TYPES[t] && !r.pois.some(x => x.type === t || (t === 'camp' && x.picnic)));
+    if (miss.length) w.push(`לא מצאתי על הדרך ${miss.map(t => POI_TYPES[t].he).join(' או ')} עם שם במפה. אפשר להוסיף תחנה בלחיצה על המפה ("תחנה בדרך").`);
+  }
   if (r.res > 300 && !r.unrated) info.push(isIL(r) ? `${(r.res / 1000).toFixed(1)} ק"מ עוברים בתוך שמורת טבע / גן לאומי. בשמורות מותר לנסוע רק בדרכים המסומנות לרכב (סימון שבילים בצבע + שלט "דרך לרכב"), ו-OSM לא תמיד יודע איזו דרך מסומנת. אם אין סימון בשטח, לא נכנסים.` : `${(r.res / 1000).toFixed(1)} ק"מ עוברים בתוך שמורת טבע / פארק לאומי. ברוב אירופה נסיעה ברכב שם מותרת רק בדרכים ציבוריות פתוחות לרכב, וקנסות גבוהים. בדקו את השילוט בכניסה.`);
   const SF = safetyFor(r, dv);
   if (SF && SF.bail && SF.bail.m > 20000) w.push(`הנקודה הכי מרוחקת מכביש: כ-${(SF.bail.m / 1000).toFixed(0)} ק"מ שטח (בק"מ ${SF.bail.km.toFixed(0)}). אם משהו נשבר שם, החילוץ ארוך: צאו לפחות בשני רכבים, עם מים, מדחס, רצועת גרירה וקליטה/מכשיר קשר.`);

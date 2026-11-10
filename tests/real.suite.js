@@ -31,6 +31,7 @@ const CASES = [
 ];
 const IL = (n, la, lo) => S(n, la, lo, 'IL');
 const CASES_IL = [
+  { id: 'il-ramon-avdat-picnic', wantPoi: 'camp', p: { ...M, country: 'IL', start: IL('מצפה רמון', 30.61, 34.80), end: IL('עין עבדת', 30.83, 34.77), loop: false, duration_hours: 4, poi_types: ['camp'] } },
   { id: 'il-raanana-agamon-picnic', trueEnd: [32.3729, 34.9357], p: { ...M, country: 'IL', start: IL('רעננה', 32.184, 34.871), end: IL('אגמון חפר', 32.368, 34.888), loop: false, duration_hours: 3, poi_types: ['camp'] } },
   { id: 'il-ramon-4h', p: { ...M, country: 'IL', start: IL('מצפה רמון', 30.61, 34.80), loop: false, duration_hours: 4 } },
   { id: 'il-ramon-loop-hard', p: { ...M, country: 'IL', start: IL('מצפה רמון', 30.61, 34.80), loop: true, duration_hours: 6, difficulty: 'hard' } },
@@ -96,6 +97,7 @@ const CASES_IL = [
     const P = { ...c.p, ...(process.env.EXTRA ? JSON.parse(process.env.EXTRA) : {}) }, bad = [];
     if (res.fail) bad.push('FAILED: ' + res.fail.slice(0, 140));
     else {
+      if (c.wantPoi && !/פיקניק/.test(res.stopsText || '')) bad.push('no picnic stop');
       if (c.trueEnd) { const [a1, o1] = c.trueEnd, [a2, o2] = res.last, d = Math.hypot((a1 - a2) * 111, (o1 - o2) * 94); if (d > 2) bad.push(`ended ${d.toFixed(1)} km from the real finish`); }
       if (P.days > 1 && res.days !== P.days) bad.push(`days ${res.days}≠${P.days}`);
       if (P.max_km_per_day && Math.max(...res.dayKm) > P.max_km_per_day * 1.25 && !res.warns.concat(res.issues).some(t => /ק"מ ליום|עוברים את/.test(t))) bad.push(`day km up to ${Math.max(...res.dayKm)} > ${P.max_km_per_day}`);
