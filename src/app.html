@@ -2402,8 +2402,14 @@ async function renderChecks(r, p, D) {
       const covered = got.miss?.length ? got.miss.length / smp.length < 0.2 : true;
       const marks = [{ d: 0, name: 'נקודת היציאה' }, ...fuel, { d: smp[smp.length - 1].d, name: 'הסוף' }];
       let gi = 0, gap = 0; for (let i = 1; i < marks.length; i++) if (marks[i].d - marks[i - 1].d > gap) { gap = marks[i].d - marks[i - 1].d; gi = i; }
-      if (covered && gap > 200000) { const a = marks[gi - 1];
-        out(`${ico('fuel')}הקטע הארוך בלי תחנת דלק: כ-${Math.round(gap / 1000)} ק"מ, מק"מ ${Math.round(a.d / 1000)}${gi - 1 > 0 ? ` (תדלוק אחרון: ${a.name})` : ' (מהיציאה)'}. בשטח צריכת הדלק כפולה מבכביש: מלאו מיכל לפני, ושקלו ג'ריקן.`); }
+      if (covered && gap > 200000) { const a = marks[gi - 1], z = marks[gi];
+        // stations a short detour off the way, in the middle of that stretch
+        const mids = smp.filter(q => q.d > a.d + 40000 && q.d < z.d - 40000).filter((q, i) => i % 4 === 0);
+        let det = null;
+        if (mids.length) { const g2 = await poisFromTiles(mids.map(q => [q.lat, q.lon]), 15000);
+          for (const f of (g2?.supply || []).filter(x => x.kind === 'fuel')) { let bd = Infinity, at = null; for (const q of smp) { const d = hav(q.lat, q.lon, f.lat, f.lon); if (d < bd) { bd = d; at = q; } } if (at && (!det || Math.abs(at.d - (a.d + z.d) / 2) < Math.abs(det.at.d - (a.d + z.d) / 2))) det = { f, at, off: bd }; } }
+        const k = det ? dayAt(r.coords.findIndex(c => Math.abs(c[0] - det.at.lat) < 0.003 && Math.abs(c[1] - det.at.lon) < 0.003)) : 0;
+        if (tok === checksTok) out(`${ico('fuel')}הקטע הארוך בלי תחנת דלק ליד הדרך: כ-${Math.round(gap / 1000)} ק"מ, מק"מ ${Math.round(a.d / 1000)}${gi - 1 > 0 ? ` (תדלוק אחרון: ${a.name})` : ' (מהיציאה)'}. בשטח צריכת הדלק כפולה מבכביש: מלאו מיכל לפני, ושקלו ג'ריקן.${det ? ` אפשר לסטות לתדלוק ב${det.f.name} (${(det.off / 1000).toFixed(0)} ק"מ מהדרך, ליד ק"מ ${Math.round(det.at.d / 1000)}${D ? `, יום ${k + 1}` : ''}).` : ''}`); }
     }
   } catch {}
   // the group's own field reports on this route
