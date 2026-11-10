@@ -1,23 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- a lifted full-size 4x4 wagon (generic, no badge) on a desert track -->
+  <!-- a lifted black full-size 4x4 wagon (generic, no badge) on a desert track -->
   <rect width="512" height="512" rx="112" fill="#d9541a"/>
   <path d="M0 372 C110 348 190 366 270 352 S430 336 512 350 V512 H0Z" fill="#b8430f"/>
   <!-- roof rails -->
-  <rect x="96" y="128" width="252" height="10" rx="5" fill="#2a2522"/>
-  <rect x="112" y="138" width="10" height="12" fill="#2a2522"/><rect x="322" y="138" width="10" height="12" fill="#2a2522"/>
+  <rect x="96" y="128" width="252" height="10" rx="5" fill="#b9c0c8"/>
+  <rect x="112" y="138" width="10" height="12" fill="#b9c0c8"/><rect x="322" y="138" width="10" height="12" fill="#b9c0c8"/>
   <!-- long body: upright rear, long glasshouse, short raked windscreen, flat bonnet -->
-  <path d="M56 296 V188 Q56 152 88 150 L332 150 Q348 150 358 162 L392 206 L446 214 Q466 218 466 240 V294 Q466 308 452 308 H70 Q56 308 56 296Z" fill="#f4efe6"/>
+  <path d="M56 296 V188 Q56 152 88 150 L332 150 Q348 150 358 162 L392 206 L446 214 Q466 218 466 240 V294 Q466 308 452 308 H70 Q56 308 56 296Z" fill="#17191c"/>
   <!-- windows: rear quarter, rear door, front door, windscreen line -->
-  <path d="M76 168 Q76 162 84 162 H138 V210 H76Z" fill="#2a2522"/>
-  <rect x="148" y="162" width="82" height="48" fill="#2a2522"/>
-  <path d="M240 162 H328 Q336 162 342 170 L370 210 H240Z" fill="#2a2522"/>
+  <path d="M76 168 Q76 162 84 162 H138 V210 H76Z" fill="#46525f"/>
+  <rect x="148" y="162" width="82" height="48" fill="#46525f"/>
+  <path d="M240 162 H328 Q336 162 342 170 L370 210 H240Z" fill="#46525f"/>
   <!-- belt line, door cuts, headlight, bumper -->
-  <rect x="56" y="232" width="410" height="6" fill="#d8cfc0"/>
-  <rect x="140" y="214" width="4" height="80" fill="#d8cfc0"/><rect x="234" y="214" width="4" height="80" fill="#d8cfc0"/>
-  <rect x="438" y="222" width="26" height="14" rx="4" fill="#ffd23f"/>
-  <rect x="440" y="280" width="36" height="18" rx="6" fill="#2a2522"/>
+  <rect x="56" y="268" width="410" height="6" fill="#aeb6bf"/>
+  <rect x="140" y="214" width="4" height="80" fill="#30343a"/><rect x="234" y="214" width="4" height="80" fill="#30343a"/>
+  <rect x="436" y="220" width="28" height="14" rx="4" fill="#eef3f8"/>
+  <rect x="440" y="280" width="36" height="18" rx="6" fill="#aeb6bf"/>
   <rect x="40" y="280" width="30" height="18" rx="6" fill="#2a2522"/>
   <!-- big tyres (lifted: clear gap under the body) -->
-  <circle cx="150" cy="322" r="58" fill="#2a2522"/><circle cx="150" cy="322" r="24" fill="#c9c1b4"/><circle cx="150" cy="322" r="8" fill="#2a2522"/>
-  <circle cx="380" cy="322" r="58" fill="#2a2522"/><circle cx="380" cy="322" r="24" fill="#c9c1b4"/><circle cx="380" cy="322" r="8" fill="#2a2522"/>
+  <circle cx="150" cy="322" r="58" fill="#2a2522"/><circle cx="150" cy="322" r="24" fill="#cfd4da"/><circle cx="150" cy="322" r="8" fill="#2a2522"/>
+  <circle cx="380" cy="322" r="58" fill="#2a2522"/><circle cx="380" cy="322" r="24" fill="#cfd4da"/><circle cx="380" cy="322" r="8" fill="#2a2522"/>
 </svg>

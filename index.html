@@ -71,6 +71,7 @@ header button{pointer-events:auto;margin-inline-start:auto}
 .flykm{color:#fff;font:600 13px var(--body);font-variant-numeric:tabular-nums;min-width:62px;text-align:center}
 .flymsg{position:absolute;inset:0;display:grid;place-items:center;color:#fff;font:500 15px var(--body);pointer-events:none}
 .flymsg:empty{display:none}
+.flycar{filter:drop-shadow(0 2px 3px rgba(0,0,0,.55));pointer-events:none}
 .fly3d{border:0;background:#1b2a22;color:#ffd23f;border-radius:999px;padding:4px 11px;font:600 12px var(--body);cursor:pointer;display:inline-flex;align-items:center;margin-top:6px}
 .plinks .fly3d{margin-top:0}
 .gate{position:fixed;inset:0;z-index:50;background:linear-gradient(160deg,#eef3ee,#fff 60%);display:grid;place-items:center;padding:20px}
@@ -581,7 +582,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
   </div>
   <button class="ghost" id="inviteBtn" type="button" style="margin-top:10px">קישור הזמנה לחבר (עם הקוד)</button>
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.62 · 10.11.2026 19:19</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.63 · 10.11.2026 19:29</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -3657,7 +3658,11 @@ async function flyOver(coords, title, marks = []) {
     map3.addLayer({ id: 'trk-c', type: 'line', source: 'trk', paint: { 'line-color': '#000', 'line-width': 8, 'line-opacity': 0.45 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
     map3.addLayer({ id: 'trk', type: 'line', source: 'trk', paint: { 'line-color': '#ffd23f', 'line-width': 4.5 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
     $('flyMsg').textContent = '';
-    let bearing = null;
+    // a small black 4x4 drives the track (seen from above, nose up)
+    const carEl = document.createElement('div'); carEl.className = 'flycar';
+    carEl.innerHTML = '<svg viewBox="0 0 24 44" width="18" height="33" aria-hidden="true"><rect x="2.5" y="2" width="19" height="40" rx="5" fill="#17191c" stroke="#fff" stroke-width="1.6"/><path d="M5 11.5 Q12 8.5 19 11.5 L18 16 H6Z" fill="#7f8c99"/><rect x="6" y="18" width="12" height="15" rx="1.5" fill="#2b3036"/><rect x="5.5" y="19" width="1.2" height="13" fill="#b9c0c8"/><rect x="17.3" y="19" width="1.2" height="13" fill="#b9c0c8"/><path d="M6 36 H18 L17 39.5 H7Z" fill="#7f8c99"/><rect x="4" y="2.6" width="4" height="2" rx="1" fill="#fff6c8"/><rect x="16" y="2.6" width="4" height="2" rx="1" fill="#fff6c8"/></svg>';
+    const car = new ml.Marker({ element: carEl, rotationAlignment: 'map', pitchAlignment: 'map' }).setLngLat([pts[0][0], pts[0][1]]).addTo(map3);
+    let bearing = null, heading = null;
     const frame = now => {
       if (!flyState || flyState.map !== map3) return;
       const dt = flyState.last ? Math.min(0.1, (now - flyState.last) / 1000) : 0; flyState.last = now;
@@ -3665,7 +3670,12 @@ async function flyOver(coords, title, marks = []) {
       const here = at(flyState.t), ahead = at(Math.min(total, flyState.t + 900)), behind = at(Math.max(0, flyState.t - 1));
       const want = here === ahead ? (bearing ?? 0) : Math.atan2((ahead[0] - behind[0]) * Math.cos(here[1] * Math.PI / 180), ahead[1] - behind[1]) * 180 / Math.PI;
       if (bearing == null) bearing = want; let dB = ((want - bearing + 540) % 360) - 180; bearing += dB * Math.min(1, dt * 1.6); // smooth turns
-      map3.jumpTo({ center: [here[0], here[1]], bearing, pitch: 68, zoom: 14.3 });
+      const near = at(Math.min(total, flyState.t + 40)), back = at(Math.max(0, flyState.t - 40)); // the car turns with the track itself
+      const hd = near === back ? (heading ?? want) : Math.atan2((near[0] - back[0]) * Math.cos(here[1] * Math.PI / 180), near[1] - back[1]) * 180 / Math.PI;
+      if (heading == null) heading = hd; heading += (((hd - heading + 540) % 360) - 180) * Math.min(1, dt * 6);
+      car.setLngLat([here[0], here[1]]).setRotation(heading);
+      const look = at(Math.min(total, flyState.t + 220)); // the camera looks a little ahead, so the car sits low in the view
+      map3.jumpTo({ center: [look[0], look[1]], bearing, pitch: 68, zoom: 14.3 });
       const pc = (flyState.t / total * 100).toFixed(2); $('flyProg').style.width = pc + '%'; $('flyKnob').style.insetInlineStart = pc + '%'; bar.setAttribute('aria-valuenow', Math.round(pc));
       $('flyKm').textContent = `${(flyState.t / 1000).toFixed(1)} / ${(total / 1000).toFixed(0)} ק"מ`;
       if (flyState.t >= total && flyState.playing) { flyState.playing = false; flyBtn('replay'); }
