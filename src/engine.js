@@ -907,9 +907,9 @@ function planMultiVia(G, p, nodes, onProgress = () => {}) {
     let dayL0 = targetLengthM({ ...p, distance_km: null, duration_hours: p.hours_per_day || 6 });
     if (p.max_km_per_day) dayL0 = Math.min(dayL0, p.max_km_per_day * 1000 * 0.9);
     const tot0 = legs0.flat().reduce((t, e) => t + G.eLen[e], 0);
-    const stretch = Math.min(2.2, dayL0 * N * 0.85 / Math.max(1, tot0));
+    const roomy = dayL0 * N * 0.85 / Math.max(1, tot0) > 1.25, stretch = roomy ? Math.min(2.2, dayL0 * N * 0.85 / Math.max(1, tot0)) : 1.18; // no spare days: still try a slightly longer, dirtier way
     const ins = [];
-    if (stretch > 1.25) for (let i = 0; i < legs0.length; i++) {
+    for (let i = 0; i < legs0.length; i++) {
       const a = stops0[i], b = stops0[i + 1], len = legs0[i].reduce((t, e) => t + G.eLen[e], 0), want = len * stretch;
       const Ra = dijkstra(G, a, fac, null, want * 12), Rb = dijkstra(G, b, fac, null, want * 12);
       let best = -1, bs = Infinity;
@@ -920,7 +920,8 @@ function planMultiVia(G, p, nodes, onProgress = () => {}) {
       }
       if (best < 0) continue;
       const p1 = pathEdges(G, Ra, best), R2 = dijkstra(G, best, fac, null, Infinity, b), p2 = pathEdges(G, R2, b);
-      if (p1 && p2) { legs0[i] = [...p1, ...p2]; ins[i] = best; }
+      const asphOf = es => es.reduce((t, e) => t + (G.eAsph[e] ? G.eLen[e] : 0), 0) / Math.max(1, es.reduce((t, e) => t + G.eLen[e], 0));
+      if (p1 && p2 && (roomy || asphOf([...p1, ...p2]) < asphOf(legs0[i]) - 0.1)) { legs0[i] = [...p1, ...p2]; ins[i] = best; }
     }
     // the turn points become stops, so the route keeps them when the nights are put in
     if (ins.some(x => x != null)) for (let i = legs0.length - 1; i >= 0; i--) if (ins[i] != null) {

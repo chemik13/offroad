@@ -53,6 +53,19 @@ header button{pointer-events:auto;margin-inline-start:auto}
 #sheet.min #body{display:none}
 #sheet.has-results{max-height:52vh;max-height:52dvh}
 #sheet.full{max-height:calc(100vh - 70px);max-height:calc(100dvh - 70px - env(safe-area-inset-top,0px))}
+.gate{position:fixed;inset:0;z-index:50;background:linear-gradient(160deg,#eef3ee,#fff 60%);display:grid;place-items:center;padding:20px}
+.gate[hidden]{display:none}
+.gatebox{width:min(380px,100%);display:flex;flex-direction:column;gap:14px;text-align:center}
+.gatebox h1{font-family:var(--display);font-size:26px;margin:0}
+.gatebox p{margin:0;color:var(--muted);font-size:15px;line-height:1.5}
+.gatemark .mark{width:30px;height:38px;border-radius:4px}
+.gatebox label{display:flex;flex-direction:column;gap:6px;text-align:start;font-size:14px;font-weight:500}
+.gatebox input{font:inherit;font-size:20px;padding:14px 14px;border-radius:12px;border:1px solid var(--line);background:#fff;color:var(--ink)}
+.gatebox input:focus{border-color:var(--accent);outline:2px solid var(--accent)}
+.go.big{font-size:19px;padding:15px;border-radius:12px}
+.gatemsg{font-size:15px;min-height:1.4em}
+.gatemsg.err{color:var(--danger)}
+.gatefoot{font-size:13px!important}
 #sheet.has-results #compose{display:none}
 .plancard{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff;display:flex;flex-direction:column;gap:8px}
 .pc-sum{font-size:14px;line-height:1.45;font-weight:500}
@@ -429,6 +442,18 @@ ul.pois li{margin-bottom:8px}
   </div>
 </section>
 
+<div id="gate" class="gate" hidden>
+  <div class="gatebox">
+    <div class="gatemark"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span></div>
+    <h1>מתכנן מסלולי שטח</h1>
+    <p>כותבים או אומרים לאן רוצים לנסוע, ומקבלים מסלול שטח מוכן לנסיעה.</p>
+    <label>קוד הקבוצה<input id="gateCode" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="מקבלים אותו ממי שהזמין אתכם"></label>
+    <label>איך קוראים לך?<input id="gateNick" type="text" autocomplete="nickname" placeholder="השם יופיע ליד מסלולים ששמרת"></label>
+    <button class="go big" id="gateGo" type="button">כניסה</button>
+    <div id="gateMsg" class="gatemsg" role="status"></div>
+    <p class="gatefoot">נכנסים פעם אחת. הטלפון זוכר אתכם.</p>
+  </div>
+</div>
 <dialog id="settings">
   <h2>הגדרות</h2>
   <p>קוד הקבוצה מחבר אתכם לספריית המסלולים המשותפת ולפענוח החכם של הפרומפט. מקבלים אותו ממי שהקים את האפליקציה.</p>
@@ -439,8 +464,9 @@ ul.pois li{margin-bottom:8px}
       <p style="margin:6px 0">רק אם אין קוד קבוצה. נשמר בדפדפן הזה בלבד. מאפשר טיולים לפי נושא ("בעקבות…") עם חיפוש ברשת.</p>
       <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off"></details>
   </div>
+  <button class="ghost" id="inviteBtn" type="button" style="margin-top:10px">קישור הזמנה לחבר (עם הקוד)</button>
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.50 · 10.11.2026 14:22</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.51 · 10.11.2026 14:34</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -1388,9 +1414,9 @@ function planMultiVia(G, p, nodes, onProgress = () => {}) {
     let dayL0 = targetLengthM({ ...p, distance_km: null, duration_hours: p.hours_per_day || 6 });
     if (p.max_km_per_day) dayL0 = Math.min(dayL0, p.max_km_per_day * 1000 * 0.9);
     const tot0 = legs0.flat().reduce((t, e) => t + G.eLen[e], 0);
-    const stretch = Math.min(2.2, dayL0 * N * 0.85 / Math.max(1, tot0));
+    const roomy = dayL0 * N * 0.85 / Math.max(1, tot0) > 1.25, stretch = roomy ? Math.min(2.2, dayL0 * N * 0.85 / Math.max(1, tot0)) : 1.18; // no spare days: still try a slightly longer, dirtier way
     const ins = [];
-    if (stretch > 1.25) for (let i = 0; i < legs0.length; i++) {
+    for (let i = 0; i < legs0.length; i++) {
       const a = stops0[i], b = stops0[i + 1], len = legs0[i].reduce((t, e) => t + G.eLen[e], 0), want = len * stretch;
       const Ra = dijkstra(G, a, fac, null, want * 12), Rb = dijkstra(G, b, fac, null, want * 12);
       let best = -1, bs = Infinity;
@@ -1401,7 +1427,8 @@ function planMultiVia(G, p, nodes, onProgress = () => {}) {
       }
       if (best < 0) continue;
       const p1 = pathEdges(G, Ra, best), R2 = dijkstra(G, best, fac, null, Infinity, b), p2 = pathEdges(G, R2, b);
-      if (p1 && p2) { legs0[i] = [...p1, ...p2]; ins[i] = best; }
+      const asphOf = es => es.reduce((t, e) => t + (G.eAsph[e] ? G.eLen[e] : 0), 0) / Math.max(1, es.reduce((t, e) => t + G.eLen[e], 0));
+      if (p1 && p2 && (roomy || asphOf([...p1, ...p2]) < asphOf(legs0[i]) - 0.1)) { legs0[i] = [...p1, ...p2]; ins[i] = best; }
     }
     // the turn points become stops, so the route keeps them when the nights are put in
     if (ins.some(x => x != null)) for (let i = legs0.length - 1; i >= 0; i--) if (ins[i] != null) {
@@ -1687,6 +1714,28 @@ $('grip').onclick = () => {
 // ---------- server (Supabase edge function) ----------
 const API = 'https://tbuoselznsubmndvaxjc.supabase.co/functions/v1/api';
 const hasGroup = () => !!store.get('groupCode');
+// entry gate: the group code once, remembered on this phone. An invite link (#code=XXXX) fills it in by itself.
+setTimeout(function gate() { // after the rest of the script has set up
+  if (location.protocol === 'file:' && !/code=/.test(location.hash)) return; // local test builds
+  const m = location.hash.match(/(?:^#|&)code=([^&]+)/);
+  if (m) { $('gateCode').value = decodeURIComponent(m[1]); history.replaceState(null, '', location.pathname + location.hash.replace(/(?:^#|&)code=[^&]+/, '').replace(/^#?$/, '')); }
+  if (hasGroup() && !m) return;
+  $('gate').hidden = false; $('gateNick').value = store.get('nick') || '';
+  const go = async () => {
+    const code = $('gateCode').value.trim(); if (!code) { $('gateMsg').className = 'gatemsg err'; $('gateMsg').textContent = 'צריך את קוד הקבוצה.'; $('gateCode').focus(); return; }
+    $('gateGo').disabled = true; $('gateMsg').className = 'gatemsg'; $('gateMsg').textContent = 'בודק…';
+    try {
+      const r = await fetch(API + '/routes', { headers: { 'x-group-code': code } });
+      if (r.status === 401) throw Object.assign(new Error('bad'), { bad: true });
+      store.set('groupCode', code); if ($('gateNick').value.trim()) store.set('nick', $('gateNick').value.trim());
+      $('gate').hidden = true; checkSharedLink();
+    } catch (e) { $('gateMsg').className = 'gatemsg err'; $('gateMsg').textContent = e.bad ? 'הקוד לא נכון. בדקו אותו מול מי ששלח לכם.' : 'אין חיבור לאינטרנט כרגע. נסו שוב.'; }
+    finally { $('gateGo').disabled = false; }
+  };
+  $('gateGo').onclick = go;
+  for (const id of ['gateCode', 'gateNick']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+  if (m) go(); else setTimeout(() => $('gateCode').focus(), 100);
+}, 0);
 async function api(path, opts = {}) {
   const r = await fetch(API + path, { ...opts, headers: { 'content-type': 'application/json', 'x-group-code': store.get('groupCode') || '', ...(opts.headers || {}) } });
   let j = null; try { j = await r.json(); } catch {}
@@ -1707,6 +1756,7 @@ async function checkConn() {
 }
 $('settingsBtn').onclick = () => { $('apiKey').value = store.get('apiKey') || ''; $('groupCode').value = store.get('groupCode') || ''; $('nick').value = store.get('nick') || ''; $('settings').showModal(); checkConn(); };
 $('closeSettings').onclick = () => $('settings').close();
+$('inviteBtn').onclick = async () => { const c = store.get('groupCode'); if (!c) return; const url = location.origin + location.pathname + '#code=' + encodeURIComponent(c); try { if (navigator.share) await navigator.share({ title: 'מתכנן מסלולי שטח', text: 'הצטרפו למתכנן המסלולים שלנו', url }); else { await navigator.clipboard.writeText(url); $('connState').textContent = 'הקישור הועתק. שלחו אותו בוואטסאפ.'; } } catch {} };
 $('saveKey').onclick = () => { store.set('apiKey', $('apiKey').value.trim()); store.set('groupCode', $('groupCode').value.trim()); store.set('nick', $('nick').value.trim()); checkConn(); status('נשמר.'); };
 store.get('lastPrompt') && ($('prompt').value = store.get('lastPrompt'));
 
@@ -1827,6 +1877,7 @@ const SYSTEM = () => `Today is ${new Date().toISOString().slice(0, 10)} (${new D
 - Europe: names in the local/English form. Prefer regions and routes where driving unpaved public roads is legal (e.g. known overland/4x4 routes, TET sections), start at a town, and for several days rely on official campsites (nightcamp). Israeli rules (firing zones, Area A) do not apply abroad. Use web_search when you are not sure of a place's location or when the request is themed.
 - Themed requests (a historical event or military operation, a book, a person, a named trail, "in the footsteps of", "בעקבות"): research the theme, then choose the real sites in order as start, via and end. Prefer points reachable by 4x4 (trailheads, memorial sites, viewpoints, ruins) over city centers, and skip sites that are now inside military bases or Area A. Add a short Hebrew note per via and a 2-4 sentence Hebrew story_he. Keep at most 8 vias and keep notes short. The theme's final destination MUST be "end" (with lat/lon), never left out or put only in via.
 - Refinement requests come with the current parameters as JSON: return the full updated parameters, changing only what was asked.
+- Start and end are exactly the places the user named, in that order ("מטירנה לקוטור" = start Tirana, end Kotor; "מסלוניקי" = start Thessaloniki). Never replace a named place with another.
 - Always set start. If the user did not say where to start, choose it yourself: a town or trailhead at the edge of the area the trip is about (for themed trips the theme's natural starting point), with lat/lon. Only if they say "from my location", set from_my_location instead.
 - "יום כולל לילה" / a day and a night = days 2.
 - The group always drives a lifted Land Cruiser with diff lockers. Defaults: difficulty medium, point-to-point (loop=false). For several days set days, and include nightcamp in poi_types.`;
@@ -3738,8 +3789,9 @@ $('shareBtn').onclick = async () => {
   catch { prompt('הקישור לטיול:', url); }
 };
 // a shared link opens the trip
-(async () => { const m = location.hash.match(/^#r=([0-9a-f-]{36})$/); if (!m || !hasGroup()) return;
-  try { status('פותח את הטיול ששותף…'); const j = await api('/routes/' + m[1]); showSaved(j.route); status(''); } catch { status('לא הצלחתי לפתוח את הטיול ששותף. בדקו את קוד הקבוצה ב-⚙.', true); } })();
+async function checkSharedLink() { const m = location.hash.match(/#r=([0-9a-f-]{36})/); if (!m || !hasGroup()) return;
+  try { status('פותח את הטיול ששותף…'); const j = await api('/routes/' + m[1]); showSaved(j.route); status(''); } catch { status('לא הצלחתי לפתוח את הטיול ששותף. בדקו את קוד הקבוצה ב-⚙.', true); } }
+checkSharedLink();
 $('drivenBtn').onclick = async () => {
   const sv = current.saved; if (!sv) return;
   try { const j = await api('/routes/' + sv.id, { method: 'PATCH', body: JSON.stringify({ driven: !sv.driven }) }); Object.assign(sv, j.route); render(0); libCache = null; }
