@@ -701,6 +701,7 @@ async function geocode(place) {
     const NOM = 'https://nominatim.openstreetmap.org/search?format=json&limit=3&accept-language=he,en&q=' + encodeURIComponent(name);
     let j = abroad ? [] : await (await fetch(NOM + '&viewbox=34.2,33.45,35.95,29.4&bounded=1')).json();
     if (!j.length) j = await (await fetch(NOM + (place.country && place.country !== 'IL' ? '&countrycodes=' + place.country.toLowerCase() : ''))).json(); // Europe & anywhere else
+    if (!j.length && place.country && place.country !== 'IL') j = await (await fetch(NOM)).json(); // wrong / guessed country: search everywhere
     if (j.length) {
       let best = j[0];
       if (place.lat) best = j.reduce((a, b) => hav(+a.lat, +a.lon, place.lat, place.lon) < hav(+b.lat, +b.lon, place.lat, place.lon) ? a : b);
@@ -1524,7 +1525,7 @@ async function run(fromPrompt, preset = null) {
     }
 
     status('מאתר מקומות…');
-    if (p.country) for (const pl of [p.start, p.end, ...(p.via || [])]) if (pl && !pl.country) pl.country = p.country;
+    if (p.country) for (const pl of [p.start, p.end, ...(p.via || [])]) if (pl && !pl.country) { pl.country = p.country; pl.countryGuess = true; }
     const sLL = await geocode(p.start);
     if (!sLL) throw new Error(p._basic && !hasGroup()
       ? `לא מצאתי את "${p.start?.name}". הפענוח החכם לא פעיל: הכניסו קוד קבוצה ב-⚙ כדי שאבין בקשות כמו "בעקבות מבצע…" ואחפש ברשת.`
@@ -1534,7 +1535,9 @@ async function run(fromPrompt, preset = null) {
     if (!p.loop && p.end) { eLL = await geocode(p.end); if (!eLL) throw new Error(`לא מצאתי את היעד "${p.end.name}".`); setEnd(eLL); }
     else if (endMarker) { endMarker.remove(); endMarker = null; }
     const viaLL = [];
-    for (const v of p.via || []) { const ll = await geocode(v); if (!ll) throw new Error(`לא מצאתי את "${v.name}".`); viaLL.push({ ll, name: v.name, note: v.note }); }
+    const lost = [];
+    for (const v of p.via || []) { const ll = await geocode(v); if (!ll) { lost.push(v.name); continue; } viaLL.push({ ll, name: v.name, note: v.note }); }
+    if (lost.length) { p.via = (p.via || []).filter(v => !lost.includes(v.name)); } p._lost = lost;
 
     const multi = (p.days || 1) > 1;
     if (multi && !(p.poi_types || []).includes('nightcamp')) p.poi_types = [...(p.poi_types || []), 'nightcamp'];
@@ -2029,6 +2032,7 @@ function render(i, day = null) {
   });
   if (r.unrated) $('legend').innerHTML = `<span><i style="--c:${DCOL('x')}"></i>מסלול מיובא: אין דירוג קושי לקטעים</span>`;
   const w = [];
+  if (!current.saved && p._lost?.length) w.push(`לא מצאתי במפה את ${p._lost.map(n => '"' + n + '"').join(', ')}, אז דילגתי. כתבו בתיבת השינוי מקום קרוב אחר אם חשוב לכם.`);
   if (!current.saved && current.res.note && /^⚠/.test(current.res.note)) w.push(current.res.note);
   if (current.G?.eRep && r.edges) { const hit = r.edges.filter(e => current.G.eRep[e]).length; if (hit) w.push(`המסלול עובר ליד דיווחים מהשטח של החבורה (קושי שונה מהמפה). לחצו על הסימנים במפה לפרטים.`); }
   if (r.unrated) w.push('המסלול יובא מקובץ. לא בדקתי לו קושי ושטחי אש, רק שטחי A. סעו בו בזהירות כמו במסלול לא מוכר.');
@@ -2109,7 +2113,7 @@ function render(i, day = null) {
   $('sheet').classList.remove('min', 'full'); $('sheet').classList.add('has-results');
 }
 function tripHead(r, p) {
-  const nm = x => x?.name ? '\u2068' + x.name.replace(/^📍\s*/, '') + '\u2069' : null;
+  const nm = x => x?.name ? '\u2068' + x.name.replace(/^📍\s*/, '').split(/[,،]/)[0].trim() + '\u2069' : null;
   const a = nm(p.start) || 'מסלול', b = p.loop ? null : nm(p.end);
   const D = r.days && r.days.length > 1 ? r.days.length : 0;
   $('thTitle').textContent = p.loop ? `לופ מ${a}` : b ? `${a} ← ${b}` : a;
