@@ -389,7 +389,7 @@ ul.pois li{margin-bottom:8px}
       <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off"></details>
   </div>
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.41 · 10.11.2026 11:34</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.42 · 10.11.2026 11:57</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2230,7 +2230,20 @@ async function osrmFerry(wps, fer) {
 async function poisFromTiles(points, radius) {
   const keysBy = points.map(q => tilesFor(bboxFor([q], radius)));
   const { tiles } = await ensureTiles([...new Set(keysBy.flat())], { bg: true, noOsm: true });
-  const camps = [], supply = [], seen = new Set(), miss = [];
+  const camps = [], supply = [], seen = new Set(), miss = [], lakes = new Map();
+  for (const t of Object.values(tiles)) for (const [id, nm, ring] of t.lk || []) lakes.set(id, { nm, ring });
+  // within ~400 m of a lake shore (or on it)
+  const byLake = (la, lo) => {
+    const kx = Math.cos(la * Math.PI / 180) * 111320, ky = 110540;
+    for (const { nm, ring } of lakes.values()) {
+      for (let q = 0; q + 3 < ring.length; q += 2) {
+        const ax = (ring[q + 1] - lo) * kx, ay = (ring[q] - la) * ky, bx = (ring[q + 3] - lo) * kx, by = (ring[q + 2] - la) * ky;
+        const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy, u = L ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / L)) : 0;
+        if (Math.hypot(ax + u * dx, ay + u * dy) < 400) return nm || 'אגם';
+      }
+    }
+    return null;
+  };
   const LAKE = /lago|lake|jezero|jezioro|limni|λίμνη|λιμνη|\bsee\b|\blac\b|езеро|lacul|lacu\b|liqen/i;
   points.forEach((q, n) => {
     if (keysBy[n].some(k => !tiles[k])) { miss.push(n); return; }
@@ -2239,7 +2252,8 @@ async function poisFromTiles(points, radius) {
       if (t.tourism === 'camp_site' || t.tourism === 'caravan_site') {
         const auth = campAuth(t, la, lo); if (!auth) continue; seen.add(tp + id);
         const name = t['name:he'] || t.name || (t.tourism === 'caravan_site' ? 'חניון קרוואנים' : 'קמפינג');
-        camps.push({ id: tp + id, type: 'nightcamp', name, lat: la, lon: lo, auth, fee: t.fee, water: t.drinking_water, toilets: t.toilets, website: t.website, lake: LAKE.test(name) });
+        const lk = byLake(la, lo);
+        camps.push({ id: tp + id, type: 'nightcamp', name, lat: la, lon: lo, auth: lk ? `${auth} · על שפת ${lk}` : auth, fee: t.fee, water: t.drinking_water, toilets: t.toilets, website: t.website, lake: !!lk || LAKE.test(name) });
       } else if (t.amenity === 'fuel' || t.shop === 'supermarket' || t.shop === 'convenience') {
         seen.add(tp + id);
         supply.push({ kind: t.amenity === 'fuel' ? 'fuel' : 'food', name: t.name || t.brand || (t.amenity === 'fuel' ? 'תחנת דלק' : 'סופרמרקט'), lat: la, lon: lo });
@@ -2411,7 +2425,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
   status(`מחפש ${cuts.length} חניוני לילה בדרך…`);
   const wantLake = !!p.night_near_water || /אגם|lake|lago|jezero/i.test(current?.prompt || '') || /אגם/.test($('prompt').value);
   const land = cuts.map((c, k) => c.ferryNight ? null : k).filter(k => k != null);
-  const fromT = land.length ? await poisFromTiles(land.map(k => cuts[k].c), 16000) : { camps: [], supply: [], miss: [] };
+  const fromT = land.length ? await poisFromTiles(land.map(k => cuts[k].c), wantLake ? 25000 : 16000) : { camps: [], supply: [], miss: [] };
   const camps = fromT.camps, supply = fromT.supply;
   const slow = fromT.miss.map(n => cuts[land[n]].c);
   if (slow.length) { // areas without prebuilt tiles: ask OSM, but never wait long
@@ -2421,11 +2435,11 @@ async function planOverland(p, sLL, eLL, viaLL) {
   const nights = cuts.map((c, k) => {
     if (c.ferryNight) return { type: 'nightcamp', name: '⛴ לילה על המעבורת', lat: c.c[0], lon: c.c[1], auth: 'מעבורת לילה: הזמינו תא או מושבים ומקום לרכב', ferry: true };
     let best = null, bs = Infinity;
-    for (const cp of camps) { const d = hav(c.c[0], c.c[1], cp.lat, cp.lon); if (d > 16000) continue; const sc = d - (cp.lake ? 12000 : 0) - (cp.name !== 'קמפינג' && cp.name !== 'חניון קרוואנים' ? 1500 : 0); if (sc < bs) { bs = sc; best = cp; } }
-    if (!best) notes.push(`לילה ${k + 1}: לא מצאתי קמפינג רשמי ב-15 ק"מ מנקודת סוף היום.`);
+    for (const cp of camps) { const d = hav(c.c[0], c.c[1], cp.lat, cp.lon); if (d > (wantLake ? 25000 : 16000)) continue; const sc = d - (cp.lake ? (wantLake ? 22000 : 8000) : 0) - (cp.name !== 'קמפינג' && cp.name !== 'חניון קרוואנים' ? 1500 : 0); if (sc < bs) { bs = sc; best = cp; } }
+    if (!best) { notes.push(`לילה ${k + 1}: לא מצאתי קמפינג רשמי ב-15 ק"מ מנקודת סוף היום.`); return { type: 'dayend', name: 'סוף היום: אין קמפינג רשמי קרוב', lat: c.c[0], lon: c.c[1] }; }
     return best;
   });
-  if (wantLake && nights.some(n => n && !n.lake && !n.ferry)) notes.push('לא בכל לילה יש קמפינג על שפת אגם; במקומות האלה בחרתי את הקרוב לדרך.');
+  if (wantLake && nights.some(n => n && !n.lake && !n.ferry && n.type !== 'dayend')) notes.push('לא בכל לילה יש קמפינג על שפת אגם; במקומות האלה בחרתי את הקרוב לדרך.');
   // 4. final road route through highlights and camps, in order
   const marks = [];
   vias.forEach((_, l) => marks.push({ i: legIdx0[l + 1], o: 1, ll: wp0[l + 1], via: l }));
@@ -3246,7 +3260,7 @@ function render(i, day = null) {
       const b = document.createElement('button'); b.className = 'dayrow';
       b.innerHTML = `<span class="dn"></span><span class="dt"></span><span class="dm"></span><span class="ds"></span>`;
       b.querySelector('.dn').textContent = `יום ${k + 1}`; b.querySelector('.dn').style.cssText = `background:${DAYC[k % DAYC.length]};color:#fff`;
-      b.querySelector('.dt').textContent = d.camp ? `לינה: ${d.camp.name}` : 'סיום הטיול';
+      b.querySelector('.dt').textContent = d.camp ? (d.camp.type === 'dayend' ? d.camp.name : `לינה: ${d.camp.name}`) : k === D.length - 1 ? 'סיום הטיול' : 'סוף היום: אין קמפינג רשמי קרוב';
       b.querySelector('.dm').textContent = `${(d.len / 1000).toFixed(0)} ק"מ · ${fmtH(d.hrs)}`;
       b.querySelector('.ds').textContent = [d.mid ? 'עצירה: ' + d.mid.name : null, d.camp ? (d.camp.type === 'dayend' ? 'אין חניון לילה מורשה קרוב. בדקו חלופה לפני היציאה.' : campSub(d.camp)) : null].filter(Boolean).join(' · ');
       b.onclick = () => render(i, k);

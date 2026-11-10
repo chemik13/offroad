@@ -49,6 +49,10 @@ def poi_node(t):
             or (t.get("natural") in ("peak", "water") and "name" in t) or ("historic" in t and "name" in t))
 
 
+def is_lake(t):
+    return t.get("natural") == "water" and (t.get("water") in ("lake", "reservoir") or ("water" not in t and "name" in t))
+
+
 def is_mil(t): return t.get("landuse") == "military" or t.get("military") in MIL_KINDS
 
 
@@ -64,7 +68,7 @@ class Builder(osmium.SimpleHandler):
 
     def T(self, i, j):
         k = key(i, j)
-        if k not in self.tiles: self.tiles[k] = {"w": [], "p": [], "m": []}
+        if k not in self.tiles: self.tiles[k] = {"w": [], "p": [], "m": [], "lk": []}
         return self.tiles[k]
 
     def tiles_for_box(self, s, w, n, e):
@@ -98,7 +102,8 @@ class Builder(osmium.SimpleHandler):
     def area(self, a):
         t = {tg.k: tg.v for tg in a.tags}
         mil, camp = is_mil(t) or is_reserve(t), t.get("tourism") in ("camp_site", "caravan_site")
-        if not (mil or camp): return
+        lake = is_lake(t)
+        if not (mil or camp or lake): return
         rings = []
         try:
             for outer in a.outer_rings():
@@ -113,13 +118,20 @@ class Builder(osmium.SimpleHandler):
         if mil:
             rec = [tp + str(a.orig_id()), rings, pick(t, MIL_TAGS)]
             for i, j in self.tiles_for_box(s, wv, n, e): self.T(i, j)["m"].append(rec)
+        if lake and (n - s) + (e - wv) > 0.004:  # ~ a few hectares and up: shoreline for "sleep by a lake"
+            ring = max(rings, key=len)
+            pts = len(ring) // 2; step = max(1, pts // 150)
+            ring = [v for q in range(0, pts, step) for v in ring[2 * q:2 * q + 2]] + ring[-2:]
+            rec = [tp + str(a.orig_id()), t.get("name:he") or t.get("name") or "", ring]
+            for i, j in self.tiles_for_box(s, wv, n, e): self.T(i, j)["lk"].append(rec)
         if camp:  # same as Overpass "out center": centre of the bounding box
             la, lo = (s + n) / 2, (wv + e) / 2
             self.T(*tile_of(la, lo))["p"].append([tp, a.orig_id(), r6(la), r6(lo), pick(t, POI_TAGS)])
 
 
 def merge_into(old, new):
-    for part, idf in (("w", lambda r: r[0]), ("p", lambda r: (r[0], r[1])), ("m", lambda r: r[0])):
+    for part, idf in (("w", lambda r: r[0]), ("p", lambda r: (r[0], r[1])), ("m", lambda r: r[0]), ("lk", lambda r: r[0])):
+        old.setdefault(part, []); new.setdefault(part, [])
         seen = {idf(r) for r in old[part]}
         old[part] += [r for r in new[part] if idf(r) not in seen]
     return old
