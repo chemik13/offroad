@@ -1239,11 +1239,14 @@ async function fillDayEnds(p, r) {
   const t = await poisFromTiles(pts, 32000);
   const places = [p.start, p.end, ...(p.via || [])].filter(x => x && x.country && x.lat);
   const countryAt = ll => { let b = null, bd = Infinity; for (const x of places) { const d = hav(ll[0], ll[1], x.lat, x.lon); if (d < bd) { bd = d; b = x.country; } } return b || p.country; };
+  const every = Math.max(1, Math.round(p.camp_every_days || p.resupply_every_days || 2));
+  const sinceAt = k => { let c = 0; for (let q = k - 1; q >= 0 && D[q].camp?.wild; q--) c++; return c; }; // nature nights right before this one
   ends.forEach((k, n) => {
     const q = pts[n], rule = WILD_NIGHT[countryAt(q)] || 'no';
+    const campDue = sinceAt(k) + 1 >= every;
     const near = (list, max) => { let b = null, bd = max; for (const x of list) { const d = hav(q[0], q[1], x.lat, x.lon); if (d < bd) { bd = d; b = x; } } return b && { x: b, km: Math.round(bd / 1000) }; };
     const c = near(t.camps, 32000);
-    const w = rule !== 'no' && (p.wild_camping || !c) ? near(t.wild || [], p.wild_camping ? 12000 : 20000) : null;
+    const w = rule !== 'no' && ((p.wild_camping && !(campDue && c)) || !c) ? near(t.wild || [], p.wild_camping ? 12000 : 20000) : null;
     if (w) D[k].camp = { ...D[k].camp, type: 'nightcamp', wild: true, name: `🌲 לינת שטח: ${w.x.name}`, lat: w.x.lat, lon: w.x.lon, auth: `לינת שטח, ${w.km} ק"מ מסוף היום. אין קמפינג רשמי קרוב.` };
     else if (c) D[k].camp = { ...D[k].camp, ...c.x, auth: `${c.x.auth} · ${c.km} ק"מ מסוף היום (נסיעה הלוך-חזור לא כלולה במסלול)` };
   });
@@ -1453,8 +1456,8 @@ async function planOverland(p, sLL, eLL, viaLL) {
       if (w) { sinceCamp++; return { type: 'nightcamp', wild: true, lake: w.kind === 'lake', name: `🌲 לינת שטח: ${w.name}`, lat: w.lat, lon: w.lon,
         auth: rule === 'yes' ? 'לינת שטח (לא קמפינג). מקובלת כאן מחוץ לשמורות. בלי מדורה בקיץ, השאירו נקי.' : 'לינת שטח (לא קמפינג). רשמית אסורה כאן אבל נסבלת לרוב: לילה אחד, רחוק מחופים ואתרים, בלי לפרוש מחנה.' }; }
     }
-    sinceCamp = 0;
-    return pickCamp(c, k);
+    const pc = pickCamp(c, k); sinceCamp = pc?.wild ? sinceCamp + 1 : 0;
+    return pc;
   });
   function pickCamp(c, k) {
     let best = null, bs = Infinity;
@@ -1463,7 +1466,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
       let far = null, fd = 32000; for (const cp of camps) { const d = hav(c.c[0], c.c[1], cp.lat, cp.lon); if (d < fd) { fd = d; far = cp; } }
       const rule = WILD_NIGHT[countryAt(c.c)] || 'no';
       let w = null, wd = 20000; if (rule !== 'no') for (const x of fromT.wild || []) { const d = hav(c.c[0], c.c[1], x.lat, x.lon); if (d < wd) { wd = d; w = x; } }
-      if (w && (wildOk || !far)) return { type: 'nightcamp', wild: true, lake: w.kind === 'lake', name: `🌲 לינת שטח: ${w.name}`, lat: w.lat, lon: w.lon, auth: `לינת שטח (אין קמפינג קרוב). ${rule === 'yes' ? 'מקובלת כאן מחוץ לשמורות.' : 'רשמית אסורה כאן אבל נסבלת לרוב: לילה אחד, בלי לפרוש מחנה.'}` };
+      if (w && !far) return { type: 'nightcamp', wild: true, lake: w.kind === 'lake', name: `🌲 לינת שטח: ${w.name}`, lat: w.lat, lon: w.lon, auth: `לינת שטח (אין קמפינג קרוב). ${rule === 'yes' ? 'מקובלת כאן מחוץ לשמורות.' : 'רשמית אסורה כאן אבל נסבלת לרוב: לילה אחד, בלי לפרוש מחנה.'}` };
       if (far) { notes.push(`לילה ${k + 1}: הקמפינג הקרוב ביותר ${Math.round(fd / 1000)} ק"מ מסוף היום.`); return far; }
       notes.push(`לילה ${k + 1}: לא מצאתי קמפינג רשמי ב-30 ק"מ מנקודת סוף היום.`); return { type: 'dayend', name: 'סוף היום: אין קמפינג רשמי קרוב', lat: c.c[0], lon: c.c[1] };
     }

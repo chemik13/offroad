@@ -92,7 +92,7 @@ const CASES_IL = [
     } catch (e) { res = { fail: 'timeout/exception: ' + e.message.slice(0, 120) }; }
     res.sec = Math.round((Date.now() - t0) / 1000); res.errs = errs;
     // checks against the request
-    const P = c.p, bad = [];
+    const P = { ...c.p, ...(process.env.EXTRA ? JSON.parse(process.env.EXTRA) : {}) }, bad = [];
     if (res.fail) bad.push('FAILED: ' + res.fail.slice(0, 140));
     else {
       if (P.days > 1 && res.days !== P.days) bad.push(`days ${res.days}≠${P.days}`);
