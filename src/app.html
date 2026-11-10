@@ -299,7 +299,6 @@ ul.pois li{margin-bottom:8px}
         <button class="mic" id="micBtn" type="button" aria-label="דברו במקום להקליד" title="דברו במקום להקליד"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg></button></div>
       <div style="display:flex;flex-direction:column;gap:6px"><button class="go" id="goBtn">בנה מסלול</button><button class="ghost" id="talkBtn" title="מצב שיחה: מדברים והאפליקציה עונה בקול" style="padding:7px 8px;font-size:13px">שיחה</button></div>
     </div>
-      <div class="vehpick"><span class="vlab">הרכב שלכם</span><div class="seg" id="vehSeg" role="radiogroup" aria-label="הרכב שלכם"></div><small id="vehHint"></small></div>
       <div class="examples" id="examples"></div>
     </div>
     <div id="tripHead" hidden>
@@ -312,7 +311,6 @@ ul.pois li{margin-bottom:8px}
 
     <div id="results" hidden>
       <div class="quick">
-        <div class="qrow"><span class="vlab">רכב</span><div class="seg" id="vehSeg2" role="radiogroup" aria-label="רכב"></div></div>
         <div class="qrow"><span class="vlab">קושי</span><div class="seg" id="diffSeg" role="radiogroup" aria-label="קושי"></div></div>
       </div>
       <div class="tabs" id="tabs"></div>
@@ -386,7 +384,6 @@ ul.pois li{margin-bottom:8px}
   <div style="display:flex;flex-direction:column;gap:10px">
     <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">קוד קבוצה<input id="groupCode" type="password" autocomplete="off"></label>
     <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">השם שלך (מופיע ליד מסלולים ששמרת)<input id="nick" type="text" autocomplete="nickname" style="direction:rtl"></label>
-    <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">הרכב שלי (ברירת המחדל לכל מסלול)<select id="myVeh" style="font:inherit;font-size:15px;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--stone);color:var(--ink)"><option value="stock">רגיל: 4x4 מהמפעל, בלי הגבהה</option><option value="raised">מוגבה + הילוך כוח</option><option value="lockers">מוגבה + נעילות</option></select></label>
     <details><summary style="font-size:13px;cursor:pointer">מתקדם: מפתח Claude אישי</summary>
       <p style="margin:6px 0">רק אם אין קוד קבוצה. נשמר בדפדפן הזה בלבד. מאפשר טיולים לפי נושא ("בעקבות…") עם חיפוש ברשת.</p>
       <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off"></details>
@@ -499,8 +496,7 @@ for (const [k, v] of Object.entries(POI_TYPES)) {
   if (v.safety) continue; // fuel / water are shown along the route, not chosen as stops
   const l = document.createElement('label'); l.innerHTML = `<input type="checkbox" value="${k}"> ${v.he}`; $('pPois').append(l);
 }
-// ---------- quick pickers: vehicle + difficulty (plain words, one tap) ----------
-const VEH = [['stock', 'רגיל', 'רכב 4x4 מהמפעל, בלי הגבהה'], ['raised', 'מוגבה', 'מוגבה, עם הילוך כוח (low)'], ['lockers', 'נעילות', 'מוגבה, עם הילוך כוח ונעילות דיפרנציאל']];
+// ---------- quick pickers: difficulty (plain words, one tap) ----------
 const DIFFS = [['easy', 'קל'], ['medium', 'בינוני'], ['hard', 'קשה']];
 function seg(el, opts, val, onPick) {
   el.innerHTML = '';
@@ -511,12 +507,7 @@ function seg(el, opts, val, onPick) {
   }
   el.dataset.v = val;
 }
-function setMyVeh(v) { store.set('myVeh', v); $('pVeh').value = v; drawPickers(); }
 function drawPickers() {
-  const v = $('results').hidden ? myVehicle() : ($('pVeh').value || myVehicle());
-  seg($('vehSeg'), VEH, myVehicle(), setMyVeh);
-  $('vehHint').textContent = VEH.find(x => x[0] === myVehicle())[2] + '. אפשר גם לכתוב בבקשה.';
-  seg($('vehSeg2'), VEH, v, k => { setMyVeh(k); rebuildWith(); });
   seg($('diffSeg'), DIFFS, $('pDiff').value || 'medium', k => { $('pDiff').value = k; drawPickers(); rebuildWith(); });
 }
 function rebuildWith() { if (!busy && current?.p) run(false); }
@@ -556,9 +547,9 @@ async function checkConn() {
     $('connState').textContent = 'מחובר לספרייה המשותפת' + (h.claude ? ' · פענוח חכם פעיל' : ' · פענוח חכם לא הוגדר בשרת') + use;
   } catch (e) { $('connState').textContent = e.status === 401 ? 'קוד הקבוצה לא נכון.' : 'אין חיבור לשרת.'; }
 }
-$('settingsBtn').onclick = () => { $('apiKey').value = store.get('apiKey') || ''; $('groupCode').value = store.get('groupCode') || ''; $('nick').value = store.get('nick') || ''; $('myVeh').value = myVehicle(); $('settings').showModal(); checkConn(); };
+$('settingsBtn').onclick = () => { $('apiKey').value = store.get('apiKey') || ''; $('groupCode').value = store.get('groupCode') || ''; $('nick').value = store.get('nick') || ''; $('settings').showModal(); checkConn(); };
 $('closeSettings').onclick = () => $('settings').close();
-$('saveKey').onclick = () => { store.set('apiKey', $('apiKey').value.trim()); store.set('groupCode', $('groupCode').value.trim()); store.set('nick', $('nick').value.trim()); store.set('myVeh', $('myVeh').value); checkConn(); status('נשמר.'); };
+$('saveKey').onclick = () => { store.set('apiKey', $('apiKey').value.trim()); store.set('groupCode', $('groupCode').value.trim()); store.set('nick', $('nick').value.trim()); checkConn(); status('נשמר.'); };
 store.get('lastPrompt') && ($('prompt').value = store.get('lastPrompt'));
 
 function milNote() {
@@ -566,7 +557,7 @@ function milNote() {
   $('milNote').textContent = $('pMil').value !== 'auto' ? '' : (r.info ? (r.info.open ? `${r.info.why}: שטחי אש בדרך כלל פתוחים, ייכללו במסלול. בסיסים צבאיים נחסמים תמיד.` : `${r.info.why}: שטחי אש נחסמים.`) : '');
 }
 $('pMil') && document.addEventListener('change', ev => { if (ev.target.id === 'pMil' || ev.target.id === 'pDate') milNote(); });
-function myVehicle() { const v = store.get('myVeh'); return ['stock', 'raised', 'lockers'].includes(v) ? v : 'raised'; }
+function myVehicle() { return 'lockers'; } // the group's car: lifted Land Cruiser with diff lockers
 function status(t, err) { $('status').textContent = t; $('status').classList.toggle('err', !!err); }
 
 // ---------- params <-> form ----------
@@ -577,7 +568,7 @@ function fillForm(p) {
   $('pHours').value = p.duration_hours || '';
   $('pKm').value = p.distance_km || '';
   $('pDiff').value = p.difficulty || 'medium';
-  $('pVeh').value = p.vehicle || myVehicle();
+  $('pVeh').value = myVehicle();
   $('pPois').querySelectorAll('input').forEach(i => i.checked = (p.poi_types || []).includes(i.value));
   $('pVia').value = (p.via || []).map(v => v.name).join(', ');
   $('pAsph').checked = !!p.avoid_asphalt;
@@ -596,7 +587,7 @@ function readForm(prev = {}) {
     loop: $('pLoop').value === '1',
     duration_hours: +$('pHours').value || null,
     distance_km: +$('pKm').value || null,
-    difficulty: $('pDiff').value, vehicle: $('pVeh').value,
+    difficulty: $('pDiff').value, vehicle: myVehicle(),
     poi_types: [...$('pPois').querySelectorAll('input:checked')].map(i => i.value),
     via: viaNames.map(n => (prev.via || []).find(v => v.name === n) || { name: n }),
     avoid_asphalt: $('pAsph').checked, military_mode: $('pMil').value, allow_area_a: $('pAA').value === '1', days: Math.max(1, +$('pDays').value || 1), hours_per_day: +$('pHpd').value || null, date: $('pDate').value || null,
@@ -623,7 +614,6 @@ const TOOL = {
       resupply_every_days: { type: 'number', description: 'Plan fuel + food stops every N days, if asked' },
       distance_km: { type: 'number', description: 'Total distance in km, if stated' },
       difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'] },
-      vehicle: { type: 'string', enum: ['stock', 'raised', 'lockers'], description: 'ONLY if the user states the vehicle for this trip: stock = standard SUV, raised = lifted with low range, lockers = lifted with diff lockers. Omit otherwise (the user has a saved default).' },
       poi_types: { type: 'array', items: { type: 'string', enum: Object.keys(POI_TYPES).filter(k => !POI_TYPES[k].safety) }, description: 'Kinds of stops wanted along the way. nightcamp = overnight camping site (חניון לילה); camp = day picnic site only.' },
       via: { type: 'array', items: { type: 'object', properties: { name: { type: 'string', description: 'Hebrew name as on a map' }, lat: { type: 'number' }, lon: { type: 'number' }, note: { type: 'string', description: 'One short Hebrew line: why this stop (what happened here / what to see)' } }, required: ['name', 'lat', 'lon'] }, description: 'Ordered stops the route must pass (max 8). For themed trips these are the theme sites.' },
       story_he: { type: 'string', description: 'For themed trips: 2-4 Hebrew sentences telling the story the trip follows. Omit otherwise.' },
@@ -635,7 +625,7 @@ const TOOL = {
       military_mode: { type: 'string', enum: ['auto', 'avoid', 'allow'], description: 'Firing zones: auto (default: allowed only on weekends/holidays), avoid, or allow if the user explicitly wants them' },
       summary_he: { type: 'string', description: 'One short Hebrew sentence restating what was understood' },
     },
-    required: ['loop', 'difficulty', 'vehicle', 'poi_types', 'summary_he'],
+    required: ['loop', 'difficulty', 'poi_types', 'summary_he'],
   },
 };
 const SYSTEM = () => `Today is ${new Date().toISOString().slice(0, 10)} (${new Date().toLocaleDateString('en-US', { weekday: 'long' })}). You plan 4x4 jeep trips in Israel and in Europe for a group of Israeli friends and convert each request into structured parameters by calling route_request exactly once at the end.
@@ -645,7 +635,7 @@ const SYSTEM = () => `Today is ${new Date().toISOString().slice(0, 10)} (${new D
 - Themed requests (a historical event or military operation, a book, a person, a named trail, "in the footsteps of", "בעקבות"): research the theme, then choose the real sites in order as start, via and end. Prefer points reachable by 4x4 (trailheads, memorial sites, viewpoints, ruins) over city centers, and skip sites that are now inside military bases or Area A. Add a short Hebrew note per via and a 2-4 sentence Hebrew story_he. Keep at most 8 vias and keep notes short. The theme's final destination MUST be "end" (with lat/lon), never left out or put only in via.
 - Refinement requests come with the current parameters as JSON: return the full updated parameters, changing only what was asked.
 - If the user did not say where to start: for themed trips start at the theme's natural starting point; otherwise omit start. If they say "from my location", set from_my_location.
-- Defaults: omit vehicle unless stated, difficulty medium, point-to-point (loop=false). For several days set days, and include nightcamp in poi_types.`;
+- The group always drives a lifted Land Cruiser with diff lockers. Defaults: difficulty medium, point-to-point (loop=false). For several days set days, and include nightcamp in poi_types.`;
 const VOICE_SYSTEM = `
 VOICE CONVERSATION MODE: the user is talking and hears your text read aloud in Hebrew.
 - Keep spoken text to 1-2 short Hebrew sentences, no lists, no symbols, no markdown.
@@ -1021,7 +1011,7 @@ const talk = (() => {
     const np = { allow_area_a: false, military_mode: 'auto', via: [], ...tu.input };
     for (const pl of [np.start, np.end, ...(np.via || [])]) if (pl && pl.lat && pl.lon) pl.researched = true;
     if (current?.p) { for (const k of ['start', 'end']) if (np[k] && current.p[k] && np[k].name === current.p[k].name && current.p[k].latlng) np[k].latlng = current.p[k].latlng; if (!np.date && current.p.date) np.date = current.p.date; }
-    if (!np.vehicle) np.vehicle = myVehicle();
+    np.vehicle = myVehicle();
     await run(true, np);
     const summary = lastRunErr ? 'לא הצלחתי לבנות מסלול: ' + lastRunErr : routeSummary();
     pendingTool = { type: 'tool_result', tool_use_id: tu.id, content: lastRunErr ? 'נכשל: ' + lastRunErr : 'נבנה: ' + summary };
@@ -1483,7 +1473,7 @@ async function run(fromPrompt, preset = null) {
         catch (e) { smartErr = e.status === 429 ? e.message : e.status === 401 ? 'קוד הקבוצה או המפתח לא נכונים.' : e.status === 503 ? 'מפתח Claude לא הוגדר בשרת.' : 'הפענוח החכם נכשל' + (e.detail ? ` (${e.detail})` : e.status ? ` (${e.status})` : '') + '.'; }
       }
       if (!p) { p = parseLocal(text); p._basic = true; p._smartErr = smartErr; }
-      if (!p.vehicle) p.vehicle = myVehicle(); // the user's saved car unless the prompt names another
+      p.vehicle = myVehicle(); // always the group's Land Cruiser
       if (!p.start && (p.from_my_location || /מהמיקום שלי|מאיפה שאני|מהמקום שלי/.test(text))) {
         status('מאתר את המיקום שלך…');
         const pos = await new Promise((res, rej) => navigator.geolocation ? navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: false, timeout: 12000, maximumAge: 300000 }) : rej(new Error('no geo'))).catch(() => null);
