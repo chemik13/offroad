@@ -28,14 +28,35 @@ const CASES = [
   { id: 'dolomites-21d', p: { ...M, country: 'GR', start: S('Thessaloniki', 40.64, 22.94, 'GR'), days: 21, max_km_per_day: 100, offroad_share: 0.35, night_near_water: true, resupply_every_days: 2, poi_types: ['nightcamp'], loop: true,
     via: [S('Zagori', 39.88, 20.75), S('Igoumenitsa', 39.505, 20.265, 'GR', { ferry_to_next: true, ferry_hours: 26 }), S('Venezia', 45.44, 12.32, 'IT'), S('Passo Giau', 46.48, 12.05, 'IT'), S('Lago di Braies', 46.69, 12.08, 'IT'), S('Venezia porto', 45.43, 12.31, 'IT', { ferry_to_next: true, ferry_hours: 26 }), S('Igoumenitsa port', 39.50, 20.26, 'GR'), S('Meteora', 39.71, 21.63, 'GR')] } },
 ];
+const IL = (n, la, lo) => S(n, la, lo, 'IL');
+const CASES_IL = [
+  { id: 'il-ramon-4h', p: { ...M, country: 'IL', start: IL('מצפה רמון', 30.61, 34.80), loop: false, duration_hours: 4 } },
+  { id: 'il-ramon-loop-hard', p: { ...M, country: 'IL', start: IL('מצפה רמון', 30.61, 34.80), loop: true, duration_hours: 6, difficulty: 'hard' } },
+  { id: 'il-ramon-beerot', p: { ...M, country: 'IL', start: IL('מצפה רמון', 30.61, 34.80), end: IL('חניון בארות', 30.588, 34.889), loop: false, poi_types: ['viewpoint'] } },
+  { id: 'il-golan-half', p: { ...M, country: 'IL', start: IL('קצרין', 32.99, 35.69), loop: true, duration_hours: 4, poi_types: ['spring', 'viewpoint'] } },
+  { id: 'il-menashe-2h', p: { ...M, country: 'IL', start: IL('רמות מנשה', 32.60, 35.05), loop: true, duration_hours: 2, difficulty: 'easy' } },
+  { id: 'il-yatir-easy', p: { ...M, country: 'IL', start: IL('יער יתיר', 31.35, 35.00), loop: true, duration_hours: 3, difficulty: 'easy' } },
+  { id: 'il-meron-loop', p: { ...M, country: 'IL', start: IL('מירון', 32.98, 35.43), loop: true, duration_hours: 4 } },
+  { id: 'il-eilat-hard', p: { ...M, country: 'IL', start: IL('שחורת', 29.65, 34.93), loop: true, duration_hours: 7, difficulty: 'hard', avoid_asphalt: true } },
+  { id: 'il-arava', p: { ...M, country: 'IL', start: IL('צופר', 30.56, 35.18), end: IL('פארן', 30.33, 35.15), loop: false, duration_hours: 5 } },
+  { id: 'il-judean-desert', p: { ...M, country: 'IL', start: IL('מצפה שלם', 31.57, 35.40), end: IL('מצדה', 31.31, 35.36), loop: false, duration_hours: 6 } },
+  { id: 'il-firing-weekday', p: { ...M, country: 'IL', start: IL('מצפה רמון', 30.61, 34.80), loop: true, duration_hours: 6, date: '2026-11-17' }, expectMil: 0 },
+  { id: 'il-firing-saturday', p: { ...M, country: 'IL', start: IL('מצפה רמון', 30.61, 34.80), loop: true, duration_hours: 6, date: '2026-11-14' }, allowMil: true },
+  { id: 'il-area-a', p: { ...M, country: 'IL', start: IL('מצפה יריחו', 31.82, 35.40), end: IL('נבי מוסא', 31.79, 35.43), loop: false, duration_hours: 3 }, expectAA: 0 },
+  { id: 'il-2d-negev', p: { ...M, country: 'IL', start: IL('מצפה רמון', 30.61, 34.80), days: 2, poi_types: ['nightcamp', 'viewpoint'], loop: false } },
+  { id: 'il-3d-loop-bs', p: { ...M, country: 'IL', start: IL('באר שבע', 31.25, 34.79), days: 3, poi_types: ['nightcamp'], loop: true } },
+  { id: 'il-paran-long', p: { ...M, country: 'IL', start: IL('צופר', 30.56, 35.18), end: IL('אילת', 29.56, 34.95), loop: false, distance_km: 150 } },
+  { id: 'il-golan-eilat-5d', p: { ...M, country: 'IL', start: IL('קצרין', 32.99, 35.69), end: IL('אילת', 29.56, 34.95), days: 5, max_km_per_day: 150, poi_types: ['nightcamp'], loop: false } },
+  { id: 'il-galil-2d', p: { ...M, country: 'IL', start: IL('צפת', 32.965, 35.496), end: IL('קצרין', 32.99, 35.69), days: 2, poi_types: ['nightcamp', 'spring'], loop: false } },
+];
 (async () => {
   const [html, out = '/tmp/suite', only] = process.argv.slice(2);
   fs.mkdirSync(out, { recursive: true });
   const b = await chromium.launch(process.env.HTTPS_PROXY ? { proxy: { server: process.env.HTTPS_PROXY } } : {});
   const rows = [];
-  for (const c of CASES.filter(c => !only || only.split(',').includes(c.id))) {
+  for (const c of (process.env.SUITE === 'il' ? CASES_IL : CASES).filter(c => !only || only.split(',').includes(c.id))) {
     const pg = await b.newPage({ viewport: { width: 1400, height: 900 }, ignoreHTTPSErrors: true });
-    const errs = []; pg.on('pageerror', e => errs.push(e.message));
+    const errs = []; pg.on('pageerror', e => errs.push(e.message)); if (process.env.DBG) pg.on('console', m => { if (/dbg/.test(m.text())) console.log('C', m.text().slice(0, 200)); });
     await pg.route(/tile\.|arcgis|fonts|opentopomap/, r => r.abort());
     await pg.route(/overpass|kumi|coffee|mail\.ru/, r => r.abort());
     await pg.route(/project-osrm/, async r => { try { const resp = await r.fetch({ timeout: 60000 }); await r.fulfill({ response: resp, headers: { ...resp.headers(), 'access-control-allow-origin': '*' } }); } catch { r.abort(); } });
@@ -52,7 +73,7 @@ const CASES = [
         const p = current.p, D = r.days && r.days.length > 1 ? r.days : null;
         const near = (ll, max) => { let m = Infinity; for (let i = 0; i < r.coords.length; i += 1) { const d = hav(ll[0], ll[1], r.coords[i][0], r.coords[i][1]); if (d < m) m = d; } return m; };
         const viaMiss = (P.via || []).filter(v => near([v.lat, v.lon]) > 8000).map(v => v.name + ' ' + Math.round(near([v.lat, v.lon]) / 1000) + 'km');
-        let jumps = 0; const jumpAt = []; for (const sg of r.segs) if (!sg.ferry) for (let i = 1; i < sg.pts.length; i++) { const d = hav(sg.pts[i - 1][0], sg.pts[i - 1][1], sg.pts[i][0], sg.pts[i][1]); if (d > (sg.road ? 6000 : 1500)) { jumps++; jumpAt.push(sg.pts[i - 1].map(x => x.toFixed(3)).join(',') + '→' + sg.pts[i].map(x => x.toFixed(3)).join(',') + ' ' + Math.round(d) + 'm road=' + !!sg.road); } }
+        let jumps = 0; const jumpAt = []; for (const sg of r.segs) if (!sg.ferry) for (let i = 1; i < sg.pts.length; i++) { const d = hav(sg.pts[i - 1][0], sg.pts[i - 1][1], sg.pts[i][0], sg.pts[i][1]); if (d > (sg.road ? 6000 : 3000)) { jumps++; jumpAt.push(sg.pts[i - 1].map(x => x.toFixed(3)).join(',') + '→' + sg.pts[i].map(x => x.toFixed(3)).join(',') + ' ' + Math.round(d) + 'm road=' + !!sg.road); } }
         // driving the same ground twice (not counting the loop closing back home)
         const cell = new Map(); let again = 0, tot = 0;
         for (let i = 1; i < r.coords.length; i++) { const d = hav(r.coords[i - 1][0], r.coords[i - 1][1], r.coords[i][0], r.coords[i][1]); tot += d; const k = Math.round(r.coords[i][0] / 0.002) + ',' + Math.round(r.coords[i][1] / 0.0027); const f = cell.get(k); if (f != null && i - f > 40) again += d; else if (f == null) cell.set(k, i); }
@@ -60,9 +81,9 @@ const CASES = [
         const startD = P.start ? hav(P.start.lat, P.start.lon, r.coords[0][0], r.coords[0][1]) : 0;
         const endLL = P.loop ? P.start : P.end; const endD = endLL ? hav(endLL.lat, endLL.lon, r.coords[r.coords.length - 1][0], r.coords[r.coords.length - 1][1]) : 0;
         return {
-          days: D ? D.length : 1, km: Math.round(r.len / 1000), off: Math.round((r.len - r.asph) / r.len * 100), hrs: +r.hrs.toFixed(1),
+          days: D ? D.length : 1, km: Math.round(r.len / 1000), off: Math.round((r.len - r.asph) / r.len * 100), hrs: +r.hrs.toFixed(1), hrsAll: +(r.hrs + r.pois.filter(x => x.type !== 'nightcamp').length * 0.25).toFixed(1),
           dayKm: D ? D.map(d => Math.round(d.len / 1000)) : [Math.round(r.len / 1000)], dayOff: D ? D.map(d => Math.round((d.off ?? 0) / 1000)) : [],
-          nights, viaMiss, jumps, jumpAt, again: Math.round(again / tot * 100), startKm: +(startD / 1000).toFixed(1), endKm: +(endD / 1000).toFixed(1),
+          nights, viaMiss, jumps, jumpAt, milKm: +((r.mil || 0) / 1000).toFixed(1), aaKm: +((r.aa || 0) / 1000).toFixed(1), reuseKm: +((r.reuse || 0) / 1000).toFixed(1), again: Math.round(again / tot * 100), startKm: +(startD / 1000).toFixed(1), endKm: +(endD / 1000).toFixed(1),
           warns: [...document.querySelectorAll('.warn')].map(x => x.textContent.slice(0, 110)).filter(t => !/OSM\. מצב השטח|מחוץ לישראל/.test(t)),
           issues: (r.issues || []).map(t => t.slice(0, 110)), overland: !!r.overland, note: (r.note || '').slice(0, 160),
         };
@@ -85,6 +106,10 @@ const CASES = [
       const nn = res.nights.filter(x => x === 'none').length; if (res.nights.length && nn / res.nights.length > 0.3) bad.push(`${nn}/${res.nights.length} nights without camp`);
       if (P.night_near_water && res.nights.length && !res.nights.some(x => /lake/.test(x))) bad.push('no lakeside night');
       if (P.wild_camping) { let run = 0; for (const x of res.nights) { run = /^wild/.test(x) ? run + 1 : 0; if (run >= (P.camp_every_days || 2)) { bad.push('too many wild nights in a row'); break; } } }
+      if (c.expectMil === 0 && res.milKm > 0) bad.push(`${res.milKm} km in firing zones on a weekday`);
+      if (c.expectAA === 0 && res.aaKm > 0) bad.push(`${res.aaKm} km in Area A`);
+      if (P.duration_hours && !P.days && Math.abs(res.hrsAll - P.duration_hours) / P.duration_hours > 0.4) bad.push(`${res.hrsAll}h vs ${P.duration_hours}h asked`);
+      if (P.distance_km && Math.abs(res.km - P.distance_km) / P.distance_km > 0.35) bad.push(`${res.km}km vs ${P.distance_km}km asked`);
       if (res.sec > 120) bad.push(`slow ${res.sec}s`);
       if (res.errs.length) bad.push('page errors: ' + res.errs[0].slice(0, 80));
     }

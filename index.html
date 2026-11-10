@@ -70,6 +70,12 @@ header button{pointer-events:auto;margin-inline-start:auto}
 #tripHead b{font-family:var(--display);font-size:17px;font-weight:600;line-height:1.3}
 #tripHead small{font-size:13px;color:var(--muted);line-height:1.4}
 .linkbtn{flex:none;background:none;border:1px solid var(--line);border-radius:999px;padding:5px 12px;font:500 13px var(--body);color:var(--accent);cursor:pointer}
+#sheet:not(.has-results) #busyLine{display:none}
+.busyline{flex:none;font-size:13px;color:var(--ink);padding:8px 10px 6px;margin-top:6px;border-radius:8px;background:var(--accent-soft);position:relative;overflow:hidden}
+.busyline.err{background:#fde8e8;color:var(--danger)}
+.busyline::after{content:'';position:absolute;inset-inline-start:0;bottom:0;height:3px;width:30%;background:var(--accent);animation:bl 1.2s ease-in-out infinite}
+.busyline.err::after{display:none}
+@keyframes bl{0%{transform:translateX(0)}50%{transform:translateX(-230%)}100%{transform:translateX(0)}}
 #composer{display:flex;gap:8px;padding-top:10px;margin-top:6px;border-top:1px solid var(--line);flex:none}
 #composer[hidden]{display:none}
 #composer input{flex:1;min-width:0;font:inherit;font-size:16px;color:var(--ink);background:var(--stone);border:1px solid transparent;border-radius:10px;padding:10px 12px}
@@ -92,7 +98,9 @@ textarea:focus,select:focus,input:focus,button:focus-visible{outline:2px solid v
 .go:hover{filter:brightness(1.06)}
 .go:disabled{opacity:.5}
 .pwrap{position:relative;flex:1;min-width:0;display:flex}
-.pwrap textarea{padding-inline-start:44px}
+.pwrap textarea{padding-inline-start:44px;padding-inline-end:30px}
+.clr{position:absolute;inset-inline-end:6px;top:6px;width:24px;height:24px;border-radius:50%;border:0;background:var(--stone-2);color:var(--muted);font-size:12px;cursor:pointer;z-index:1}
+.clr:hover{color:var(--ink)}
 .mic{position:absolute;inset-inline-start:6px;top:50%;transform:translateY(-50%);width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:#fff;color:var(--ink);display:grid;place-items:center;cursor:pointer;padding:0}
 .mic.on{background:var(--danger);border-color:var(--danger);color:#fff}
 @media (prefers-reduced-motion:no-preference){.mic.on{animation:micpulse 1.2s ease-in-out infinite}}
@@ -295,7 +303,7 @@ ul.pois li{margin-bottom:8px}
   <div id="body">
     <div id="compose">
     <div class="promptrow">
-      <div class="pwrap"> <textarea id="prompt" rows="3" placeholder="למשל: חצי יום בגולן מקצרין, בינוני, עם מעיין ותצפית"></textarea>
+      <div class="pwrap"> <button class="clr" id="clrBtn" type="button" aria-label="נקה את הבקשה" title="נקה">✕</button><textarea id="prompt" rows="3" placeholder="למשל: חצי יום בגולן מקצרין, בינוני, עם מעיין ותצפית"></textarea>
         <button class="mic" id="micBtn" type="button" aria-label="דברו במקום להקליד" title="דברו במקום להקליד"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg></button></div>
       <div style="display:flex;flex-direction:column;gap:6px"><button class="go" id="goBtn">בנה מסלול</button><button class="ghost" id="talkBtn" title="מצב שיחה: מדברים והאפליקציה עונה בקול" style="padding:7px 8px;font-size:13px">שיחה</button></div>
     </div>
@@ -372,6 +380,7 @@ ul.pois li{margin-bottom:8px}
       <div class="actions" style="margin-top:10px"><button class="ghost" id="rebuildBtn">בנה שוב עם ההגדרות</button></div>
     </details>
   </div>
+  <div id="busyLine" class="busyline" hidden></div>
   <div id="composer" hidden>
     <input type="text" id="refineIn" enterkeyhint="send" aria-label="מה לשנות במסלול" placeholder="מה לשנות? למשל: יותר שטח">
     <button class="go" id="refineBtn" type="button">שנה</button>
@@ -389,7 +398,7 @@ ul.pois li{margin-bottom:8px}
       <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off"></details>
   </div>
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.43 · 10.11.2026 12:17</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.44 · 10.11.2026 12:38</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -1504,6 +1513,7 @@ const store = { get(k){try{return localStorage.getItem(k)}catch{return null}}, s
 
 // ---------- map ----------
 const map = L.map('map', { zoomControl: false, attributionControl: true, zoomSnap: 0.5 }).setView(DEFAULT_CENTER, 7);
+if (!location.hash) map.fitBounds([[29.5, 34.25], [33.3, 35.9]]); // Israel first
 const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17, attribution: '© OpenStreetMap, SRTM · OpenTopoMap' }).addTo(map);
 const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' });
 const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18, attribution: 'Esri World Imagery' });
@@ -1576,6 +1586,7 @@ function drawPickers() {
   seg($('diffSeg'), DIFFS, $('pDiff').value || 'medium', k => { $('pDiff').value = k; drawPickers(); rebuildWith(); });
 }
 function rebuildWith() { if (!busy && current?.p) run(false); }
+$('clrBtn').onclick = () => { $('prompt').value = ''; store.set('lastPrompt', ''); growPrompt(); $('prompt').focus(); };
 $('newTripBtn').onclick = () => {
   $('sheet').classList.remove('has-results', 'min', 'full'); $('results').hidden = true; $('tripHead').hidden = true; $('composer').hidden = true; $('understood').hidden = true;
   status(''); drawPickers(); $('prompt').focus(); $('prompt').select();
@@ -1623,7 +1634,8 @@ function milNote() {
 }
 $('pMil') && document.addEventListener('change', ev => { if (ev.target.id === 'pMil' || ev.target.id === 'pDate') milNote(); });
 function myVehicle() { return 'lockers'; } // the group's car: lifted Land Cruiser with diff lockers
-function status(t, err) { $('status').textContent = t; $('status').classList.toggle('err', !!err); }
+function status(t, err) { $('status').textContent = t; $('status').classList.toggle('err', !!err); const bl = $('busyLine'); if (bl) { bl.textContent = t; bl.classList.toggle('err', !!err); bl.hidden = !t || !$('sheet').classList.contains('has-results') || (!isBusy() && !err); } }
+function isBusy() { try { return busy; } catch { return false; } }
 
 // ---------- params <-> form ----------
 function fillForm(p) {
@@ -1954,6 +1966,7 @@ async function loadGraph(bboxOrKeys, { quiet = false, noOsm = false } = {}) {
   const keys = typeof bboxOrKeys[0] === 'string' ? bboxOrKeys : tilesFor(bboxOrKeys);
   if (gcache && keys.every(k => gcache.keys.has(k))) return gcache.G;
   const { tiles, stat } = await ensureTiles(keys, { say: quiet ? () => {} : status, noOsm });
+  { const ix = await euKeys(); for (const k of keys) if (!tiles[k]) { const b = tileBBox(k), il = inIsrael((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) || inIsrael(b[0], b[1]) || inIsrael(b[2], b[3]); if ((!il && !(ix.size && euCovered(k, ix)) && keys.some(q => tiles[q])) || keys.filter(q => !tiles[q]).length <= Math.max(1, keys.length * 0.08)) tiles[k] = { w: [], p: [], m: [], at: Date.now(), key: k }; } }
   const miss = keys.filter(k => !tiles[k]).length;
   if (miss) throw new Error(`שרתי OpenStreetMap עמוסים: ירדו ${keys.length - miss} מתוך ${keys.length} אזורים. מה שירד נשמר. לחצו שוב "בנה מסלול" בעוד דקה, וזה ימשיך מאיפה שנעצר.`);
   if (!quiet) status('מעבד את רשת השבילים…');
@@ -2248,7 +2261,8 @@ async function poisFromTiles(points, radius) {
   };
   const LAKE = /lago|lake|jezero|jezioro|limni|λίμνη|λιμνη|\bsee\b|\blac\b|езеро|lacul|lacu\b|liqen/i;
   points.forEach((q, n) => {
-    if (keysBy[n].some(k => !tiles[k])) { miss.push(n); return; }
+    if (!keysBy[n].some(k => tiles[k])) { miss.push(n); return; }
+    keysBy[n] = keysBy[n].filter(k => tiles[k]);
     for (const k of keysBy[n]) for (const [tp, id, la, lo, t] of tiles[k].p || []) {
       if (!t || seen.has(tp + id) || hav(q[0], q[1], la, lo) > radius) continue;
       if (t.tourism === 'camp_site' || t.tourism === 'caravan_site') {
@@ -2451,7 +2465,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
         // no trail runs alongside the road here (mountain tracks are often dead ends): an off-road loop from the road instead
         if (j.M && Date.now() < deadline) {
           const c = j.M.c;
-          const G = await loadGraph(tilesFor(bboxFor([c], 9000)), { quiet: true, noOsm: 'outside' }).catch(() => null);
+          const G = await Promise.race([loadGraph(tilesFor(bboxFor([c], 9000)), { quiet: true, noOsm: 'outside' }), new Promise(r => setTimeout(() => r(null), 30000))]).catch(() => null);
           if (!G) return;
           const fac = factors(G, { ...p, avoid_asphalt: true, avoid_military: true });
           const s0 = nearestNode(G, c[0], c[1], fac, 4000); if (s0 < 0) return;
@@ -2462,7 +2476,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
       } catch (e) { console.warn("day stretch", j.d, e?.message || e); } finally { status(`מחפש קטעי שטח לכל יום… ${++done}/${jobs.length}`); }
     };
     status(`מחפש קטעי שטח לכל יום… 0/${jobs.length}`);
-    { const q = jobs.slice(); await Promise.all(Array.from({ length: 4 }, async () => { while (q.length) await one(q.shift()); })); }
+    { const q = jobs.slice(); await Promise.all(Array.from({ length: 4 }, async () => { while (q.length) { const j = q.shift(); await Promise.race([one(j), new Promise(r => setTimeout(() => { j.late = !gotDay.has(j.d); r(); }, Math.max(1000, deadline - Date.now())))]); } })); }
     const miss = jobs.filter(j => !gotDay.has(j.d) && !j.late).map(j => j.d + 1), late = jobs.filter(j => j.late).map(j => j.d + 1);
     if (miss.length) notes.push(`בימים ${miss.join(', ')} לא מצאתי שטח פתוח לרכב ליד הדרך, אז הם בכביש.`);
     if (late.length) notes.push(`החיפוש לקח יותר מדי זמן, אז ימים ${late.join(', ')} עדיין בכביש.`);
@@ -2519,7 +2533,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
   const li = legSplit(fin.coords, seq.map(x => x.ll));
   // 5. assemble coords + segments, splicing each off-road loop in at its highlight
   const coords = [], segs = [], days = [], pois = [];
-  let dayFrom = 0, dKm = 0, dH = 0, dOff = 0;
+  let dayFrom = 0, dKm = 0, dH = 0, dOff = 0, dFer = 0;
   const byD = [0, 0, 0, 0, 0, 0]; let len = 0, hrs = 0, asph = 0, unk = 0, res = 0, maxD = 0;
   const ferries = []; let sea = 0, seaH = 0;
   const pushRoad = (a, b, sp) => {
@@ -2532,7 +2546,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
       if (coords.length) part.shift();
       coords.push(...part); segs.push({ d: 0, pts: [at, ...part], road: !f, ferry: !!f });
       if (f) {
-        const hh = m / Math.max(1, f.m) * f.s / 3600; sea += m; seaH += hh; hrs += hh; dH += hh;
+        const hh = m / Math.max(1, f.m) * f.s / 3600; sea += m; seaH += hh; dFer += hh;
         const prevF = ferries[ferries.length - 1];
         if (prevF && prevF.f === f) { prevF.m += m; prevF.h += hh; } else ferries.push({ f, m, h: hh, lat: at[0], lon: at[1], day: days.length + 1 });
       } else { len += m; asph += m; byD[0] += m; const hh = m * sp / 3600 * 1.15; hrs += hh; dKm += m; dH += hh; }
@@ -2566,12 +2580,12 @@ async function planOverland(p, sLL, eLL, viaLL) {
     }
     if (nx.k != null) {
       const camp = nx.night;
-      days.push({ from: dayFrom, to: coords.length - 1, len: dKm, hrs: dH, off: dOff, camp: camp ? { ...camp, day: days.length + 1 } : null });
+      days.push({ from: dayFrom, to: coords.length - 1, len: dKm, hrs: dH, ferH: dFer, off: dOff, camp: camp ? { ...camp, day: days.length + 1 } : null });
       if (camp) pois.push({ ...camp, day: days.length });
-      dayFrom = coords.length - 1; dKm = 0; dH = 0; dOff = 0;
+      dayFrom = coords.length - 1; dKm = 0; dH = 0; dOff = 0; dFer = 0;
     }
   }
-  days.push({ from: dayFrom, to: coords.length - 1, len: dKm, hrs: dH, off: dOff, camp: null });
+  days.push({ from: dayFrom, to: coords.length - 1, len: dKm, hrs: dH, ferH: dFer, off: dOff, camp: null });
   // resupply: every N nights, nearest fuel + food to that camp
   const supEvery = Math.max(1, Math.round(p.resupply_every_days || 2));
   days.forEach((d, k) => {
@@ -2787,6 +2801,10 @@ async function run(fromPrompt, preset = null) {
     const viaLL = [];
     const lost = [];
     for (const v of p.via || []) { const ll = await geocode(v); if (!ll) { lost.push(v.name); continue; } viaLL.push({ ll, name: v.name, note: v.note, ferry: !!v.ferry_to_next, ferryHours: v.ferry_hours || null }); }
+    viaLL.forEach((v, i) => { // Claude sometimes marks both ports of a pair; a ferry leg must start where the last one did not end, and cross real distance
+      const next = viaLL[i + 1]?.ll || (p.loop ? sLL : eLL);
+      if (v.ferry && (viaLL[i - 1]?.ferry || !next || hav(v.ll[0], v.ll[1], next[0], next[1]) < 20000)) v.ferry = false;
+    });
     viaLL.forEach((v, i) => { v.port = v.ferry || !!viaLL[i - 1]?.ferry; });
     if (lost.length) { p.via = (p.via || []).filter(v => !lost.includes(v.name)); } p._lost = lost;
 
@@ -2805,9 +2823,10 @@ async function run(fromPrompt, preset = null) {
       const r = await planOverland(p, sLL, eLL, viaLL);
       lastRunErr = null;
       current = { p, res: { results: [r], L: r.len, note: r.note }, G: null, sel: 0, saved: null, prompt: fromPrompt ? text : (current?.prompt || '') };
-      status(r.note || ''); render(0);
+      status(''); render(0);
     };
-    if (p._forceOverland || span > 300000 || (keys.length > 36 && !keys.every(k => { const b = tileBBox(k); return inIsrael((b[0] + b[2]) / 2, (b[1] + b[3]) / 2); }))) return await overland();
+    const allIL = keys.every(k => { const b = tileBBox(k); return inIsrael((b[0] + b[2]) / 2, (b[1] + b[3]) / 2); }) || inIsrael(sLL[0], sLL[1]) && (!eLL || inIsrael(eLL[0], eLL[1]));
+    if (p._forceOverland || (span > 300000 && !allIL) || (keys.length > 36 && !allIL && !keys.every(k => { const b = tileBBox(k); return inIsrael((b[0] + b[2]) / 2, (b[1] + b[3]) / 2); }))) return await overland();
     status('מוריד שבילים מ-OpenStreetMap (בפעם הראשונה זה לוקח כמה שניות)…');
     const G = await loadGraph(keys);
     if (!G.N) throw new Error('לא נמצאו שבילים באזור.');
@@ -2836,7 +2855,29 @@ async function run(fromPrompt, preset = null) {
         alt.res.note = '⚠ אי אפשר לתכנן את זה בלי לעבור בשטחי אש, אז המסלול עובר בהם. בתאריך שבחרתם (יש בו יום חול) הם כנראה סגורים: תכננו לסופ"ש או חג, או ודאו מול פרסומי צה"ל לשטחי אש. ' + (alt.res.note || '');
       }
     }
-    if (multi && abroadTrip && (out.err || !out.res.results.length)) return await overland(); // the trail network alone does not connect: roads + off-road stretches
+    if (multi && abroadTrip && (out.err || !out.res.results.length)) return await overland();
+    if (multi && !out.err && out.res.results.length) { // a day far longer than the rest means the trail network ran out of nights: use roads + stretches
+      const D = out.res.results[0].days || [], avg = D.reduce((x, d) => x + d.len, 0) / Math.max(1, D.length), cap = (p.max_km_per_day || 9999) * 1000;
+      const odd = D.findIndex(d => d.len > Math.max(avg * 2.2, 60000) || d.len > cap * 1.6);
+      if (odd >= 0 && abroadTrip) return await overland();
+      if (odd >= 0) out.res.results.forEach(r => { r.issues = [...(r.issues || []), `⚠ יום ${odd + 1} ארוך מאוד (${Math.round(D[odd].len / 1000)} ק"מ): לא מצאתי חניוני לילה מורשים שמחלקים את הדרך שווה. כדאי להוסיף יום או לבחור יעד קרוב יותר.`]; });
+    }
+    if (!multi && !out.err && !p.duration_hours && !p.distance_km && out.res.results.length) { // "from A to B" with no length: a short road hop is not a jeep trip
+      const r0 = out.res.results[0];
+      if (r0.len < 25000 && (r0.len - r0.asph) / r0.len < 0.5) {
+        const more = attempt({ ...p, distance_km: 40 }); const r1 = more.res?.results?.[0];
+        if (r1 && (r1.len - r1.asph) > (r0.len - r0.asph) * 2) { more.res.L = out.res.L; out = more; }
+      }
+    }
+    if (!multi && !out.err && p.duration_hours && !p.distance_km && out.res.results.length) {
+      const r0 = out.res.results[0], stopH = r0.pois.filter(x => x.type !== 'nightcamp').length * 0.25, h0 = r0.hrs + stopH;
+      if (h0 < p.duration_hours * 0.7) {
+        status('המסלול יצא קצר מהזמן שביקשתם, מאריך…');
+        const more = attempt({ ...p, distance_km: Math.min(160, r0.len / 1000 * p.duration_hours / Math.max(0.3, h0) * 0.9) });
+        const r1 = more.res?.results?.[0];
+        if (r1 && Math.abs(r1.hrs + stopH - p.duration_hours) < Math.abs(h0 - p.duration_hours)) { more.res.L = out.res.L; out = more; }
+      }
+    } // the trail network alone does not connect: roads + off-road stretches
     if (out.err) throw new Error(out.err);
     const res = out.res;
     if (!res.results.length && res.reason) throw new Error(res.reason);
@@ -2850,7 +2891,7 @@ async function run(fromPrompt, preset = null) {
   } catch (err) {
     lastRunErr = err.message || String(err);
     status(err.message || String(err), true);
-  } finally { btns.forEach(b => b.disabled = false); busy = false; }
+  } finally { btns.forEach(b => b.disabled = false); busy = false; if (!$('busyLine').classList.contains('err')) $('busyLine').hidden = true; }
 }
 $('goBtn').onclick = () => run(true);
 $('rebuildBtn').onclick = () => run(false);
@@ -3282,7 +3323,7 @@ function render(i, day = null) {
     if (!m) return;
     const pct = m / r.len * 100;
     $('bar').insertAdjacentHTML('beforeend', `<div style="width:${pct}%;background:${DCOL(d)}"></div>`);
-    $('legend').insertAdjacentHTML('beforeend', `<span><i style="--c:${DCOL(d)}"></i>${DIFF[d].he} ${Math.round(pct)}%</span>`);
+    if (pct >= 0.5) $('legend').insertAdjacentHTML('beforeend', `<span><i style="--c:${DCOL(d)}"></i>${DIFF[d].he} ${Math.round(pct)}%</span>`);
   });
   if (r.unrated) $('legend').innerHTML = `<span><i style="--c:${DCOL('x')}"></i>מסלול מיובא: אין דירוג קושי לקטעים</span>`;
   const w = [];
@@ -3293,7 +3334,8 @@ function render(i, day = null) {
   if (r.unrated) w.push('המסלול יובא מקובץ. לא בדקתי לו קושי ושטחי אש, רק שטחי A. סעו בו בזהירות כמו במסלול לא מוכר.');
   if (!r.unrated && r.unk / r.len > 0.3) w.push(`ל-${Math.round(r.unk / r.len * 100)}% מהדרך אין דירוג קושי ב-OSM. ההערכה שם שמרנית (בינוני).`);
   const IL = isIL(r);
-  if (!IL && !r.unrated) w.push(abroadNote(r));
+  const info = []; // general notes: in the folded list, not in the way
+  if (!IL && !r.unrated) info.push(abroadNote(r));
   const mr = D ? { avoid: multiMilitary(p), info: multiMilitary(p) ? null : { open: true, why: 'כל ימי הטיול בסופ"ש / חג' } } : resolveMilitary(p);
   if (IL && D && mr.avoid && (p.military_mode || 'auto') === 'auto') w.push('אחד מימי הטיול הוא יום חול, אז שטחי אש לא נכללו בכל הטיול.');
   if (r.aa > 0) w.push(`⚠ ${(r.aa / 1000).toFixed(1)} ק"מ עוברים בשטח A. הכניסה לשטחי A אסורה על אזרחים ישראלים בצו אלוף ומסוכנת. פתחתם את זה ידנית: ודאו שיש לכם היתר.`);
@@ -3303,13 +3345,13 @@ function render(i, day = null) {
   else if (!current.saved && mr.avoid && mr.info && !mr.info.open) w.push(`התאריך הוא ${mr.info.why}, אז שטחי אש לא נכללו. בסופ"ש יהיו יותר אפשרויות.`);
   if (r.reuse / r.len > 0.15) w.push(`${(r.reuse / 1000).toFixed(1)} ק"מ נוסעים פעמיים באותו קטע (הלוך-חזור).`);
   if (!current.saved && current.res.L && (p.duration_hours || p.distance_km) && Math.abs(r.len - current.res.L) / current.res.L > 0.35) w.push('לא מצאתי מסלול באורך המבוקש בדיוק. זה הקרוב ביותר.');
-  if (r.res > 300 && !r.unrated) w.push(isIL(r) ? `${(r.res / 1000).toFixed(1)} ק"מ עוברים בתוך שמורת טבע / גן לאומי. בשמורות מותר לנסוע רק בדרכים המסומנות לרכב (סימון שבילים בצבע + שלט "דרך לרכב"), ו-OSM לא תמיד יודע איזו דרך מסומנת. אם אין סימון בשטח, לא נכנסים.` : `${(r.res / 1000).toFixed(1)} ק"מ עוברים בתוך שמורת טבע / פארק לאומי. ברוב אירופה נסיעה ברכב שם מותרת רק בדרכים ציבוריות פתוחות לרכב, וקנסות גבוהים. בדקו את השילוט בכניסה.`);
+  if (r.res > 300 && !r.unrated) info.push(isIL(r) ? `${(r.res / 1000).toFixed(1)} ק"מ עוברים בתוך שמורת טבע / גן לאומי. בשמורות מותר לנסוע רק בדרכים המסומנות לרכב (סימון שבילים בצבע + שלט "דרך לרכב"), ו-OSM לא תמיד יודע איזו דרך מסומנת. אם אין סימון בשטח, לא נכנסים.` : `${(r.res / 1000).toFixed(1)} ק"מ עוברים בתוך שמורת טבע / פארק לאומי. ברוב אירופה נסיעה ברכב שם מותרת רק בדרכים ציבוריות פתוחות לרכב, וקנסות גבוהים. בדקו את השילוט בכניסה.`);
   const SF = safetyFor(r, dv);
   if (SF && SF.bail && SF.bail.m > 20000) w.push(`הנקודה הכי מרוחקת מכביש: כ-${(SF.bail.m / 1000).toFixed(0)} ק"מ שטח (בק"מ ${SF.bail.km.toFixed(0)}). אם משהו נשבר שם, החילוץ ארוך: צאו לפחות בשני רכבים, עם מים, מדחס, רצועת גרירה וקליטה/מכשיר קשר.`);
   if (SF && SF.fuelGap > 200 && (D || r.len > 150000)) w.push(`הקטע הארוך ביותר בלי תחנת דלק ליד המסלול: כ-${SF.fuelGap.toFixed(0)} ק"מ. בשטח רכב צורך פי 1.5–2 מבכביש: מלאו מיכל לפני, ושקלו ג'ריקן.`);
-  w.push('המסלול מבוסס על נתוני OSM. מצב השטח בפועל (שיטפונות, חסימות, סגירת שמורות) יכול להשתנות: בדקו לפני יציאה.');
+  info.push('המסלול מבוסס על נתוני OSM. מצב השטח בפועל (שיטפונות, חסימות, סגירת שמורות) יכול להשתנות: בדקו לפני יציאה.');
   $('warns').innerHTML = w.map(t => `<div class="warn">${t}</div>`).join('');
-  const minor = (r.issues || []).filter(t => !/^⚠/.test(t)); if (minor.length) { const d = document.createElement('details'); d.className = 'more'; d.innerHTML = `<summary>הערות לתכנון (${minor.length})</summary><ul>${minor.map(t => `<li>${t.replace(/</g, '&lt;')}</li>`).join('')}</ul>`; $('warns').prepend(d); }
+  const minor = (r.issues || []).filter(t => !/^⚠/.test(t)).concat(info.map(t => t.replace(/<[^>]+>/g, ''))); if (minor.length) { const d = document.createElement('details'); d.className = 'more'; d.innerHTML = `<summary>הערות ומידע (${minor.length})</summary><ul>${minor.map(t => `<li>${t.replace(/</g, '&lt;')}</li>`).join('')}</ul>`; $('warns').prepend(d); }
   if (!current.saved && IL) { // quick firing-zone switch, works without a date
     const row = document.createElement('div'); row.className = 'milsw';
     row.innerHTML = '<span>שטחי אש:</span>';
@@ -3333,7 +3375,7 @@ function render(i, day = null) {
       b.innerHTML = `<span class="dn"></span><span class="dt"></span><span class="dm"></span><span class="ds"></span>`;
       b.querySelector('.dn').textContent = `יום ${k + 1}`; b.querySelector('.dn').style.cssText = `background:${DAYC[k % DAYC.length]};color:#fff`;
       b.querySelector('.dt').textContent = d.camp ? (d.camp.type === 'dayend' ? d.camp.name : `לינה: ${d.camp.name}`) : k === D.length - 1 ? 'סיום הטיול' : 'סוף היום: אין קמפינג רשמי קרוב';
-      b.querySelector('.dm').textContent = `${(d.len / 1000).toFixed(0)} ק"מ · ${fmtH(d.hrs)}`;
+      b.querySelector('.dm').textContent = `${(d.len / 1000).toFixed(0)} ק"מ · ${fmtH(d.hrs)}${d.ferH > 0.3 ? ` · ⛴ ${fmtH(d.ferH)}` : ''}`;
       b.querySelector('.ds').textContent = [d.mid ? 'עצירה: ' + d.mid.name : null, d.camp ? (d.camp.type === 'dayend' ? 'אין חניון לילה מורשה קרוב. בדקו חלופה לפני היציאה.' : campSub(d.camp)) : null].filter(Boolean).join(' · ');
       b.onclick = () => render(i, k);
       box.append(b);
@@ -3371,7 +3413,7 @@ function tripHead(r, p) {
   const nm = x => x?.name ? '\u2068' + x.name.replace(/^📍\s*/, '').split(/[,،]/)[0].trim() + '\u2069' : null;
   const a = nm(p.start) || 'מסלול', b = p.loop ? null : nm(p.end);
   const D = r.days && r.days.length > 1 ? r.days.length : 0;
-  $('thTitle').textContent = p.loop ? `לופ מ${a}` : b ? `${a} ← ${b}` : a;
+  $('thTitle').textContent = p.loop ? `לופ מ${/[A-Za-z]/.test(a) ? '-' : ''}${a}` : b ? `${a} ← ${b}` : a;
   $('thSub').textContent = [current.saved ? null : p.summary_he, D ? `${D} ימים` : null].filter(Boolean).join(' · ');
   $('tripHead').hidden = false;
   $('composer').hidden = !!current.saved && !current.saved.params;
