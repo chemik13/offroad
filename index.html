@@ -65,7 +65,8 @@ header button{pointer-events:auto;margin-inline-start:auto}
 .flykm{color:#fff;font:600 13px var(--body);font-variant-numeric:tabular-nums;min-width:62px;text-align:center}
 .flymsg{position:absolute;inset:0;display:grid;place-items:center;color:#fff;font:500 15px var(--body);pointer-events:none}
 .flymsg:empty{display:none}
-.fly3d{border:0;background:#111;color:#ffd23f;border-radius:999px;padding:5px 11px;font:600 12px var(--body);cursor:pointer;margin-top:6px}
+.fly3d{border:0;background:#1b2a22;color:#ffd23f;border-radius:999px;padding:4px 11px;font:600 12px var(--body);cursor:pointer;display:inline-flex;align-items:center;margin-top:6px}
+.plinks .fly3d{margin-top:0}
 .gate{position:fixed;inset:0;z-index:50;background:linear-gradient(160deg,#eef3ee,#fff 60%);display:grid;place-items:center;padding:20px}
 .gate[hidden]{display:none}
 .gatebox{width:min(380px,100%);display:flex;flex-direction:column;gap:14px;text-align:center}
@@ -203,6 +204,16 @@ ul.pois li{margin-bottom:8px}
 #lightbox .cap span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #lightbox .nav{background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:8px;width:36px;height:32px;font-size:18px;cursor:pointer}
 .popbtns{display:flex;gap:6px;margin-top:6px}
+.ico{width:1.05em;height:1.05em;vertical-align:-0.16em;flex:none;margin-inline-end:4px}
+.iconbtn .ico{width:20px;height:20px;margin:0}
+.safeic .ico{width:12px;height:12px;margin:0}
+.poi-ic{display:inline-flex;align-items:center}
+.poi-ic .ico{width:12px;height:12px;margin-inline-end:3px}
+.fly3d .ico{margin-inline-end:6px}
+.flybtn .ico{width:20px;height:20px;margin:0}
+.warn .ico{color:var(--warnline);width:16px;height:16px}
+.livenight{width:26px;height:26px;border-radius:50%;background:#fff;color:var(--ink);display:grid;place-items:center;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.livenight .ico{margin:0;width:16px;height:16px}
 .plinks{display:flex;flex-wrap:wrap;gap:6px;margin:5px 0 2px}
 .plinks a{font:500 12px var(--body);color:var(--accent);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:3px 9px;background:#fff}
 .plinks a:first-child{background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -301,6 +312,9 @@ ul.pois li{margin-bottom:8px}
 .daycard{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
 .daycard.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .daycard .dayrow{width:100%;border:0}
+.dphoto{display:block;width:100%;height:120px;border:0;padding:0;background:#ddd center/cover no-repeat;position:relative;cursor:zoom-in}
+.dphoto[hidden]{display:none}
+.dphoto span{position:absolute;inset-inline-start:8px;bottom:8px;background:rgba(0,0,0,.55);color:#fff;font:500 12px var(--body);padding:3px 8px;border-radius:999px}
 .dbar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--stone-2);overflow:hidden;display:block}
 .dbar i{display:block;height:100%;background:#2e9b4f}
 .dnight{padding:4px 12px 10px;border-top:1px dashed var(--line);font-size:13px}
@@ -377,7 +391,9 @@ body{font-family:var(--body);font-size:16px}
 .plinks a:first-child{background:var(--ink);border-color:var(--ink)}
 .checklist summary,.dalts summary{font-family:var(--body)}
 #sheet{border-top-left-radius:20px;border-top-right-radius:20px}
-.grip{width:44px;height:5px;background:#c9cdc6}
+.grip{width:44px;height:5px;background:#c9cdc6;touch-action:none}
+#sheet.dragging{transition:none!important}
+@media (max-width:759px){.grip::after{inset:-16px -80px}}
 textarea,#composer input{font-family:var(--body);font-size:17px}
 .recent{display:flex;flex-direction:column;gap:8px}
 .recent[hidden]{display:none}
@@ -416,7 +432,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
 <div id="map"></div>
 <header>
   <div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>מתכנן מסלולי שטח<small>4x4</small></div>
-  <div class="hbtns"><button class="textbtn" id="libBtn">שמורים</button><button class="iconbtn" id="settingsBtn" title="הגדרות" aria-label="הגדרות">⚙</button></div>
+  <div class="hbtns"><button class="textbtn" id="libBtn">שמורים</button><button class="iconbtn" id="settingsBtn" title="הגדרות" aria-label="הגדרות"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button></div>
 </header>
 
 <section id="sheet">
@@ -514,7 +530,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
 
 <div id="fly" class="fly" hidden>
   <div id="flyMap"></div>
-  <div class="flytop"><button class="flybtn" id="flyClose" type="button" aria-label="סגירה">✕</button><div class="flytitle" id="flyTitle"></div></div>
+  <div class="flytop"><button class="flybtn" id="flyClose" type="button" aria-label="סגירה"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button><div class="flytitle" id="flyTitle"></div></div>
   <div class="flybar"><button class="flybtn play" id="flyPlay" type="button" aria-label="עצירה">❚❚</button><div class="flyprog"><i id="flyProg"></i></div><div class="flykm" id="flyKm"></div><button class="flybtn" id="flySpeed" type="button">1×</button></div>
   <div class="flymsg" id="flyMsg"></div>
 </div>
@@ -542,7 +558,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
   </div>
   <button class="ghost" id="inviteBtn" type="button" style="margin-top:10px">קישור הזמנה לחבר (עם הקוד)</button>
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.54 · 10.11.2026 14:46</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.55 · 10.11.2026 15:02</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -1791,7 +1807,27 @@ setTimeout(drawPickers, 0);
 // prompt grows with its text
 const growPrompt = () => { const t = $('prompt'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight + 2, innerHeight * 0.4) + 'px'; };
 $('prompt').addEventListener('input', growPrompt); setTimeout(growPrompt, 0);
+// phones: drag the sheet by its handle and it settles at the nearest of three heights (peek, half, full)
+(() => {
+  const sh = $('sheet'), grip = $('grip'); let y0 = 0, h0 = 0, dragging = false, moved = false;
+  const phone = () => innerWidth < 760 && innerHeight > 540;
+  grip.addEventListener('pointerdown', e => { if (!phone()) return; dragging = true; moved = false; y0 = e.clientY; h0 = sh.getBoundingClientRect().height; grip.setPointerCapture(e.pointerId); });
+  grip.addEventListener('pointermove', e => {
+    if (!dragging) return; const dy = y0 - e.clientY; if (Math.abs(dy) > 6) moved = true; if (!moved) return;
+    const h = Math.max(96, Math.min(innerHeight - 64, h0 + dy)); sh.classList.remove('min'); sh.classList.add('dragging'); sh.style.maxHeight = h + 'px'; sh.style.height = h + 'px';
+  });
+  const end = () => {
+    if (!dragging) return; dragging = false; sh.classList.remove('dragging'); if (!moved) return; // a tap: the click below cycles
+    const h = sh.getBoundingClientRect().height, H = innerHeight; sh.style.maxHeight = ''; sh.style.height = '';
+    const snaps = [['min', 110], ['half', H * 0.58], ['full', H - 70]]; let best = snaps[0];
+    for (const sn of snaps) if (Math.abs(sn[1] - h) < Math.abs(best[1] - h)) best = sn;
+    sh.classList.remove('min', 'full'); if (best[0] !== 'half') sh.classList.add(best[0]);
+    grip._dragged = true; setTimeout(() => { grip._dragged = false; map.invalidateSize(); }, 250);
+  };
+  grip.addEventListener('pointerup', end); grip.addEventListener('pointercancel', end);
+})();
 $('grip').onclick = () => {
+  if ($('grip')._dragged) return;
   const s = $('sheet').classList;
   if (s.contains('min')) s.remove('min');
   else if (s.contains('full')) { s.remove('full'); s.add('min'); }
@@ -2804,7 +2840,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
     }
     return best;
   }
-  nights.forEach(n => n && live.dot([n.lat, n.lon], `<div class="livenight">${n.ferry ? '⛴' : n.wild ? '🌲' : '⛺'}</div>`));
+  nights.forEach(n => n && live.dot([n.lat, n.lon], `<div class="livenight">${ico(n.ferry ? 'ferry' : n.wild ? (n.lake ? 'lake' : 'tree') : 'tent')}</div>`));
   nights.forEach((n, k) => { if (n && !cuts[k].ferryNight) n.alts = altsOf(cuts[k]).filter(x => Math.abs(x.lat - n.lat) > 1e-5 || Math.abs(x.lon - n.lon) > 1e-5).slice(0, 4); });
   if (wildOk && nights.some(n => n?.wild)) notes.push(`לינות שטח: נקודות על שפת אגם, בתצפית או בחניון יום שדרך עפר מגיעה אליהם. קמפינג מסודר כל ${every} לילות. לא בדקתי את המקום בשטח: הגיעו לפני החושך.`);
   if (wildOk && cuts.some(c => !c.ferryNight && (WILD_NIGHT[countryAt(c.c)] || 'no') === 'no')) notes.push('באיטליה, קרואטיה, סלובניה, אוסטריה ופורטוגל לינה מחוץ לקמפינג אסורה ונאכפת בקנסות, אז שם יש רק קמפינגים.');
@@ -2942,15 +2978,15 @@ function renderSafety(r, dv) {
   const S = safetyFor(r, dv); if (!S) return;
   safeLayer = L.layerGroup().addTo(map);
   const ic = (k, t) => L.divIcon({ className: '', html: `<div class="safeic ${k}">${t}</div>`, iconSize: [20, 20], iconAnchor: [10, 10] });
-  for (const f of S.fuel) L.marker([f.lat, f.lon], { icon: ic('fuel', '⛽') }).addTo(safeLayer).bindTooltip(`${f.name} · ק"מ ${f.km.toFixed(0)}`);
-  for (const f of S.water) L.marker([f.lat, f.lon], { icon: ic('water', '💧') }).addTo(safeLayer).bindTooltip(`מי שתייה · ק"מ ${f.km.toFixed(0)}`);
+  for (const f of S.fuel) L.marker([f.lat, f.lon], { icon: ic('fuel', ico('fuel')) }).addTo(safeLayer).bindTooltip(`${f.name} · ק"מ ${f.km.toFixed(0)}`);
+  for (const f of S.water) L.marker([f.lat, f.lon], { icon: ic('water', ico('water')) }).addTo(safeLayer).bindTooltip(`מי שתייה · ק"מ ${f.km.toFixed(0)}`);
   if (S.bail && S.bail.m > 3000) L.marker([S.bail.lat, S.bail.lon], { icon: L.divIcon({ className: '', html: `<div class="steepic" style="border-color:#8a5a00;color:#8a5a00">${(S.bail.m / 1000).toFixed(0)} ק"מ מכביש</div>`, iconSize: null, iconAnchor: [0, 0] }) }).addTo(safeLayer).bindTooltip('הנקודה הכי מרוחקת מכביש סלול לאורך המסלול');
   const km = x => x.toFixed(0);
   const fuelTxt = S.fuel.length ? S.fuel.slice(0, 6).map(f => `ק"מ ${km(f.km)}`).join(', ') + (S.fuel.length > 6 ? '…' : '') : 'אין תחנות ליד המסלול (עד 2.5 ק"מ)';
   const waterTxt = S.water.length ? S.water.slice(0, 6).map(f => `ק"מ ${km(f.km)}`).join(', ') : 'אין ברזיות מסומנות ליד המסלול. קחו לפחות 5 ליטר לאדם ליום, יותר בקיץ.';
   box.innerHTML = `<div class="wx"><h3>בטיחות בדרך<small>לפי OSM</small></h3>
     <div class="wxrow" style="grid-template-columns:1fr 1fr 1fr;text-align:center"><span><b>${S.bail ? (S.bail.m / 1000).toFixed(1) : '?'}</b><br><small>ק"מ מקסימום מכביש</small></span><span><b>${S.fuel.length}</b><br><small>תחנות דלק בדרך</small></span><span><b>${S.water.length}</b><br><small>נקודות מי שתייה</small></span></div>
-    <div class="safelist">⛽ ${fuelTxt}<br>💧 ${waterTxt}</div></div>`;
+    <div class="safelist">${ico('fuel')}${fuelTxt}<br>${ico('water')}${waterTxt}</div></div>`;
 }
 
 // ---------- field reports ----------
@@ -3278,6 +3314,40 @@ function campSub(c) {
   if (c.water === 'yes') bits.push('מים'); if (c.toilets === 'yes') bits.push('שירותים');
   return latinName(bits.join(' · '));
 }
+// ---------- icons: one stroke set, drawn in currentColor ----------
+const ICON = {
+  tent: '<path d="M3 20h18M12 4 3.5 20M12 4l8.5 16M12 4v16m-3.5 0L12 13l3.5 7"/>',
+  tree: '<path d="M12 3 6 11h3l-4 6h14l-4-6h3z"/><path d="M12 17v4"/>',
+  ferry: '<path d="M3 15l1.6 4.2h14.8L21 15H3z"/><path d="M6 15V10h12v5M9 10V6h6v4M12 6V3.5"/><path d="M2.5 21.5c1.5 0 1.5-.8 3-.8s1.5.8 3 .8 1.5-.8 3-.8 1.5.8 3 .8 1.5-.8 3-.8 1.5.8 3 .8" opacity=".6"/>',
+  moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
+  flag: '<path d="M5 21V4m0 0h11l-2 4 2 4H5"/>',
+  pin: '<path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>',
+  lake: '<path d="M2.5 9c1.6 0 1.6-1 3.2-1s1.6 1 3.2 1 1.6-1 3.2-1 1.6 1 3.2 1 1.6-1 3.2-1M2.5 14c1.6 0 1.6-1 3.2-1s1.6 1 3.2 1 1.6-1 3.2-1 1.6 1 3.2 1 1.6-1 3.2-1M2.5 19c1.6 0 1.6-1 3.2-1s1.6 1 3.2 1 1.6-1 3.2-1 1.6 1 3.2 1 1.6-1 3.2-1"/>',
+  warn: '<path d="M12 3.5 2.5 20h19z"/><path d="M12 10v4.5M12 17.2v.3"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
+  play: '<path d="M7 4.5v15l12.5-7.5z" fill="currentColor"/>',
+  pause: '<path d="M8 5v14M16 5v14" stroke-width="3.2"/>',
+  replay: '<path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4.5h4.5"/>',
+  close: '<path d="M6 6l12 12M18 6 6 18"/>',
+  fuel: '<path d="M5 21V5a1.5 1.5 0 0 1 1.5-1.5h7A1.5 1.5 0 0 1 15 5v16M3.5 21h13M5 10h10M15 8l3 2.5V17a1.5 1.5 0 0 0 3 0v-7l-3-3"/>',
+  water: '<path d="M12 3.5s-6 6.6-6 11a6 6 0 0 0 12 0c0-4.4-6-11-6-11z"/>',
+  mountain: '<path d="M2.5 19.5 9 8l4 6.5 2.5-3.5 6 8.5z"/>',
+};
+const ico = (k, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON[k] || ''}</svg>`;
+// a place name with its kind drawn as an icon instead of the emoji kept in the data
+function nameKind(name, pt = {}) {
+  const n = String(name || '');
+  if (/^⛴/.test(n) || pt.ferry) return ['ferry', n.replace(/^⛴\s*/, '')];
+  if (/^🌲/.test(n) || pt.wild) return [pt.lake ? 'lake' : 'tree', n.replace(/^🌲\s*/, '')];
+  if (/^📍/.test(n)) return ['pin', n.replace(/^📍\s*/, '')];
+  if (pt.type === 'nightcamp') return [pt.lake ? 'lake' : 'tent', n];
+  return [null, n];
+}
+function setName(el, name, pt, prefix = '') {
+  const [k, txt] = nameKind(name, pt); el.textContent = '';
+  if (k) el.insertAdjacentHTML('beforeend', ico(k));
+  el.append(document.createTextNode(prefix + latinName(txt)));
+}
 // Greek / Cyrillic / Georgian names in Latin letters, readable at a glance ("Κατασκήνωση Ελαφίνας" -> "Camping Elafinas")
 const TR = (() => {
   const m = {}; const add = (src, dst) => src.split(' ').forEach((ch, i) => { m[ch] = dst.split(' ')[i]; });
@@ -3320,7 +3390,7 @@ async function flyOver(coords, title) {
       sources: { sat: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 18, attribution: 'Esri, Maxar' },
         dem: { type: 'raster-dem', tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'], encoding: 'terrarium', tileSize: 256, maxzoom: 14, attribution: 'Mapzen terrain' } },
       layers: [{ id: 'sat', type: 'raster', source: 'sat' }], sky: { 'sky-color': '#9cc8f0', 'horizon-color': '#e8f0f7', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.7, 'fog-color': '#e8f0f7' } } });
-  flyState = { map: map3, t: 0, speed: 1, playing: true, last: 0 };
+  flyState = { map: map3, t: 0, speed: 1, playing: true, last: 0 }; flyBtn('pause');
   // ~35 s for a typical day; long days go faster, short ones slower
   const durS = Math.max(22, Math.min(55, total / 1000 * 0.45)), mps = total / durS;
   map3.on('load', () => {
@@ -3340,14 +3410,15 @@ async function flyOver(coords, title) {
       map3.jumpTo({ center: [here[0], here[1]], bearing, pitch: 68, zoom: 14.3 });
       $('flyProg').style.width = (flyState.t / total * 100).toFixed(1) + '%';
       $('flyKm').textContent = `${(flyState.t / 1000).toFixed(1)} / ${(total / 1000).toFixed(0)} ק"מ`;
-      if (flyState.t >= total && flyState.playing) { flyState.playing = false; $('flyPlay').textContent = '↺'; }
+      if (flyState.t >= total && flyState.playing) { flyState.playing = false; flyBtn('replay'); }
       requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
   });
 }
 $('flyClose').onclick = () => { if (flyState?.map) flyState.map.remove(); flyState = null; $('fly').hidden = true; };
-$('flyPlay').onclick = () => { if (!flyState) return; if (flyState.t >= 0 && !flyState.playing && $('flyPlay').textContent === '↺') flyState.t = 0; flyState.playing = !flyState.playing; $('flyPlay').textContent = flyState.playing ? '❚❚' : '▶'; flyState.last = 0; };
+const flyBtn = k => { $('flyPlay').innerHTML = ico(k); $('flyPlay').dataset.k = k; };
+$('flyPlay').onclick = () => { if (!flyState) return; if ($('flyPlay').dataset.k === 'replay') flyState.t = 0; flyState.playing = !flyState.playing; flyBtn(flyState.playing ? 'pause' : 'play'); flyState.last = 0; };
 $('flySpeed').onclick = () => { if (!flyState) return; flyState.speed = flyState.speed === 1 ? 2 : flyState.speed === 2 ? 4 : 1; $('flySpeed').textContent = flyState.speed + '×'; };
 // links out: book a campsite, buy ferry tickets, navigate there
 function placeLinks(pt) {
@@ -3371,7 +3442,7 @@ function placeLinks(pt) {
 function placePopup(pt, title, sub) {
   const div = document.createElement('div');
   div.innerHTML = `<div class="poptitle"></div><div class="popsub"></div><div class="wxpop"></div><div class="thumbs"></div>`;
-  div.querySelector('.poptitle').textContent = latinName(title); div.querySelector('.popsub').textContent = sub || '';
+  setName(div.querySelector('.poptitle'), title, pt); div.querySelector('.popsub').textContent = sub || '';
   div.querySelector('.popsub').after(placeLinks(pt));
   let loaded = false;
   return { div, load: () => {
@@ -3694,7 +3765,7 @@ function render(i, day = null) {
     const label = !crowded || (dayBox && dayBox.contains([pt.lat, pt.lon]));
     const ic = L.divIcon({ className: '', html: label ? `<div class="poi-ic"></div>` : `<div class="poi-dot"></div>`, iconSize: null, iconAnchor: [0, 0] });
     const m = L.marker([pt.lat, pt.lon], { icon: ic, title: pt.name }).addTo(markLayer);
-    m.getElement()?.querySelector('.poi-ic')?.append(document.createTextNode((D && pt.type === 'nightcamp' && pt.day ? `לילה ${pt.day}: ` : '') + latinName(pt.name)));
+    { const el = m.getElement()?.querySelector('.poi-ic'); if (el) setName(el, pt.name, pt, D && pt.type === 'nightcamp' && pt.day ? `לילה ${pt.day}: ` : ''); }
     const pp = placePopup(pt, pt.name, pt.type === 'nightcamp' ? campSub(pt) : (pt.note || POI_TYPES[pt.type]?.he || 'נקודת חובה'));
     m.bindPopup(pp.div, { maxWidth: 320, minWidth: 220 }).on('popupopen', pp.load);
   });
@@ -3754,7 +3825,7 @@ function render(i, day = null) {
   if (SF && SF.bail && SF.bail.m > 20000) w.push(`הנקודה הכי מרוחקת מכביש: כ-${(SF.bail.m / 1000).toFixed(0)} ק"מ שטח (בק"מ ${SF.bail.km.toFixed(0)}). אם משהו נשבר שם, החילוץ ארוך: צאו לפחות בשני רכבים, עם מים, מדחס, רצועת גרירה וקליטה/מכשיר קשר.`);
   if (SF && SF.fuelGap > 200 && (D || r.len > 150000)) w.push(`הקטע הארוך ביותר בלי תחנת דלק ליד המסלול: כ-${SF.fuelGap.toFixed(0)} ק"מ. בשטח רכב צורך פי 1.5–2 מבכביש: מלאו מיכל לפני, ושקלו ג'ריקן.`);
   info.push('המסלול מבוסס על נתוני OSM. מצב השטח בפועל (שיטפונות, חסימות, סגירת שמורות) יכול להשתנות: בדקו לפני יציאה.');
-  $('warns').innerHTML = w.map(t => `<div class="warn">${t}</div>`).join('');
+  $('warns').innerHTML = w.map(t => /^⚠/.test(t) ? `<div class="warn">${ico('warn')}${t.replace(/^⚠️?\s*/, '')}</div>` : `<div class="warn">${t}</div>`).join('');
   const minor = (r.issues || []).filter(t => !/^⚠/.test(t)).concat(info.map(t => t.replace(/<[^>]+>/g, ''))); if (minor.length) { const d = document.createElement('details'); d.className = 'more'; d.innerHTML = `<summary>הערות ומידע (${minor.length})</summary><ul>${minor.map(t => `<li>${t.replace(/</g, '&lt;')}</li>`).join('')}</ul>`; $('warns').prepend(d); }
   if (!current.saved && IL) { // quick firing-zone switch, works without a date
     const row = document.createElement('div'); row.className = 'milsw';
@@ -3772,7 +3843,7 @@ function render(i, day = null) {
   renderSafety(r, dv, w);
   renderElevation(dv ? { ...r, coords: r.coords.slice(dv.from, dv.to + 1) } : r);
   $('dayPlan').innerHTML = '';
-  if (!D) { const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.textContent = '▶ מעוף תלת-ממד על המסלול'; fb.onclick = () => flyOver(r.coords, routeTitle(r, p)); $('dayPlan').append(fb); }
+  if (!D) { const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.innerHTML = ico('mountain') + 'מעוף תלת-ממד על המסלול'; fb.onclick = () => flyOver(r.coords, routeTitle(r, p)); $('dayPlan').append(fb); }
   if (D) {
     const box = document.createElement('div'); box.className = 'dayplan cards';
     D.forEach((d, k) => {
@@ -3786,11 +3857,14 @@ function render(i, day = null) {
       if (d.off != null) head.querySelector('.dbar i').style.width = offP + '%'; else head.querySelector('.dbar').remove();
       head.onclick = () => render(i, day === k ? null : k); // tap again: back to the whole trip
       card.append(head);
+      { const hero = d.mid || (r.pois || []).find(x => x.type === 'via' && x.day === k + 1 && !/מעבורת/.test(x.name)) || (d.camp && !d.camp.ferry && d.camp.type !== 'dayend' ? d.camp : null);
+        if (hero) { const ph = document.createElement('button'); ph.type = 'button'; ph.className = 'dphoto'; ph.hidden = true; card.append(ph);
+          dayPhotoObs.observe(ph); ph._pt = hero; } }
       const night = document.createElement('div'); night.className = 'dnight';
       const last = k === D.length - 1;
       const c = d.camp;
       const t = document.createElement('div'); t.className = 'dnt';
-      t.textContent = c ? (c.type === 'dayend' ? c.name : `🌙 ${latinName(c.name)}`) : last ? '🏁 סיום הטיול' : 'סוף היום: אין קמפינג רשמי קרוב';
+      if (c && c.type !== 'dayend') setName(t, c.name, c); else if (!c && last) { t.innerHTML = ico('flag'); t.append('סיום הטיול'); } else t.textContent = c ? c.name : 'סוף היום: אין קמפינג רשמי קרוב';
       night.append(t);
       if (c && c.type !== 'dayend') { const sub = document.createElement('div'); sub.className = 'dns'; sub.textContent = c.ferry ? c.auth : campSub(c); night.append(sub); if (!c.ferry) night.append(placeLinks(c)); }
       const alts = c?.alts || [];
@@ -3799,13 +3873,13 @@ function render(i, day = null) {
         sw.innerHTML = `<summary>החלף לינה (${alts.length} אפשרויות)</summary>`;
         for (const a of alts) {
           const b = document.createElement('button'); b.type = 'button'; b.className = 'alt';
-          b.innerHTML = '<b></b><small></small>'; b.querySelector('b').textContent = latinName(a.name); b.querySelector('small').textContent = `${a.km} ק"מ מסוף היום · ${a.wild ? 'בטבע' : a.lake ? 'קמפינג על שפת אגם' : 'קמפינג'}`;
+          b.innerHTML = '<b></b><small></small>'; setName(b.querySelector('b'), a.name, a); b.querySelector('small').textContent = `${a.km} ק"מ מסוף היום · ${a.wild ? 'בטבע' : a.lake ? 'קמפינג על שפת אגם' : 'קמפינג'}`;
           b.onclick = () => { const pins = { ...(current.p.nightPins || {}) }; const { alts: _a, day: _d, km: _k, ...keep } = a; pins[k] = keep; current.p.nightPins = pins; run(false); };
           sw.append(b);
         }
         night.append(sw);
       }
-      { const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.textContent = '▶ מעוף תלת-ממד על היום'; fb.onclick = () => flyOver(r.coords.slice(d.from, d.to + 1), `יום ${k + 1}`); night.append(fb); }
+      { const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.innerHTML = ico('mountain') + 'מעוף תלת-ממד'; fb.onclick = () => flyOver(r.coords.slice(d.from, d.to + 1), `יום ${k + 1}`); const row = night.querySelector('.plinks'); if (row) row.prepend(fb); else night.append(fb); }
       card.append(night);
       box.append(card);
     });
@@ -3819,7 +3893,7 @@ function render(i, day = null) {
     for (const x of r.pois) {
       const li = document.createElement('li');
       li.innerHTML = `<span></span> <span style="color:var(--muted)"></span><div class="thumbs"></div>`;
-      li.children[0].textContent = latinName(x.name); li.children[1].textContent = '· ' + (x.type === 'nightcamp' ? campSub(x) : (x.sunset ? 'תצפית לשקיעה' : (x.note || POI_TYPES[x.type]?.he || 'נקודת חובה')));
+      setName(li.children[0], x.name, x); li.children[1].textContent = '· ' + (x.type === 'nightcamp' ? campSub(x) : (x.sunset ? 'תצפית לשקיעה' : (x.note || POI_TYPES[x.type]?.he || 'נקודת חובה')));
       li.querySelector('.thumbs').before(placeLinks(x));
       ul.append(li); fillThumbs(li.querySelector('.thumbs'), x);
     }
@@ -3841,6 +3915,13 @@ function render(i, day = null) {
   $('sheet').classList.remove('min', 'full'); $('sheet').classList.add('has-results');
 }
 // before you go: what to book, buy, check and download, ticked off per trip (kept on this phone)
+// a day's photo, fetched only when its card scrolls into view
+const dayPhotoObs = new IntersectionObserver(entries => { for (const en of entries) if (en.isIntersecting) { dayPhotoObs.unobserve(en.target); fillDayPhoto(en.target); } }, { rootMargin: '200px' });
+async function fillDayPhoto(el) {
+  const ph = await getPhotos(el._pt).catch(() => []); if (!ph.length) return;
+  const img = new Image(); img.onload = () => { el.style.backgroundImage = `url("${ph[0].thumb}")`; el.hidden = false; el.innerHTML = `<span></span>`; el.querySelector('span').textContent = [latinName(nameKind(el._pt.name, el._pt)[1]), ph.length > 1 ? `+${ph.length - 1}` : null].filter(Boolean).join(' · '); }; img.src = ph[0].thumb;
+  el.onclick = () => openLightbox(ph, 0);
+}
 function renderChecklist(p, r, D) {
   const box = $('checklist'); box.innerHTML = ''; if (current.saved && !current.saved.params) return;
   const items = []; const fmtD = k => p.date ? new Date(addDays(p.date, k) + 'T12:00:00').toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' }) : null;
