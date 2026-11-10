@@ -379,6 +379,14 @@ body{font-family:var(--body);font-size:16px}
 #sheet{border-top-left-radius:20px;border-top-right-radius:20px}
 .grip{width:44px;height:5px;background:#c9cdc6}
 textarea,#composer input{font-family:var(--body);font-size:17px}
+.recent{display:flex;flex-direction:column;gap:8px}
+.recent[hidden]{display:none}
+.rtitle{font:600 14px var(--body);color:var(--muted)}
+.rlist{display:flex;flex-direction:column;gap:6px}
+.rlist button{display:flex;justify-content:space-between;gap:10px;align-items:center;text-align:start;border:1px solid var(--line);background:#fff;border-radius:12px;padding:10px 12px;font:inherit;color:var(--ink);cursor:pointer}
+.rlist button:hover{border-color:var(--accent)}
+.rlist b{font-weight:600;font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rlist small{color:var(--muted);font-size:12px;white-space:nowrap}
 /* phones: a little more room and bigger targets */
 @media (max-width:759px){
   #sheet{padding-inline:16px}
@@ -388,6 +396,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
 }
 /* desktop: the panel is docked to the edge, full height, like a guide book open beside the map */
 @media (min-width:960px){
+  .examples{flex-wrap:wrap;overflow:visible}
   #sheet,#sheet.has-results,#sheet.full{top:0;bottom:0;right:0;left:auto;width:460px;max-height:none;border-radius:0;border:0;border-inline-start:1px solid var(--line);box-shadow:-8px 0 30px rgba(20,30,25,.10);padding:18px 22px 16px}
   header{left:0;right:460px;width:auto}
   .leaflet-top.leaflet-right,.leaflet-bottom.leaflet-right{right:460px}
@@ -420,6 +429,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
       <div style="display:flex;flex-direction:column;gap:6px"><button class="go" id="goBtn">בנה מסלול</button><button class="ghost" id="talkBtn" title="מצב שיחה: מדברים והאפליקציה עונה בקול" style="padding:7px 8px;font-size:13px">שיחה</button></div>
     </div>
       <div class="examples" id="examples"></div>
+      <div id="recent" class="recent" hidden><div class="rtitle">הטיולים האחרונים של החבורה</div><div class="rlist"></div></div>
     </div>
     <div id="tripHead" hidden>
       <div class="th"><b id="thTitle"></b><small id="thSub"></small></div>
@@ -582,7 +592,7 @@ const store = { get(k){try{return localStorage.getItem(k)}catch{return null}}, s
 
 // ---------- map ----------
 const map = L.map('map', { zoomControl: false, attributionControl: true, zoomSnap: 0.5 }).setView(DEFAULT_CENTER, 7);
-if (!location.hash) map.fitBounds([[29.5, 34.25], [33.3, 35.9]]); // Israel first
+if (!location.hash) { map.fitBounds([[29.5, 34.25], [33.3, 35.9]]); setTimeout(() => map.fitBounds([[29.5, 34.25], [33.3, 35.9]], mapPad()), 50); } // Israel first, in the part of the map the panel leaves free
 const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17, attribution: '© OpenStreetMap, SRTM · OpenTopoMap' }).addTo(map);
 const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' });
 const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18, attribution: 'Esri World Imagery' });
@@ -698,7 +708,7 @@ setTimeout(function gate() { // after the rest of the script has set up
       const r = await fetch(API + '/routes', { headers: { 'x-group-code': code } });
       if (r.status === 401) throw Object.assign(new Error('bad'), { bad: true });
       store.set('groupCode', code); if ($('gateNick').value.trim()) store.set('nick', $('gateNick').value.trim());
-      $('gate').hidden = true; checkSharedLink();
+      $('gate').hidden = true; checkSharedLink(); loadRecent();
     } catch (e) { $('gateMsg').className = 'gatemsg err'; $('gateMsg').textContent = e.bad ? 'הקוד לא נכון. בדקו אותו מול מי ששלח לכם.' : 'אין חיבור לאינטרנט כרגע. נסו שוב.'; }
     finally { $('gateGo').disabled = false; }
   };
@@ -2828,6 +2838,22 @@ $('shareBtn').onclick = async () => {
   catch { prompt('הקישור לטיול:', url); }
 };
 // a shared link opens the trip
+// the group's latest trips on the start screen: one tap to open
+async function loadRecent() {
+  if (!hasGroup()) return;
+  try {
+    const j = await api('/routes'); const rows = (j.routes || []).slice(0, 5); if (!rows.length) return;
+    const list = document.querySelector('#recent .rlist'); list.innerHTML = '';
+    for (const r of rows) {
+      const b = document.createElement('button'); b.type = 'button'; b.innerHTML = '<b></b><small></small>';
+      b.querySelector('b').textContent = r.name; b.querySelector('small').textContent = [r.stats?.len ? Math.round(r.stats.len / 1000) + ' ק"מ' : null, r.created_by, new Date(r.created_at).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' })].filter(Boolean).join(' · ');
+      b.onclick = async () => { try { const k = await api('/routes/' + r.id); showSaved(k.route); } catch { status('לא הצלחתי לפתוח את הטיול.', true); } };
+      list.append(b);
+    }
+    $('recent').hidden = false;
+  } catch {}
+}
+setTimeout(loadRecent, 400);
 async function checkSharedLink() { const m = location.hash.match(/#r=([0-9a-f-]{36})/); if (!m || !hasGroup()) return;
   try { status('פותח את הטיול ששותף…'); const j = await api('/routes/' + m[1]); showSaved(j.route); status(''); } catch { status('לא הצלחתי לפתוח את הטיול ששותף. בדקו את קוד הקבוצה ב-⚙.', true); } }
 checkSharedLink();
