@@ -162,6 +162,9 @@ ul.pois li{margin-bottom:8px}
 #lightbox .cap span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #lightbox .nav{background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:8px;width:36px;height:32px;font-size:18px;cursor:pointer}
 .popbtns{display:flex;gap:6px;margin-top:6px}
+.plinks{display:flex;flex-wrap:wrap;gap:6px;margin:5px 0 2px}
+.plinks a{font:500 12px var(--body);color:var(--accent);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:3px 9px;background:#fff}
+.plinks a:first-child{background:var(--accent);color:#fff;border-color:var(--accent)}
 .popbtns button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 9px;font:500 13px var(--body);cursor:pointer;color:var(--ink)}
 .popbtns button:hover{border-color:var(--accent);color:var(--accent)}
 .hbtns{display:flex;flex:none;gap:8px;margin-inline-start:auto;pointer-events:auto}
@@ -1938,10 +1941,30 @@ function campSub(c) {
   if (c.water === 'yes') bits.push('מים'); if (c.toilets === 'yes') bits.push('שירותים');
   return bits.join(' · ');
 }
+// links out: book a campsite, buy ferry tickets, navigate there
+function placeLinks(pt) {
+  const ll = `${(+pt.lat).toFixed(5)},${(+pt.lon).toFixed(5)}`, q = s => encodeURIComponent(s);
+  const nm = String(pt.name || '').replace(/^[🌲⛴]\s*/u, '').replace(/^(לינת שטח|מעבורת):\s*/, '').replace(/[\u2068\u2069]/g, '');
+  const out = [];
+  if (/מעבורת/.test(pt.name || '')) {
+    const ports = nm.split('←').map(x => x.trim()).filter(Boolean);
+    out.push(['כרטיסים למעבורת', 'https://www.google.com/search?q=' + q(`${ports.join(' to ')} car ferry tickets`)]);
+    out.push(['Ferryhopper', 'https://www.ferryhopper.com/en/']);
+  } else if (pt.type === 'nightcamp' && !pt.wild && !pt.ferry && pt.type !== 'dayend') {
+    if (pt.website) out.push(['אתר והזמנה', /^https?:/.test(pt.website) ? pt.website : 'https://' + pt.website]);
+    else if (/^(קמפינג|חניון קרוואנים|camping|campsite)$/i.test(nm.trim())) out.push(['קמפינג במפה', `https://www.google.com/maps/search/camping/@${ll},15z`]); // no name: the place on the map, with its reviews and phone
+    else out.push(['חיפוש הזמנה', 'https://www.google.com/search?q=' + q(`${nm} ${inIsrael(pt.lat, pt.lon) ? 'חניון לילה' : 'camping booking'}`)]);
+  }
+  out.push(['Waze', `https://waze.com/ul?ll=${ll}&navigate=yes`], ['Google Maps', `https://www.google.com/maps/search/?api=1&query=${ll}`]);
+  const box = document.createElement('div'); box.className = 'plinks';
+  for (const [t, u] of out) { const a = document.createElement('a'); a.href = u; a.target = '_blank'; a.rel = 'noopener'; a.textContent = t; box.append(a); }
+  return box;
+}
 function placePopup(pt, title, sub) {
   const div = document.createElement('div');
   div.innerHTML = `<div class="poptitle"></div><div class="popsub"></div><div class="wxpop"></div><div class="thumbs"></div>`;
   div.querySelector('.poptitle').textContent = title; div.querySelector('.popsub').textContent = sub || '';
+  div.querySelector('.popsub').after(placeLinks(pt));
   let loaded = false;
   return { div, load: () => {
     if (loaded) return; loaded = true; fillThumbs(div.querySelector('.thumbs'), pt);
@@ -2355,6 +2378,7 @@ function render(i, day = null) {
       const li = document.createElement('li');
       li.innerHTML = `<span></span> <span style="color:var(--muted)"></span><div class="thumbs"></div>`;
       li.children[0].textContent = x.name; li.children[1].textContent = '· ' + (x.type === 'nightcamp' ? campSub(x) : (x.sunset ? 'תצפית לשקיעה' : (x.note || POI_TYPES[x.type]?.he || 'נקודת חובה')));
+      li.querySelector('.thumbs').before(placeLinks(x));
       ul.append(li); fillThumbs(li.querySelector('.thumbs'), x);
     }
     $('poiList').append(ul);
