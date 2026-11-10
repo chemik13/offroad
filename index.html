@@ -571,7 +571,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
   </div>
   <button class="ghost" id="inviteBtn" type="button" style="margin-top:10px">קישור הזמנה לחבר (עם הקוד)</button>
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.57 · 10.11.2026 16:28</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.58 · 10.11.2026 16:36</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2072,9 +2072,33 @@ async function parseSmart(text) {
     if (tu && r.stop_reason === 'max_tokens') tu = null;
   }
   if (!tu) throw Object.assign(new Error('לא התקבל פענוח'), { detail: 'Claude לא החזיר פרמטרים' });
-  const out = { allow_area_a: false, military_mode: 'auto', via: [], ...tu.input, _searched: searched };
+  const out = fixPlaces({ allow_area_a: false, military_mode: 'auto', via: [], ...tu.input, _searched: searched });
   for (const pl of [out.start, out.end, ...(out.via || [])]) if (pl && pl.lat && pl.lon) pl.researched = true;
   return out;
+}
+// the model sometimes sends a place as a JSON string (even a broken one: "lon":34.9initial): rebuild the object, keep the name
+function fixPlace(x) {
+  if (x == null || x === '') return null;
+  if (typeof x === 'string') {
+    try { x = JSON.parse(x); } catch {
+      const nm = x.match(/"name"\s*:\s*"([^"]+)"/)?.[1], la = x.match(/"lat"\s*:\s*(-?\d+(?:\.\d+)?)/)?.[1], lo = x.match(/"lon"\s*:\s*(-?\d+(?:\.\d+)?)/)?.[1];
+      x = nm ? { name: nm, ...(la && lo ? { lat: +la, lon: +lo } : {}) } : /[{}":]/.test(x) ? null : { name: x.trim() };
+    }
+    if (typeof x === 'string') x = { name: x };
+  }
+  if (!x || typeof x !== 'object') return null;
+  if (x.name != null) x.name = String(x.name).trim();
+  for (const k of ['lat', 'lon']) if (x[k] != null) { x[k] = parseFloat(x[k]); if (!isFinite(x[k])) delete x[k]; }
+  if (!x.name && !(x.lat && x.lon) && !x.latlng) return null;
+  return x;
+}
+function fixPlaces(p) {
+  p.start = fixPlace(p.start); p.end = fixPlace(p.end);
+  if (typeof p.via === 'string') { try { p.via = JSON.parse(p.via); } catch { p.via = []; } }
+  p.via = (Array.isArray(p.via) ? p.via : []).map(fixPlace).filter(Boolean);
+  if (typeof p.poi_types === 'string') { try { p.poi_types = JSON.parse(p.poi_types); } catch { p.poi_types = p.poi_types.split(/[,\s]+/).filter(Boolean); } }
+  for (const k of ['duration_hours', 'days', 'hours_per_day', 'distance_km', 'max_km_per_day']) if (p[k] != null && typeof p[k] !== 'number') { const n = parseFloat(p[k]); if (isFinite(n)) p[k] = n; else delete p[k]; }
+  return p;
 }
 
 // ---------- geocode ----------
@@ -2083,6 +2107,7 @@ async function geocode(place) {
   if (!place) return null;
   if (place.latlng) return place.latlng;
   const name = place.name;
+  if (!name) return place.lat && place.lon ? [place.lat, place.lon] : null;
   if (geoCache[name]) return geoCache[name];
   const abroad = (place.country && place.country !== 'IL') || (place.lat && place.lon && !inIsrael(place.lat, place.lon));
   const local = abroad ? null : lookupPlace(name);
@@ -2424,7 +2449,7 @@ const talk = (() => {
     if (!tu) { await say(text || 'לא הבנתי, אפשר לנסח שוב?'); return; }
     if (text) await say(text);
     state('think', 'בונה מסלול…', '');
-    const np = { allow_area_a: false, military_mode: 'auto', via: [], ...tu.input };
+    const np = fixPlaces({ allow_area_a: false, military_mode: 'auto', via: [], ...tu.input });
     for (const pl of [np.start, np.end, ...(np.via || [])]) if (pl && pl.lat && pl.lon) pl.researched = true;
     if (current?.p) { for (const k of ['start', 'end']) if (np[k] && current.p[k] && np[k].name === current.p[k].name && current.p[k].latlng) np[k].latlng = current.p[k].latlng; if (!np.date && current.p.date) np.date = current.p.date; }
     np.vehicle = myVehicle();
@@ -3168,7 +3193,8 @@ async function run(fromPrompt, preset = null, changeText = null) {
     const abroadTrip = !inIsrael(sLL[0], sLL[1]);
     if (abroadTrip && p.avoid_asphalt == null && fromPrompt) { p.avoid_asphalt = true; $('pAsph').checked = true; } // abroad: dirt first, roads only to connect
     let eLL = null;
-    if (!p.loop && p.end) { eLL = await geocode(p.end); if (!eLL) throw new Error(`לא מצאתי את היעד "${p.end.name}".`); setEnd(eLL); p._endLL = eLL; }
+    if (!p.loop && p.end) { eLL = await geocode(p.end); if (!eLL) throw new Error(`לא מצאתי את היעד "${p.end.name}".`); setEnd(eLL); p._endLL = eLL;
+      if ((p.days || 1) <= 1 && p.duration_hours && hav(sLL[0], sLL[1], eLL[0], eLL[1]) > 250000) throw new Error(`מצאתי את "${p.end.name}" ${Math.round(hav(sLL[0], sLL[1], eLL[0], eLL[1]) / 1000)} ק"מ מנקודת ההתחלה, רחוק מדי לטיול של ${p.duration_hours} שעות. כנראה שזה מקום אחר באותו שם: כתבו גם אזור (למשל "אגמון חפר, עמק חפר").`); }
     else { pickedEnd = null; if (endMarker) { endMarker.remove(); endMarker = null; } }
     const viaLL = [];
     const lost = [];
