@@ -53,6 +53,19 @@ header button{pointer-events:auto;margin-inline-start:auto}
 #sheet.min #body{display:none}
 #sheet.has-results{max-height:52vh;max-height:52dvh}
 #sheet.full{max-height:calc(100vh - 70px);max-height:calc(100dvh - 70px - env(safe-area-inset-top,0px))}
+.fly{position:fixed;inset:0;z-index:60;background:#0b0f0d}
+.fly[hidden]{display:none}
+#flyMap{position:absolute;inset:0}
+.flytop{position:absolute;top:calc(env(safe-area-inset-top,0px) + 12px);inset-inline:12px;display:flex;gap:10px;align-items:center;pointer-events:none}
+.flytitle{color:#fff;font:600 16px var(--display);text-shadow:0 1px 4px rgba(0,0,0,.6)}
+.flybtn{pointer-events:auto;width:44px;height:44px;border-radius:50%;border:0;background:rgba(255,255,255,.92);color:#111;font:600 15px var(--body);cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.35);flex:none}
+.flybar{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);inset-inline:12px;display:flex;gap:10px;align-items:center;background:rgba(0,0,0,.45);backdrop-filter:blur(6px);border-radius:999px;padding:6px}
+.flyprog{flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.25);overflow:hidden}
+.flyprog i{display:block;height:100%;width:0;background:#ffd23f}
+.flykm{color:#fff;font:600 13px var(--body);font-variant-numeric:tabular-nums;min-width:62px;text-align:center}
+.flymsg{position:absolute;inset:0;display:grid;place-items:center;color:#fff;font:500 15px var(--body);pointer-events:none}
+.flymsg:empty{display:none}
+.fly3d{border:0;background:#111;color:#ffd23f;border-radius:999px;padding:5px 11px;font:600 12px var(--body);cursor:pointer;margin-top:6px}
 .gate{position:fixed;inset:0;z-index:50;background:linear-gradient(160deg,#eef3ee,#fff 60%);display:grid;place-items:center;padding:20px}
 .gate[hidden]{display:none}
 .gatebox{width:min(380px,100%);display:flex;flex-direction:column;gap:14px;text-align:center}
@@ -229,6 +242,7 @@ ul.pois li{margin-bottom:8px}
 .lg.open{background:#e9f6ee}.lg.hol{background:#2e9b4f}.lg.sel{background:#fff;outline:2px solid var(--accent);outline-offset:-2px}
 .calnext{font-size:13px;margin-top:8px;display:flex;flex-direction:column;gap:3px}
 .calnext button{background:none;border:0;padding:0;color:var(--accent);font:inherit;cursor:pointer;text-align:start}
+.livenight{font-size:18px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4));transform:translate(4px,4px)}
 .daydot{width:22px;height:22px;border-radius:50%;background:var(--c);color:#fff;font:700 12px var(--body);display:grid;place-items:center;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4)}
 .milsw{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px}
 .milsw button{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:5px 10px;font:500 13px var(--body);cursor:pointer}
@@ -442,6 +456,12 @@ ul.pois li{margin-bottom:8px}
   </div>
 </section>
 
+<div id="fly" class="fly" hidden>
+  <div id="flyMap"></div>
+  <div class="flytop"><button class="flybtn" id="flyClose" type="button" aria-label="סגירה">✕</button><div class="flytitle" id="flyTitle"></div></div>
+  <div class="flybar"><button class="flybtn play" id="flyPlay" type="button" aria-label="עצירה">❚❚</button><div class="flyprog"><i id="flyProg"></i></div><div class="flykm" id="flyKm"></div><button class="flybtn" id="flySpeed" type="button">1×</button></div>
+  <div class="flymsg" id="flyMsg"></div>
+</div>
 <div id="gate" class="gate" hidden>
   <div class="gatebox">
     <div class="gatemark"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span></div>
@@ -528,6 +548,16 @@ const aaToggle = () => { if (map.getZoom() >= 9) aaLayer.addTo(map); else aaLaye
 map.on('zoomend', aaToggle); aaToggle();
 const routeLayer = L.layerGroup().addTo(map);
 const markLayer = L.layerGroup().addTo(map);
+// live drawing while a long trip is planned: road skeleton, day ends, dirt stretches and nights appear as they are found
+const liveLayer = L.layerGroup().addTo(map);
+let liveOn = false;
+const LIVEC = ['#1f6fd6', '#d2691e', '#7a3fc2', '#0e9a8a', '#c2185b', '#5d7a1f', '#b8860b'];
+const live = {
+  clear() { liveLayer.clearLayers(); window.__live = 0; },
+  line(pts, st) { if (!liveOn || !pts || pts.length < 2) return; L.polyline(pts, st).addTo(liveLayer); window.__live = (window.__live || 0) + 1; },
+  dirt(pts) { live.line(pts, { color: '#fff', weight: 8, opacity: 0.9 }); live.line(pts, { color: '#2e9b4f', weight: 5 }); },
+  dot(ll, html) { if (!liveOn) return; L.marker(ll, { icon: L.divIcon({ className: '', html, iconSize: null, iconAnchor: [11, 11] }), interactive: false }).addTo(liveLayer); window.__live = (window.__live || 0) + 1; },
+};
 let pickedStart = null, pickedEnd = null;
 const pinIcon = c => L.divIcon({ className: '', html: `<div class="pin" style="background:${c}"></div>`, iconSize: [18, 18], iconAnchor: [9, 9] });
 let startMarker = null, endMarker = null;
@@ -1434,6 +1464,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
       if (s < 0) throw 0;
       const res = plan(G, { ...p, avoid_asphalt: true, loop: true, days: 1, via: [], distance_km: offKm, duration_hours: null }, { s, e: -1, vias: [], viaPois: [] }, () => {});
       const r = res.results[0]; if (!r || r.len < 3000) throw 0;
+      live.dirt(r.coords);
       pieces[i] = { coords: r.coords, segs: r.segs, len: r.len, hrs: r.hrs, byD: r.byD, maxD: r.maxD, asph: r.asph, unk: r.unk, res: r.res || 0, at: [G.lat[s], G.lon[s]], pois: r.pois.filter(x => x.type !== 'nightcamp') };
     } catch (e) { if (e) console.warn('offroad piece', e); notes.push(e?.message === 'timeout' ? `שרתי OpenStreetMap איטיים כרגע, אז ליד ${vias[i].name} עוברים בכביש.` : `לא מצאתי קטע שטח מתאים ליד ${vias[i].name}; עוברים שם בכביש.`); }
     finally { status(`מתכנן קטעי שטח באזורים שבדרך (${++pDone}/${vias.length})…`); }
@@ -1444,6 +1475,11 @@ async function planOverland(p, sLL, eLL, viaLL) {
   const wp0 = [sLL, ...vias.map((v, i) => pieces[i]?.at || v.ll), end];
   const ferAt = new Map(); vias.forEach((v, i) => { if (v.ferry) ferAt.set(i + 1, { hours: v.ferryHours, name: v.ferryName || `\u2068${v.name}\u2069 ← \u2068${vias[i + 1]?.name || 'יעד'}\u2069` }); });
   const sk = await osrmFerry(wp0, ferAt);
+  { const land = [], sea = []; let cur = [], isSea = null; // the road skeleton, the sea legs dashed blue
+    sk.coords.forEach((c, i) => { const s = !!(sk.ferry[i] && sk.ferry[i + 1]); if (s !== isSea && cur.length) { (isSea ? sea : land).push([...cur, c]); cur = []; } isSea = s; cur.push(c); }); if (cur.length) (isSea ? sea : land).push(cur);
+    for (const l of land) live.line(l, { color: '#646b66', weight: 4, opacity: 0.7, dashArray: '2 7', lineCap: 'round' });
+    for (const l of sea) live.line(l, { color: '#1f6fd6', weight: 3, dashArray: '2 8' });
+    if (liveOn) map.fitBounds(L.latLngBounds(sk.coords).pad(0.1), mapPad()); }
   const legIdx0 = legSplit(sk.coords, wp0);
   const timeline = []; // cumulative [km, h] per road coord, with off-road loops added at their highlight
   let km = 0, h = 0;
@@ -1488,6 +1524,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
     if (q < parts.length - 1) cuts.push({ ...timeline[b], ferryNight: true }); // sleep on the boat
   });
   p.days = cuts.length + 1; if ($('pDays')) $('pDays').value = p.days;
+  cuts.forEach((c, k) => live.dot(c.c, `<div class="daydot" style="--c:${LIVEC[(k + 1) % LIVEC.length]}">${k + 2}</div>`));
   // 2b. an off-road stretch every day: replace part of the day's road with trails between two road points
   const dayOff = [], dayLoop = [], gotDay = new Set();
   {
@@ -1531,6 +1568,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
           if (used.some(u => !(f.B.i < u.A.i || f.A.i > u.B.i))) continue;
           used.push(f); offSum += f.off; if (offSum >= j.target * 1000 * 1.1 || used.length >= 3) break;
         }
+        for (const { r } of used) live.dirt(r.coords);
         for (const { A, B, r } of used) dayOff.push({ d: j.d, A, B, coords: r.coords, segs: r.segs, len: r.len, hrs: r.hrs, byD: r.byD, maxD: r.maxD, asph: r.asph, unk: r.unk, res: r.res || 0, pois: [] });
         if (used.length) gotDay.add(j.d);
         if (offSum >= j.target * 1000 * 0.6) return; // enough; otherwise add a loop into the trails as well
@@ -1545,6 +1583,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
           const s0 = nearestNode(G, c[0], c[1], fac, 4000); if (s0 < 0) return;
           const r = plan(G, { ...p, avoid_asphalt: true, loop: true, days: 1, via: [], distance_km: j.loopKm, duration_hours: null }, { s: s0, e: -1, vias: [], viaPois: [] }, () => {}).results[0];
           if (!r || r.len < 5000 || (r.len - r.asph) / r.len < 0.3) return;
+          live.dirt(r.coords);
           gotDay.add(j.d); dayLoop[j.d] = { M: j.M, coords: r.coords, segs: r.segs, len: r.len, hrs: r.hrs, byD: r.byD, maxD: r.maxD, asph: r.asph, unk: r.unk, res: r.res || 0, pois: r.pois.filter(x => x.type !== 'nightcamp') };
         }
       } catch (e) { console.warn("day stretch", j.d, e?.message || e); } finally { status(`מחפש קטעי שטח לכל יום… ${++done}/${jobs.length}`); }
@@ -1603,6 +1642,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
     }
     return best;
   }
+  nights.forEach(n => n && live.dot([n.lat, n.lon], `<div class="livenight">${n.ferry ? '⛴' : n.wild ? '🌲' : '⛺'}</div>`));
   nights.forEach((n, k) => { if (n && !cuts[k].ferryNight) n.alts = altsOf(cuts[k]).filter(x => Math.abs(x.lat - n.lat) > 1e-5 || Math.abs(x.lon - n.lon) > 1e-5).slice(0, 4); });
   if (wildOk && nights.some(n => n?.wild)) notes.push(`לינות שטח: נקודות על שפת אגם, בתצפית או בחניון יום שדרך עפר מגיעה אליהם. קמפינג מסודר כל ${every} לילות. לא בדקתי את המקום בשטח: הגיעו לפני החושך.`);
   if (wildOk && cuts.some(c => !c.ferryNight && (WILD_NIGHT[countryAt(c.c)] || 'no') === 'no')) notes.push('באיטליה, קרואטיה, סלובניה, אוסטריה ופורטוגל לינה מחוץ לקמפינג אסורה ונאכפת בקנסות, אז שם יש רק קמפינגים.');
@@ -1835,7 +1875,8 @@ async function run(fromPrompt, preset = null) {
   const btns = [$('goBtn'), $('rebuildBtn')]; btns.forEach(b => b.disabled = true); busy = true; bgNote = '';
   const changing = !$('results').hidden && $('sheet').classList.contains('has-results');
   if (changing) $('results').classList.add('working'); // the old trip stays in view while the new one is planned
-  else { $('results').hidden = true; stageStart(fromPrompt && !preset); }
+  else { $('results').hidden = true; stageStart(fromPrompt && !preset); routeLayer.clearLayers(); markLayer.clearLayers(); }
+  live.clear(); liveOn = !changing;
   try {
     let p;
     const text = $('prompt').value.trim();
@@ -1993,7 +2034,7 @@ async function run(fromPrompt, preset = null) {
   } catch (err) {
     lastRunErr = err.message || String(err);
     status(err.message || String(err), true);
-  } finally { btns.forEach(b => b.disabled = false); busy = false; stageEnd(); $('results').classList.remove('working'); if (!$('busyLine').classList.contains('err')) $('busyLine').hidden = true; }
+  } finally { btns.forEach(b => b.disabled = false); busy = false; stageEnd(); liveOn = false; live.clear(); $('results').classList.remove('working'); if (!$('busyLine').classList.contains('err')) $('busyLine').hidden = true; }
 }
 $('goBtn').onclick = () => run(true);
 $('rebuildBtn').onclick = () => run(false);
@@ -2092,6 +2133,60 @@ function latinName(nm) {
   t = [...t].map(ch => { const lo = ch.toLowerCase(), r = TR[lo]; if (r == null) return ch; const o = r === '_' ? '' : r; return ch !== lo ? o.charAt(0).toUpperCase() + o.slice(1) : o; }).join('');
   return t.replace(/\b([a-z])/g, (x, c, i, all) => (i === 0 || all[i - 1] === ' ') ? c.toUpperCase() : c);
 }
+// ---------- 3D fly-over of a day: satellite imagery on real terrain, the camera follows the track ----------
+let mlLoad = null;
+const loadML = () => mlLoad || (mlLoad = new Promise((res, rej) => {
+  const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.css'; document.head.append(css);
+  const js = document.createElement('script'); js.src = 'https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.js'; js.onload = () => res(window.maplibregl); js.onerror = () => { mlLoad = null; rej(new Error('load')); }; document.head.append(js);
+}));
+let flyState = null;
+async function flyOver(coords, title) {
+  if (!coords || coords.length < 2) return;
+  $('fly').hidden = false; $('flyTitle').textContent = title || ''; $('flyMsg').textContent = 'טוען תלת-ממד…'; $('flyProg').style.width = '0';
+  let ml; try { ml = await loadML(); } catch { $('flyMsg').textContent = 'לא הצלחתי לטעון את התלת-ממד. בדקו חיבור לאינטרנט.'; return; }
+  // the track, evenly spaced every ~25 m, with distance along it
+  const pts = [[coords[0][1], coords[0][0], 0]];
+  for (let i = 1; i < coords.length; i++) {
+    const a = coords[i - 1], b = coords[i], d = hav(a[0], a[1], b[0], b[1]), n = Math.max(1, Math.round(d / 25));
+    for (let k = 1; k <= n; k++) pts.push([a[1] + (b[1] - a[1]) * k / n, a[0] + (b[0] - a[0]) * k / n, pts[pts.length - 1][2] + d / n]);
+  }
+  const total = pts[pts.length - 1][2];
+  const at = dist => { let lo = 0, hi = pts.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (pts[m][2] < dist) lo = m; else hi = m; } return pts[hi]; };
+  if (flyState?.map) flyState.map.remove();
+  const map3 = new ml.Map({ container: 'flyMap', attributionControl: { compact: true }, pitch: 68, zoom: 14, center: [pts[0][0], pts[0][1]], maxPitch: 80,
+    style: { version: 8,
+      sources: { sat: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 18, attribution: 'Esri, Maxar' },
+        dem: { type: 'raster-dem', tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'], encoding: 'terrarium', tileSize: 256, maxzoom: 14, attribution: 'Mapzen terrain' } },
+      layers: [{ id: 'sat', type: 'raster', source: 'sat' }], sky: { 'sky-color': '#9cc8f0', 'horizon-color': '#e8f0f7', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.7, 'fog-color': '#e8f0f7' } } });
+  flyState = { map: map3, t: 0, speed: 1, playing: true, last: 0 };
+  // ~35 s for a typical day; long days go faster, short ones slower
+  const durS = Math.max(22, Math.min(55, total / 1000 * 0.45)), mps = total / durS;
+  map3.on('load', () => {
+    map3.setTerrain({ source: 'dem', exaggeration: 1.35 });
+    map3.addSource('trk', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: pts.map(p => [p[0], p[1]]) } } });
+    map3.addLayer({ id: 'trk-c', type: 'line', source: 'trk', paint: { 'line-color': '#000', 'line-width': 8, 'line-opacity': 0.45 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
+    map3.addLayer({ id: 'trk', type: 'line', source: 'trk', paint: { 'line-color': '#ffd23f', 'line-width': 4.5 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
+    $('flyMsg').textContent = '';
+    let bearing = null;
+    const frame = now => {
+      if (!flyState || flyState.map !== map3) return;
+      const dt = flyState.last ? Math.min(0.1, (now - flyState.last) / 1000) : 0; flyState.last = now;
+      if (flyState.playing) flyState.t = Math.min(total, flyState.t + dt * mps * flyState.speed);
+      const here = at(flyState.t), ahead = at(Math.min(total, flyState.t + 900)), behind = at(Math.max(0, flyState.t - 1));
+      const want = here === ahead ? (bearing ?? 0) : Math.atan2((ahead[0] - behind[0]) * Math.cos(here[1] * Math.PI / 180), ahead[1] - behind[1]) * 180 / Math.PI;
+      if (bearing == null) bearing = want; let dB = ((want - bearing + 540) % 360) - 180; bearing += dB * Math.min(1, dt * 1.6); // smooth turns
+      map3.jumpTo({ center: [here[0], here[1]], bearing, pitch: 68, zoom: 14.3 });
+      $('flyProg').style.width = (flyState.t / total * 100).toFixed(1) + '%';
+      $('flyKm').textContent = `${(flyState.t / 1000).toFixed(1)} / ${(total / 1000).toFixed(0)} ק"מ`;
+      if (flyState.t >= total && flyState.playing) { flyState.playing = false; $('flyPlay').textContent = '↺'; }
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  });
+}
+$('flyClose').onclick = () => { if (flyState?.map) flyState.map.remove(); flyState = null; $('fly').hidden = true; };
+$('flyPlay').onclick = () => { if (!flyState) return; if (flyState.t >= 0 && !flyState.playing && $('flyPlay').textContent === '↺') flyState.t = 0; flyState.playing = !flyState.playing; $('flyPlay').textContent = flyState.playing ? '❚❚' : '▶'; flyState.last = 0; };
+$('flySpeed').onclick = () => { if (!flyState) return; flyState.speed = flyState.speed === 1 ? 2 : flyState.speed === 2 ? 4 : 1; $('flySpeed').textContent = flyState.speed + '×'; };
 // links out: book a campsite, buy ferry tickets, navigate there
 function placeLinks(pt) {
   const ll = `${(+pt.lat).toFixed(5)},${(+pt.lon).toFixed(5)}`, q = s => encodeURIComponent(s);
@@ -2375,6 +2470,7 @@ function segsInRange(r, from, to) {
   return out;
 }
 function render(i, day = null) {
+  live.clear();
   const { res, p } = current; if (current.sel !== i) day = null; current.sel = i; current.day = day;
   const r = res.results[i];
   $('results').hidden = false; $('sheet').classList.remove('min', 'full'); $('sheet').classList.add('has-results');
@@ -2513,6 +2609,7 @@ function render(i, day = null) {
   renderSafety(r, dv, w);
   renderElevation(dv ? { ...r, coords: r.coords.slice(dv.from, dv.to + 1) } : r);
   $('dayPlan').innerHTML = '';
+  if (!D) { const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.textContent = '▶ מעוף תלת-ממד על המסלול'; fb.onclick = () => flyOver(r.coords, routeTitle(r, p)); $('dayPlan').append(fb); }
   if (D) {
     const box = document.createElement('div'); box.className = 'dayplan cards';
     D.forEach((d, k) => {
@@ -2545,6 +2642,7 @@ function render(i, day = null) {
         }
         night.append(sw);
       }
+      { const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.textContent = '▶ מעוף תלת-ממד על היום'; fb.onclick = () => flyOver(r.coords.slice(d.from, d.to + 1), `יום ${k + 1}`); night.append(fb); }
       card.append(night);
       box.append(card);
     });
