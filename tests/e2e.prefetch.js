@@ -20,7 +20,7 @@ function fakeOSM(){const els=[];let id=1;const la0=30.45,lo0=34.65,st=0.004,n=90
  console.log('build took ms',Date.now()-t0,'| overpass calls total',calls.join(','),'| stat',JSON.stringify(await p.evaluate(()=>current.G.cacheStat)));
  // foreground fetch with slow kumi: must finish ~1.5s (de wins), not 8s
  await p.evaluate(()=>{gcache=null;memTiles.clear();idb.clear();});
- const t1=Date.now();await p.fill('#prompt','3 שעות ממצפה רמון');await p.click('#goBtn');await p.waitForTimeout(200);
+ await p.click('#newTripBtn');const t1=Date.now();await p.fill('#prompt','3 שעות ממצפה רמון');await p.click('#goBtn');await p.waitForTimeout(200);
  await p.waitForFunction(()=>!document.getElementById('results').hidden && !document.getElementById('goBtn').disabled,null,{timeout:20000});
  console.log('fresh download with race took ms',Date.now()-t1);
  console.log(errs.join('\n')||'no page errors');await b.close();})();

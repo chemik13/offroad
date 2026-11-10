@@ -31,6 +31,7 @@
   color-scheme:light;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{height:100%;margin:0}
 body{font-family:var(--body);background:var(--bg);color:var(--ink);font-size:15px;overflow:hidden;-webkit-font-smoothing:antialiased}
 #map{position:fixed;inset:0;z-index:0;background:#eef0ec}
@@ -52,7 +53,28 @@ header button{pointer-events:auto;margin-inline-start:auto}
 #sheet.min #body{display:none}
 #sheet.has-results{max-height:52vh;max-height:52dvh}
 #sheet.full{max-height:calc(100vh - 70px);max-height:calc(100dvh - 70px - env(safe-area-inset-top,0px))}
-#sheet.has-results .examples{display:none}
+#sheet.has-results #compose{display:none}
+#sheet:not(.has-results) #composer,#sheet:not(.has-results) #params{display:none}
+#compose{display:flex;flex-direction:column;gap:12px}
+.vehpick{display:flex;flex-direction:column;gap:5px}
+.vehpick small{font-size:12px;color:var(--muted)}
+.vlab{font-size:12px;color:var(--muted);font-weight:500}
+.seg{display:flex;background:var(--stone);border-radius:10px;padding:3px;gap:3px}
+.seg button{flex:1;min-width:0;border:0;background:none;color:var(--ink);border-radius:8px;padding:7px 4px;font:500 14px var(--body);cursor:pointer;white-space:nowrap}
+.seg button[aria-checked=true]{background:#fff;box-shadow:0 1px 3px rgba(20,30,25,.18);font-weight:600}
+.quick{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.qrow{display:grid;grid-template-columns:42px 1fr;align-items:center;gap:8px}
+#tripHead{display:flex;align-items:flex-start;gap:10px}
+#tripHead[hidden]{display:none}
+#tripHead .th{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+#tripHead b{font-family:var(--display);font-size:17px;font-weight:600;line-height:1.3}
+#tripHead small{font-size:13px;color:var(--muted);line-height:1.4}
+.linkbtn{flex:none;background:none;border:1px solid var(--line);border-radius:999px;padding:5px 12px;font:500 13px var(--body);color:var(--accent);cursor:pointer}
+#composer{display:flex;gap:8px;padding-top:10px;margin-top:6px;border-top:1px solid var(--line);flex:none}
+#composer[hidden]{display:none}
+#composer input{flex:1;min-width:0;font:inherit;font-size:16px;color:var(--ink);background:var(--stone);border:1px solid transparent;border-radius:10px;padding:10px 12px}
+#composer input:focus{background:#fff;border-color:var(--accent)}
+details.params{margin-top:10px}
 .grip{position:relative}
 .grip::after{content:"";position:absolute;inset:-12px -40px}
 .grip{width:40px;height:4px;border-radius:2px;background:var(--stone-2);margin:4px auto 10px;cursor:pointer;border:0;display:block}
@@ -271,44 +293,28 @@ ul.pois li{margin-bottom:8px}
 <section id="sheet">
   <button class="grip" id="grip" aria-label="כווץ / הרחב"></button>
   <div id="body">
+    <div id="compose">
     <div class="promptrow">
       <div class="pwrap"> <textarea id="prompt" rows="3" placeholder="למשל: חצי יום בגולן מקצרין, בינוני, עם מעיין ותצפית"></textarea>
         <button class="mic" id="micBtn" type="button" aria-label="דברו במקום להקליד" title="דברו במקום להקליד"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg></button></div>
       <div style="display:flex;flex-direction:column;gap:6px"><button class="go" id="goBtn">בנה מסלול</button><button class="ghost" id="talkBtn" title="מצב שיחה: מדברים והאפליקציה עונה בקול" style="padding:7px 8px;font-size:13px">שיחה</button></div>
     </div>
-    <div class="examples" id="examples"></div>
+      <div class="vehpick"><span class="vlab">הרכב שלכם</span><div class="seg" id="vehSeg" role="radiogroup" aria-label="הרכב שלכם"></div><small id="vehHint"></small></div>
+      <div class="examples" id="examples"></div>
+    </div>
+    <div id="tripHead" hidden>
+      <div class="th"><b id="thTitle"></b><small id="thSub"></small></div>
+      <button class="linkbtn" id="newTripBtn" type="button">טיול חדש</button>
+    </div>
     <div id="status" role="status"></div>
     <div id="understood" class="understood" hidden></div>
 
-    <details class="params" id="params">
-      <summary>הגדרות מסלול (אפשר לערוך ולבנות שוב)</summary>
-      <div class="grid">
-        <label class="full">נקודת התחלה<input type="text" id="pStart" placeholder="שם מקום, או לחצו על המפה"></label>
-        <label>סוג<select id="pLoop"><option value="0">מנקודה לנקודה</option><option value="1">לופ (חוזר להתחלה)</option></select></label>
-        <label>יעד<input type="text" id="pEnd" placeholder="ריק = המערכת תבחר יעד"></label>
-        <label>משך (שעות)<input type="number" id="pHours" min="0.5" max="12" step="0.5"></label>
-        <label>או אורך (ק"מ)<input type="number" id="pKm" min="2" max="600" step="1"></label>
-        <label>מספר ימים<input type="number" id="pDays" min="1" max="7" step="1" value="1"></label>
-        <label>שעות נסיעה ביום<input type="number" id="pHpd" min="2" max="12" step="0.5" placeholder="6"></label>
-        <label>רמת קושי<select id="pDiff"><option value="easy">קל</option><option value="medium">בינוני</option><option value="hard">קשה</option></select></label>
-        <label>רכב<select id="pVeh"><option value="stock">סטוק</option><option value="raised">מוגבה + הילוך כוח</option><option value="lockers">מוגבה + נעילות</option></select></label>
-        <label class="full">עצירות בדרך
-          <span class="checks" id="pPois"></span></label>
-        <label class="full">דרך (נקודות חובה, מופרדות בפסיק)<input type="text" id="pVia" placeholder="למשל: עין סהרונים, הר ארדון"></label>
-        <label class="full"><span class="checks">
-          <label><input type="checkbox" id="pAsph"> להימנע מכבישים</label>
-          </span></label>
-        <label>תאריך יציאה<span style="display:flex;gap:6px"><input type="date" id="pDate" style="flex:1;min-width:0"><button type="button" class="ghost" id="calBtn" style="padding:6px 10px;font-size:13px;white-space:nowrap">לוח שטחי אש</button></span></label>
-        <label>שעת יציאה<input type="time" id="pTime" value="08:00"></label>
-        <label>שטחי אש<select id="pMil"><option value="auto">לפי התאריך (סופ"ש וחגים)</option><option value="avoid">תמיד להימנע</option><option value="allow">לכלול תמיד</option></select></label>
-        <label class="full" id="milNote" style="color:var(--muted)"></label>
-        <label class="full">שטחי A (רשות פלסטינית)<select id="pAA"><option value="0">חסום (ברירת מחדל)</option><option value="1">לאפשר מעבר</option></select></label>
-      </div>
-      <div class="actions" style="margin-top:10px"><button class="ghost" id="rebuildBtn">בנה שוב עם ההגדרות</button></div>
-    </details>
 
     <div id="results" hidden>
-      <div class="refine" id="refineRow"><label for="refineIn" style="display:block;font-size:13px;font-weight:600;margin-bottom:4px">✏️ רוצים לשנות? כתבו כאן מה לשנות</label><div style="display:flex;gap:8px"><input type="text" id="refineIn" placeholder="&quot;יותר שטח&quot;, &quot;תוסיף יום באלבניה&quot;, &quot;עד 100 ק&quot;מ ביום&quot;"><button class="ghost" id="refineBtn">עדכון</button></div></div>
+      <div class="quick">
+        <div class="qrow"><span class="vlab">רכב</span><div class="seg" id="vehSeg2" role="radiogroup" aria-label="רכב"></div></div>
+        <div class="qrow"><span class="vlab">קושי</span><div class="seg" id="diffSeg" role="radiogroup" aria-label="קושי"></div></div>
+      </div>
       <div class="tabs" id="tabs"></div>
       <div class="daychips" id="dayChips" hidden></div>
       <div class="stats" id="stats" style="margin-top:8px"></div>
@@ -341,6 +347,36 @@ ul.pois li{margin-bottom:8px}
       <div class="confirm" id="delConfirm" style="margin-top:8px" hidden>למחוק את המסלול מהספרייה של כולם?
         <button class="danger" id="delYes">כן, למחוק</button><button class="ghost" id="delNo">ביטול</button></div>
     </div>
+    <details class="params" id="params">
+      <summary>הגדרות מתקדמות: התחלה, יעד, ימים, תאריך, עצירות</summary>
+      <div class="grid">
+        <label class="full">נקודת התחלה<input type="text" id="pStart" placeholder="שם מקום, או לחצו על המפה"></label>
+        <label>סוג<select id="pLoop"><option value="0">מנקודה לנקודה</option><option value="1">לופ (חוזר להתחלה)</option></select></label>
+        <label>יעד<input type="text" id="pEnd" placeholder="ריק = המערכת תבחר יעד"></label>
+        <label>משך (שעות)<input type="number" id="pHours" min="0.5" max="12" step="0.5"></label>
+        <label>או אורך (ק"מ)<input type="number" id="pKm" min="2" max="600" step="1"></label>
+        <label>מספר ימים<input type="number" id="pDays" min="1" max="7" step="1" value="1"></label>
+        <label>שעות נסיעה ביום<input type="number" id="pHpd" min="2" max="12" step="0.5" placeholder="6"></label>
+        <label hidden>רמת קושי<select id="pDiff"><option value="easy">קל</option><option value="medium">בינוני</option><option value="hard">קשה</option></select></label>
+        <label hidden>רכב<select id="pVeh"><option value="stock">רגיל</option><option value="raised">מוגבה</option><option value="lockers">נעילות</option></select></label>
+        <label class="full">עצירות בדרך
+          <span class="checks" id="pPois"></span></label>
+        <label class="full">דרך (נקודות חובה, מופרדות בפסיק)<input type="text" id="pVia" placeholder="למשל: עין סהרונים, הר ארדון"></label>
+        <label class="full"><span class="checks">
+          <label><input type="checkbox" id="pAsph"> להימנע מכבישים</label>
+          </span></label>
+        <label>תאריך יציאה<span style="display:flex;gap:6px"><input type="date" id="pDate" style="flex:1;min-width:0"><button type="button" class="ghost" id="calBtn" style="padding:6px 10px;font-size:13px;white-space:nowrap">לוח שטחי אש</button></span></label>
+        <label>שעת יציאה<input type="time" id="pTime" value="08:00"></label>
+        <label>שטחי אש<select id="pMil"><option value="auto">לפי התאריך (סופ"ש וחגים)</option><option value="avoid">תמיד להימנע</option><option value="allow">לכלול תמיד</option></select></label>
+        <label class="full" id="milNote" style="color:var(--muted)"></label>
+        <label class="full">שטחי A (רשות פלסטינית)<select id="pAA"><option value="0">חסום (ברירת מחדל)</option><option value="1">לאפשר מעבר</option></select></label>
+      </div>
+      <div class="actions" style="margin-top:10px"><button class="ghost" id="rebuildBtn">בנה שוב עם ההגדרות</button></div>
+    </details>
+  </div>
+  <div id="composer" hidden>
+    <input type="text" id="refineIn" enterkeyhint="send" aria-label="מה לשנות במסלול" placeholder="מה לשנות? למשל: יותר שטח">
+    <button class="go" id="refineBtn" type="button">שנה</button>
   </div>
 </section>
 
@@ -350,7 +386,7 @@ ul.pois li{margin-bottom:8px}
   <div style="display:flex;flex-direction:column;gap:10px">
     <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">קוד קבוצה<input id="groupCode" type="password" autocomplete="off"></label>
     <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">השם שלך (מופיע ליד מסלולים ששמרת)<input id="nick" type="text" autocomplete="nickname" style="direction:rtl"></label>
-    <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">הרכב שלי (ברירת המחדל לכל מסלול)<select id="myVeh" style="font:inherit;font-size:15px;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--stone);color:var(--ink)"><option value="stock">סטוק</option><option value="raised">מוגבה + הילוך כוח</option><option value="lockers">מוגבה + נעילות</option></select></label>
+    <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">הרכב שלי (ברירת המחדל לכל מסלול)<select id="myVeh" style="font:inherit;font-size:15px;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--stone);color:var(--ink)"><option value="stock">רגיל: 4x4 מהמפעל, בלי הגבהה</option><option value="raised">מוגבה + הילוך כוח</option><option value="lockers">מוגבה + נעילות</option></select></label>
     <details><summary style="font-size:13px;cursor:pointer">מתקדם: מפתח Claude אישי</summary>
       <p style="margin:6px 0">רק אם אין קוד קבוצה. נשמר בדפדפן הזה בלבד. מאפשר טיולים לפי נושא ("בעקבות…") עם חיפוש ברשת.</p>
       <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off"></details>
@@ -454,7 +490,7 @@ const EXAMPLES = [
   'ממצפה רמון עד חניון בארות, בינוני, עם תצפית',
   'חצי יום בגולן מקצרין, קל, עם מעיין',
   'ממצדה עד עין גדי דרך מדבר יהודה, רכב מוגבה',
-  'לופ של 3 שעות ביער יתיר, קל, רכב סטוק',
+  'לופ של 3 שעות ביער יתיר, קל, רכב רגיל',
   'יום שלם קשה בהרי אילת, נעילות, בלי כבישים',
   'שעתיים ברמת מנשה עם תצפית',
 ];
@@ -463,6 +499,32 @@ for (const [k, v] of Object.entries(POI_TYPES)) {
   if (v.safety) continue; // fuel / water are shown along the route, not chosen as stops
   const l = document.createElement('label'); l.innerHTML = `<input type="checkbox" value="${k}"> ${v.he}`; $('pPois').append(l);
 }
+// ---------- quick pickers: vehicle + difficulty (plain words, one tap) ----------
+const VEH = [['stock', 'רגיל', 'רכב 4x4 מהמפעל, בלי הגבהה'], ['raised', 'מוגבה', 'מוגבה, עם הילוך כוח (low)'], ['lockers', 'נעילות', 'מוגבה, עם הילוך כוח ונעילות דיפרנציאל']];
+const DIFFS = [['easy', 'קל'], ['medium', 'בינוני'], ['hard', 'קשה']];
+function seg(el, opts, val, onPick) {
+  el.innerHTML = '';
+  for (const [k, he, tip] of opts) {
+    const b = document.createElement('button'); b.type = 'button'; b.setAttribute('role', 'radio'); b.textContent = he; if (tip) b.title = tip;
+    b.setAttribute('aria-checked', String(k === val)); b.onclick = () => { if (k !== el.dataset.v) onPick(k); };
+    el.append(b);
+  }
+  el.dataset.v = val;
+}
+function setMyVeh(v) { store.set('myVeh', v); $('pVeh').value = v; drawPickers(); }
+function drawPickers() {
+  const v = $('results').hidden ? myVehicle() : ($('pVeh').value || myVehicle());
+  seg($('vehSeg'), VEH, myVehicle(), setMyVeh);
+  $('vehHint').textContent = VEH.find(x => x[0] === myVehicle())[2] + '. אפשר גם לכתוב בבקשה.';
+  seg($('vehSeg2'), VEH, v, k => { setMyVeh(k); rebuildWith(); });
+  seg($('diffSeg'), DIFFS, $('pDiff').value || 'medium', k => { $('pDiff').value = k; drawPickers(); rebuildWith(); });
+}
+function rebuildWith() { if (!busy && current?.p) run(false); }
+$('newTripBtn').onclick = () => {
+  $('sheet').classList.remove('has-results', 'min', 'full'); $('results').hidden = true; $('tripHead').hidden = true; $('composer').hidden = true; $('understood').hidden = true;
+  status(''); drawPickers(); $('prompt').focus(); $('prompt').select();
+};
+setTimeout(drawPickers, 0);
 // grip: normal → full → collapsed → normal
 // prompt grows with its text
 const growPrompt = () => { const t = $('prompt'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight + 2, innerHeight * 0.4) + 'px'; };
@@ -1789,7 +1851,6 @@ $('pTime').addEventListener('change', () => { if (current && !$('results').hidde
 function stopName(x) { return x?.name || 'נקודה על המפה'; }
 function renderStops(p, r) {
   const box = $('stopsBox'); box.innerHTML = '';
-  $('refineRow').hidden = !!current.saved;
   if (current.saved) return;
   const vias = p.via || [];
   const el = document.createElement('div'); el.className = 'stops';
@@ -1828,7 +1889,7 @@ $('refineBtn').onclick = async () => {
   const ask = $('refineIn').value.trim(); if (!ask || !current) return;
   if (!hasGroup() && !store.get('apiKey')) { status('שיפור במילים צריך את הפענוח החכם: הכניסו קוד קבוצה ב-⚙. בינתיים אפשר לערוך תחנות ידנית או בהגדרות המסלול.', true); return; }
   const slim = JSON.parse(JSON.stringify(current.p, (k, v) => k.startsWith('_') || k === 'researched' ? undefined : v));
-  $('refineBtn').disabled = true; status('מעדכן את הטיול לפי הבקשה…');
+  $('refineBtn').disabled = true; status('מעדכן את הטיול לפי הבקשה…'); $('refineIn').blur();
   try {
     const np = await parseSmart(`הפרמטרים הנוכחיים של הטיול (JSON):\n${JSON.stringify(slim)}\n\nבקשת שינוי: ${ask}\n\nהחזר את כל הפרמטרים המעודכנים ב-route_request.`);
     for (const k of ['start', 'end']) if (np[k] && current.p[k] && np[k].name === current.p[k].name && current.p[k].latlng) np[k].latlng = current.p[k].latlng;
@@ -1837,8 +1898,6 @@ $('refineBtn').onclick = async () => {
     current.p = { ...np, story_he: np.story_he || current.p.story_he };
     fillForm(current.p); $('refineIn').value = '';
     await run(false);
-    const und = [np.summary_he ? 'עודכן: ' + np.summary_he : null, current.p.story_he || null].filter(Boolean).join('\n');
-    if (und) { $('understood').hidden = false; $('understood').textContent = und; }
   } catch (e) { status('העדכון נכשל: ' + (e.detail || e.message), true); }
   finally { $('refineBtn').disabled = false; }
 };
@@ -1866,6 +1925,7 @@ function render(i, day = null) {
   const { res, p } = current; if (current.sel !== i) day = null; current.sel = i; current.day = day;
   const r = res.results[i];
   $('results').hidden = false; $('sheet').classList.remove('min', 'full'); $('sheet').classList.add('has-results');
+  tripHead(r, p);
   const D = r.days && r.days.length > 1 ? r.days : null;
   const dv = D && day != null ? D[day] : null;
   $('tabs').innerHTML = '';
@@ -2030,6 +2090,18 @@ function render(i, day = null) {
   }
   $('results').hidden = false;
   $('sheet').classList.remove('min', 'full'); $('sheet').classList.add('has-results');
+}
+function tripHead(r, p) {
+  const nm = x => x?.name ? '\u2068' + x.name.replace(/^📍\s*/, '') + '\u2069' : null;
+  const a = nm(p.start) || 'מסלול', b = p.loop ? null : nm(p.end);
+  const D = r.days && r.days.length > 1 ? r.days.length : 0;
+  $('thTitle').textContent = p.loop ? `לופ מ${a}` : b ? `${a} ← ${b}` : a;
+  $('thSub').textContent = [current.saved ? null : p.summary_he, D ? `${D} ימים` : null].filter(Boolean).join(' · ');
+  $('tripHead').hidden = false;
+  $('composer').hidden = !!current.saved && !current.saved.params;
+  const und = [p._smartErr ? '⚠️ ' + p._smartErr + ' תכננתי לפי פענוח בסיסי. נסו שוב.' : null, p.story_he || null].filter(Boolean).join('\n');
+  $('understood').hidden = !und; $('understood').textContent = und;
+  drawPickers();
 }
 function routeTitle(r, p) {
   const nm = x => x?.name && !x.name.startsWith('📍') ? x.name : null;

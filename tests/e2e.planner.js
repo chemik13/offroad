@@ -16,11 +16,10 @@ await p.route(/tile|arcgis/,r=>r.abort());
 await p.goto('file://'+process.argv[2]);
 const state=async(tag)=>{const s=await p.evaluate(()=>({status:document.getElementById('status').textContent,results:!document.getElementById('results').hidden,tabs:[...document.querySelectorAll('#tabs button')].map(b=>b.textContent),lines:document.querySelectorAll('.leaflet-overlay-pane path').length,loop:document.getElementById('pLoop').value,start:document.getElementById('pStart').value,end:document.getElementById('pEnd').value}));console.log(tag,JSON.stringify(s));};
 for (const [tag,prompt] of (process.argv[3]?JSON.parse(process.argv[3]):[['A','ממצפה רמון עד חניון בארות עם תצפית']])) {
- await p.fill('#prompt',prompt);await p.click('#goBtn');await p.waitForTimeout(2500);await state(tag+' prompt');
+ if(await p.isVisible('#newTripBtn'))await p.click('#newTripBtn');await p.fill('#prompt',prompt);await p.click('#goBtn');await p.waitForTimeout(2500);await state(tag+' prompt');
 }
 // rebuild with changed params
-await p.evaluate(()=>{document.querySelector('#params').open=true});
-await p.selectOption('#pDiff','hard');await p.click('#rebuildBtn');await p.waitForTimeout(2500);await state('rebuild');
+await p.click('#diffSeg button:nth-child(3)');await p.waitForTimeout(2500);await state('rebuild');
 // switch tab
 const t=await p.$$('#tabs button');if(t[1]){await t[1].click();await p.waitForTimeout(300);await state('tab2');}
 await p.screenshot({path:process.argv[4]||'/tmp/x.png'});

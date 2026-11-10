@@ -20,7 +20,7 @@ const setup=async(ctx,group)=>{const p=await ctx.newPage();const errs=[];p.on('p
  await p.route(/tile\.|arcgis|fonts/,r=>r.abort());
  if(group) await p.addInitScript(()=>localStorage.setItem('groupCode','abc'));
  await p.goto('file://'+process.argv[2]);return {p,errs};};
-const runPrompt=async(p,txt)=>{await p.fill('#prompt',txt);await p.click('#goBtn');await p.waitForTimeout(3000);return p.evaluate(()=>({ok:!document.getElementById('results').hidden,stat:current&&current.G&&current.G.cacheStat}));};
+const runPrompt=async(p,txt)=>{if(await p.isVisible('#newTripBtn'))await p.click('#newTripBtn');await p.fill('#prompt',txt);await p.click('#goBtn');await p.waitForTimeout(3000);return p.evaluate(()=>({ok:!document.getElementById('results').hidden,stat:current&&current.G&&current.G.cacheStat}));};
 // device A (with group code)
 const ctxA=await b.newContext();let {p,errs}=await setup(ctxA,true);
 console.log('A1',JSON.stringify(await runPrompt(p,'3 שעות ממצפה רמון')),'overpass',overpass,'puts',puts);
