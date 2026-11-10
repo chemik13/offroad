@@ -262,6 +262,14 @@ ul.pois li{margin-bottom:8px}
 .dayplan{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:8px}
 .dayrow{display:grid;grid-template-columns:auto 1fr auto;gap:4px 10px;align-items:center;padding:8px 10px;border-top:1px solid var(--line);background:#fff;border-inline:0;border-bottom:0;font:inherit;color:var(--ink);text-align:start;cursor:pointer}
 .dayrow:first-child{border-top:0}
+.checklist{border:1px solid var(--line);border-radius:12px;margin-top:8px;background:#fff}
+.checklist summary{cursor:pointer;padding:9px 12px;font:600 14px var(--body)}
+.checklist ul{list-style:none;margin:0;padding:0 12px 10px;display:flex;flex-direction:column;gap:6px}
+.checklist li{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.4}
+.checklist li input{margin-top:3px;flex:none}
+.checklist li.done span{text-decoration:line-through;color:var(--muted)}
+.checklist li a{color:var(--accent);margin-inline-start:4px;white-space:nowrap}
+.stat.hard{cursor:pointer}.stat.hard span::after{content:' · הצג';color:var(--accent)}
 .dayplan.cards{border:0;gap:8px;overflow:visible}
 .daycard{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
 .daycard.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
@@ -358,6 +366,7 @@ ul.pois li{margin-bottom:8px}
       <div class="stats" id="stats" style="margin-top:8px"></div>
       <div style="margin-top:8px"><div class="bar" id="bar"></div><div class="legend" id="legend"></div></div>
       <div id="warns" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
+      <div id="checklist"></div>
       <div id="dayPlan"></div>
       <div id="stopsBox"></div>
       <div id="safe"></div>
@@ -367,6 +376,7 @@ ul.pois li{margin-bottom:8px}
       <div class="saverow" style="margin-top:10px" id="saveRow">
         <input type="text" id="routeName" aria-label="שם המסלול" placeholder="שם המסלול">
         <button class="ghost" id="saveBtn">שמירה</button>
+        <button class="ghost" id="shareBtn" title="קישור לחבורה">שיתוף</button>
       </div>
       <div class="savedtag" id="savedTag" hidden></div>
       <div class="actions" style="margin-top:10px">
@@ -2395,7 +2405,13 @@ function render(i, day = null) {
   if (!dv) $('stats').innerHTML = `
     <div class="stat"><b>${(r.len / 1000).toFixed(1)}</b><span>ק"מ${D ? ' בסה״כ' : ''}</span></div>
     <div class="stat"><b>${fmtH(r.hrs + stopH)}</b><span>${D ? 'שעות נסיעה בסה״כ' : 'שעות (כולל עצירות)'}</span></div>
-    <div class="stat"><b>${r.unrated ? 'לא מדורג' : (DIFF[r.maxD]?.he || '—').replace(/ \(.*\)/, '')}</b><span>הקטע הקשה ביותר</span></div>`;
+    <div class="stat${r.unrated ? '' : ' hard'}" id="hardStat"><b>${r.unrated ? 'לא מדורג' : (DIFF[r.maxD]?.he || '—').replace(/ \(.*\)/, '')}</b><span>הקטע הקשה ביותר</span></div>`;
+  const hs = $('hardStat'); if (hs && !r.unrated) hs.onclick = () => { // zoom to the hardest stretch and flash it
+    const segs = r.segs.filter(sg => sg.d === r.maxD && !sg.ferry); if (!segs.length) return;
+    const longest = segs.reduce((a, b) => (b.pts.length > a.pts.length ? b : a));
+    const ln = L.polyline(longest.pts, { color: '#ff2d55', weight: 9, opacity: 0.9 }).addTo(routeLayer);
+    map.fitBounds(L.latLngBounds(longest.pts).pad(0.6), { ...mapPad(), maxZoom: 15 }); setTimeout(() => ln.remove(), 4000);
+  };
   if (!dv && r.overland) $('stats').insertAdjacentHTML('beforeend', `<div class="stat" style="grid-column:1/-1"><b>${((r.len - r.asph) / 1000).toFixed(0)} ק"מ שטח · ${(r.asph / 1000).toFixed(0)} ק"מ כביש</b><span>${r.len - r.asph < 1000 ? 'לא נמצאו קטעי שטח: הוסיפו אזורי שטח בדרך (בתיבת השינוי למעלה)' : `${Math.round((r.len - r.asph) / r.len * 100)}% שטח · לכל יום רואים את החלוקה בכפתורי הימים`}</span></div>`);
   $('bar').innerHTML = ''; $('legend').innerHTML = '';
   r.byD.forEach((m, d) => {
@@ -2484,6 +2500,7 @@ function render(i, day = null) {
     });
     $('dayPlan').append(box);
   }
+  renderChecklist(p, r, D);
   renderStops(p, r);
   $('poiList').innerHTML = '';
   if (r.pois.length) {
@@ -2511,6 +2528,36 @@ function render(i, day = null) {
   }
   $('results').hidden = false;
   $('sheet').classList.remove('min', 'full'); $('sheet').classList.add('has-results');
+}
+// before you go: what to book, buy, check and download, ticked off per trip (kept on this phone)
+function renderChecklist(p, r, D) {
+  const box = $('checklist'); box.innerHTML = ''; if (current.saved && !current.saved.params) return;
+  const items = []; const fmtD = k => p.date ? new Date(addDays(p.date, k) + 'T12:00:00').toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' }) : null;
+  for (const x of r.pois) if (/מעבורת/.test(x.name) && x.type === 'via') { const day = (x.note || '').match(/ביום (\d+)/)?.[1]; items.push({ t: `להזמין מעבורת: ${latinName(x.name.replace(/^⛴\s*מעבורת:?\s*/, ''))}${day ? ` (יום ${day}${fmtD(day - 1) ? ', ' + fmtD(day - 1) : ''})` : ''}`, a: placeLinks(x).querySelector('a') }); }
+  (D || []).forEach((d, k) => { const c = d.camp; if (c && c.type === 'nightcamp' && !c.wild && !c.ferry && k < D.length - 1 && !inIsrael(c.lat, c.lon)) items.push({ t: `לבדוק/להזמין לינה ללילה ${k + 1}${fmtD(k) ? ' (' + fmtD(k) + ')' : ''}: ${latinName(c.name)}`, a: placeLinks(c).querySelector('a') }); });
+  if ((D || []).some(d => d.camp?.wild)) items.push({ t: 'לינות בטבע: מים לשתייה ל-2 ימים, שקיות זבל, תאורה. להגיע לפני החושך.' });
+  if ((r.issues || []).some(t => /תחנת דלק/.test(t))) items.push({ t: 'יש לילות בלי תחנת דלק קרובה: לתדלק כשהמיכל בחצי, ולשקול ג\'ריקן' });
+  else if (r.len > 250000) items.push({ t: 'לתדלק בכל הזדמנות לפני קטעי שטח ארוכים' });
+  if (!isIL(r)) { const cc = [...new Set([p.start, p.end, ...(p.via || [])].map(x => x?.country).filter(c => c && c !== 'IL'))]; const HE = { GR: 'יוון', IT: 'איטליה', AL: 'אלבניה', MK: 'צפון מקדוניה', ME: 'מונטנגרו', BA: 'בוסניה', HR: 'קרואטיה', RO: 'רומניה', PT: 'פורטוגל', GE: 'גאורגיה', RS: 'סרביה', BG: 'בולגריה', SI: 'סלובניה', AT: 'אוסטריה', XK: 'קוסובו', TR: 'טורקיה', ES: 'ספרד', FR: 'צרפת', CY: 'קפריסין', JO: 'ירדן' };
+    items.push({ t: `ביטוח רכב וגרין קארד ל${cc.length ? cc.map(c => HE[c] || c).join(', ') : 'מדינות הטיול'}, ורישיון נהיגה בינלאומי` }); }
+  if (isIL(r) && r.mil > 0) items.push({ t: 'לבדוק שהשטחים הצבאיים פתוחים בתאריך (מוקד שטחי אש)' });
+  items.push({ t: 'להוריד את המסלול ל-Off-Road (אין קליטה בשטח)', go: () => $('offroadBtn').click() });
+  items.push({ t: 'ציוד חילוץ: רצועה, שאקלים, מדחס, חלק אוויר בצמיגים בחול/בוץ' });
+  const key = 'chk:' + (current.saved?.id || [p.start?.name, p.end?.name, p.days, Math.round(r.len / 1000)].join('|'));
+  let done = {}; try { done = JSON.parse(localStorage.getItem(key) || '{}'); } catch {}
+  const det = document.createElement('details'); det.className = 'checklist'; det.open = (D || []).length > 1;
+  const left = items.filter((_, n) => !done[n]).length;
+  det.innerHTML = `<summary>לפני היציאה (${left} מתוך ${items.length})</summary><ul></ul>`;
+  items.forEach((it, n) => {
+    const li = document.createElement('li'); if (done[n]) li.classList.add('done');
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !!done[n];
+    cb.onchange = () => { done[n] = cb.checked; li.classList.toggle('done', cb.checked); try { localStorage.setItem(key, JSON.stringify(done)); } catch {} det.querySelector('summary').textContent = `לפני היציאה (${items.filter((_, q) => !done[q]).length} מתוך ${items.length})`; };
+    const sp = document.createElement('span'); sp.textContent = it.t; li.append(cb, sp);
+    if (it.a) { const a = it.a.cloneNode(true); li.append(a); }
+    if (it.go) { const a = document.createElement('a'); a.href = '#'; a.textContent = 'עכשיו'; a.onclick = e => { e.preventDefault(); it.go(); }; li.append(a); }
+    det.querySelector('ul').append(li);
+  });
+  box.append(det);
 }
 function tripHead(r, p) {
   const nm = x => x?.name ? '\u2068' + x.name.replace(/^📍\s*/, '').split(/[,،]/)[0].trim() + '\u2069' : null;
@@ -2577,6 +2624,17 @@ $('saveBtn').onclick = async () => {
   } catch (e) { status('השמירה נכשלה: ' + e.message, true); }
   finally { $('saveBtn').disabled = false; }
 };
+// share: a link that opens this trip on any phone of the group (saves first if needed)
+$('shareBtn').onclick = async () => {
+  if (!hasGroup()) { status('שיתוף צריך קוד קבוצה (⚙).', true); return; }
+  if (!current.saved) { await $('saveBtn').onclick(); if (!current.saved) return; }
+  const url = location.origin + location.pathname + '#r=' + current.saved.id;
+  try { if (navigator.share) await navigator.share({ title: current.saved.name, text: 'הטיול שלנו', url }); else { await navigator.clipboard.writeText(url); status('הקישור הועתק. שלחו אותו לחבורה.'); } }
+  catch { prompt('הקישור לטיול:', url); }
+};
+// a shared link opens the trip
+(async () => { const m = location.hash.match(/^#r=([0-9a-f-]{36})$/); if (!m || !hasGroup()) return;
+  try { status('פותח את הטיול ששותף…'); const j = await api('/routes/' + m[1]); showSaved(j.route); status(''); } catch { status('לא הצלחתי לפתוח את הטיול ששותף. בדקו את קוד הקבוצה ב-⚙.', true); } })();
 $('drivenBtn').onclick = async () => {
   const sv = current.saved; if (!sv) return;
   try { const j = await api('/routes/' + sv.id, { method: 'PATCH', body: JSON.stringify({ driven: !sv.driven }) }); Object.assign(sv, j.route); render(0); libCache = null; }
