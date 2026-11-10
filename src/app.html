@@ -54,6 +54,21 @@ header button{pointer-events:auto;margin-inline-start:auto}
 #sheet.has-results{max-height:52vh;max-height:52dvh}
 #sheet.full{max-height:calc(100vh - 70px);max-height:calc(100dvh - 70px - env(safe-area-inset-top,0px))}
 #sheet.has-results #compose{display:none}
+.plancard{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff;display:flex;flex-direction:column;gap:8px}
+.pc-sum{font-size:14px;line-height:1.45;font-weight:500}
+.pc-sum:empty{display:none}
+.pc-sum .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.pc-sum .chips span{font:500 12px var(--body);background:var(--stone);border-radius:999px;padding:3px 9px;color:var(--ink)}
+.pc-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px}
+.pc-steps li{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.pc-steps li::before{content:'';width:14px;height:14px;border-radius:50%;border:2px solid var(--stone-2);flex:none;box-sizing:border-box}
+.pc-steps li.on{color:var(--ink);font-weight:500}
+.pc-steps li.on::before{border-color:var(--accent);border-top-color:transparent;animation:spin 0.9s linear infinite}
+.pc-steps li.ok::before{background:var(--accent);border-color:var(--accent)}
+.pc-steps li small{color:var(--muted);font-weight:400}
+.pc-time{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+#sheet.has-results .plancard{display:none}
+#results.working{opacity:.45;pointer-events:none;transition:opacity .2s}
 #sheet:not(.has-results) #composer,#sheet:not(.has-results) #params{display:none}
 #compose{display:flex;flex-direction:column;gap:12px}
 .vehpick{display:flex;flex-direction:column;gap:5px}
@@ -247,6 +262,19 @@ ul.pois li{margin-bottom:8px}
 .dayplan{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:8px}
 .dayrow{display:grid;grid-template-columns:auto 1fr auto;gap:4px 10px;align-items:center;padding:8px 10px;border-top:1px solid var(--line);background:#fff;border-inline:0;border-bottom:0;font:inherit;color:var(--ink);text-align:start;cursor:pointer}
 .dayrow:first-child{border-top:0}
+.dayplan.cards{border:0;gap:8px;overflow:visible}
+.daycard{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
+.daycard.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.daycard .dayrow{width:100%;border:0}
+.dbar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--stone-2);overflow:hidden;display:block}
+.dbar i{display:block;height:100%;background:#2e9b4f}
+.dnight{padding:4px 12px 10px;border-top:1px dashed var(--line);font-size:13px}
+.dnt{font-weight:500;padding-top:6px}
+.dns{font-size:12px;color:var(--muted)}
+.dalts summary{cursor:pointer;font:500 12px var(--body);color:var(--accent);margin-top:4px}
+.dalts .alt{display:flex;flex-direction:column;align-items:flex-start;width:100%;text-align:start;border:1px solid var(--line);border-radius:8px;background:#fff;padding:6px 9px;margin-top:5px;cursor:pointer;font:inherit;color:var(--ink)}
+.dalts .alt:hover{border-color:var(--accent)}
+.dalts .alt b{font-weight:500;font-size:13px}.dalts .alt small{font-size:11px;color:var(--muted)}
 .dayrow:hover{background:var(--stone)}
 .dayrow .dn{font-weight:600;font-size:13px;background:var(--stone);border-radius:6px;padding:2px 7px}
 .dayrow .dt{font-size:14px;min-width:0}
@@ -317,6 +345,7 @@ ul.pois li{margin-bottom:8px}
       <button class="linkbtn" id="newTripBtn" type="button">טיול חדש</button>
     </div>
     <div id="status" role="status"></div>
+    <div id="planCard" class="plancard" hidden><div class="pc-sum"></div><ol class="pc-steps"></ol><div class="pc-time"></div></div>
     <div id="understood" class="understood" hidden></div>
 
 
@@ -572,8 +601,38 @@ function milNote() {
 }
 $('pMil') && document.addEventListener('change', ev => { if (ev.target.id === 'pMil' || ev.target.id === 'pDate') milNote(); });
 function myVehicle() { return 'lockers'; } // the group's car: lifted Land Cruiser with diff lockers
-function status(t, err) { $('status').textContent = t; $('status').classList.toggle('err', !!err); const bl = $('busyLine'); if (bl) { bl.textContent = t; bl.classList.toggle('err', !!err); bl.hidden = !t || !$('sheet').classList.contains('has-results') || (!isBusy() && !err); } }
+function status(t, err) { if (t && !err && !$('planCard').hidden) { for (const [k, rx] of STAGE_RX) if (rx.test(t)) { stageSet(k, /\d+\/\d+|\d+ מתוך \d+/.test(t) ? (t.match(/\d+\/\d+|\d+ מתוך \d+/) || [''])[0] : ''); break; } } $('status').textContent = t; $('status').classList.toggle('err', !!err); const bl = $('busyLine'); if (bl) { bl.textContent = t; bl.classList.toggle('err', !!err); bl.hidden = !t || !$('sheet').classList.contains('has-results') || (!isBusy() && !err); } }
 function isBusy() { try { return busy; } catch { return false; } }
+// ---------- live progress: what is happening now, step by step ----------
+const STAGES = [['parse', 'מבין את הבקשה'], ['geo', 'מאתר את המקומות במפה'], ['data', 'טוען שבילים וכבישים'], ['plan', 'מתכנן ימים, קטעי שטח ולינות'], ['done', 'מצייר את המסלול']];
+const STAGE_RX = [['parse', /מבין את הבקשה|מעדכן את הטיול/], ['geo', /מאתר/], ['data', /מוריד|טוען|מחשב את קטעי הכביש|קטעי שטח באזורים|מעבד את רשת|במטמון/], ['plan', /קטעי שטח לכל יום|חניוני לילה|לינה|מחלק לימים|מתכנן|מחשב|מרכיב|בודק|מאריך|מקצר|מחפש/]];
+let stageT0 = 0, stageTimer = null, stageNow = -1;
+function stageStart(withParse) {
+  const ol = document.querySelector('#planCard .pc-steps'); ol.innerHTML = '';
+  for (const [k, he] of STAGES) { if (k === 'parse' && !withParse) continue; const li = document.createElement('li'); li.dataset.k = k; li.textContent = he; ol.append(li); }
+  document.querySelector('#planCard .pc-sum').innerHTML = ''; stageNow = -1; stageT0 = Date.now(); $('planCard').hidden = false; $('status').style.display = 'none';
+  clearInterval(stageTimer); stageTimer = setInterval(() => { document.querySelector('#planCard .pc-time').textContent = `${Math.round((Date.now() - stageT0) / 1000)} שניות`; }, 500);
+}
+function stageSet(k, detail) {
+  const lis = [...document.querySelectorAll('#planCard .pc-steps li')], i = lis.findIndex(li => li.dataset.k === k); if (i < 0) return;
+  if (i < stageNow) return; // never step back
+  stageNow = i; lis.forEach((li, n) => { li.classList.toggle('ok', n < i); li.classList.toggle('on', n === i); const sm = li.querySelector('small'); if (sm && n !== i) sm.remove(); });
+  if (detail) { let sm = lis[i].querySelector('small'); if (!sm) { sm = document.createElement('small'); lis[i].append(sm); } sm.textContent = ' · ' + detail; }
+}
+function stageEnd() { clearInterval(stageTimer); $('planCard').hidden = true; $('status').style.display = ''; }
+function stageSummary(p) {
+  const box = document.querySelector('#planCard .pc-sum'); box.innerHTML = '';
+  if (!p) return; const t = document.createElement('div'); t.textContent = p.summary_he ? 'הבנתי: ' + p.summary_he : ''; box.append(t);
+  const nm = x => x?.name ? x.name.replace(/^📍\s*/, '') : null, chips = [];
+  if (nm(p.start)) chips.push(p.loop ? `לופ מ${nm(p.start)}` : `מ${nm(p.start)}${nm(p.end) ? ' ל' + nm(p.end) : ''}`);
+  if (p.days > 1) chips.push(`${p.days} ימים`); else if (p.duration_hours) chips.push(`${p.duration_hours} שעות`);
+  if (p.max_km_per_day) chips.push(`עד ${p.max_km_per_day} ק"מ ביום`);
+  const fer = (p.via || []).filter(v => v.ferry_to_next).length; if (fer) chips.push(`⛴ ${fer === 1 ? 'מעבורת' : fer + ' מעבורות'}`);
+  if ((p.via || []).length) chips.push(`${p.via.length} עצירות`);
+  if (p.offroad_share) chips.push(`${Math.round(p.offroad_share * 100)}% שטח`);
+  if (p.wild_camping) chips.push('לינה בטבע');
+  if (chips.length) { const c = document.createElement('div'); c.className = 'chips'; for (const x of chips) { const sp = document.createElement('span'); sp.textContent = x; c.append(sp); } box.append(c); }
+}
 
 // ---------- params <-> form ----------
 function fillForm(p) {
@@ -1450,7 +1509,16 @@ async function planOverland(p, sLL, eLL, viaLL) {
   const wildOk = !!p.wild_camping;
   const every = Math.max(1, Math.round(p.camp_every_days || p.resupply_every_days || 2));
   let sinceCamp = 0;
+  const altsOf = c => { // up to 5 other places to sleep near the end of the day
+    const rule = WILD_NIGHT[countryAt(c.c)] || 'no', L = [];
+    for (const cp of camps) { const d = hav(c.c[0], c.c[1], cp.lat, cp.lon); if (d < 25000) L.push({ ...cp, _d: d - (cp.lake ? 4000 : 0) }); }
+    if (rule !== 'no') for (const x of fromT.wild || []) { const d = hav(c.c[0], c.c[1], x.lat, x.lon); if (d < 15000) L.push({ type: 'nightcamp', wild: true, lake: x.kind === 'lake', name: `🌲 לינת שטח: ${x.name}`, lat: x.lat, lon: x.lon, auth: rule === 'yes' ? 'לינת שטח (לא קמפינג). מקובלת כאן מחוץ לשמורות.' : 'לינת שטח (לא קמפינג). רשמית אסורה כאן אבל נסבלת לרוב.', _d: d + 2000 }); }
+    L.sort((a, b) => a._d - b._d); const seen = new Set();
+    const kept = [];
+    return L.filter(x => { if (kept.some(y => (y.name === x.name && hav(y.lat, y.lon, x.lat, x.lon) < 4000) || hav(y.lat, y.lon, x.lat, x.lon) < 300)) return false; kept.push(x); return true; }).slice(0, 6).map(({ _d, ...x }) => ({ ...x, km: Math.round(hav(c.c[0], c.c[1], x.lat, x.lon) / 1000) }));
+  };
   const nights = cuts.map((c, k) => {
+    const pin = p.nightPins?.[k]; if (pin && !c.ferryNight) { sinceCamp = pin.wild ? sinceCamp + 1 : 0; return { ...pin, pinned: true }; } // the user's choice for this night
     if (c.ferryNight) { sinceCamp = 0; return { type: 'nightcamp', name: '⛴ לילה על המעבורת', lat: c.c[0], lon: c.c[1], auth: 'מעבורת לילה: הזמינו תא או מושבים ומקום לרכב', ferry: true }; }
     const rule = WILD_NIGHT[countryAt(c.c)] || 'no';
     if (wildOk && rule !== 'no' && sinceCamp + 1 < every) { // a night in nature, then a campsite every few nights (showers, water, laundry)
@@ -1475,6 +1543,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
     }
     return best;
   }
+  nights.forEach((n, k) => { if (n && !cuts[k].ferryNight) n.alts = altsOf(cuts[k]).filter(x => Math.abs(x.lat - n.lat) > 1e-5 || Math.abs(x.lon - n.lon) > 1e-5).slice(0, 4); });
   if (wildOk && nights.some(n => n?.wild)) notes.push(`לינות שטח: נקודות על שפת אגם, בתצפית או בחניון יום שדרך עפר מגיעה אליהם. קמפינג מסודר כל ${every} לילות. לא בדקתי את המקום בשטח: הגיעו לפני החושך.`);
   if (wildOk && cuts.some(c => !c.ferryNight && (WILD_NIGHT[countryAt(c.c)] || 'no') === 'no')) notes.push('באיטליה, קרואטיה, סלובניה, אוסטריה ופורטוגל לינה מחוץ לקמפינג אסורה ונאכפת בקנסות, אז שם יש רק קמפינגים.');
   if (wantLake && nights.some(n => n && !n.lake && !n.ferry && !n.wild && n.type !== 'dayend')) notes.push('לא בכל לילה יש קמפינג על שפת אגם; במקומות האלה בחרתי את הקרוב לדרך.');
@@ -1704,7 +1773,9 @@ let current = null; // {p, plan, G}
 let lastRunErr = null;
 async function run(fromPrompt, preset = null) {
   const btns = [$('goBtn'), $('rebuildBtn')]; btns.forEach(b => b.disabled = true); busy = true; bgNote = '';
-  $('results').hidden = true;
+  const changing = !$('results').hidden && $('sheet').classList.contains('has-results');
+  if (changing) $('results').classList.add('working'); // the old trip stays in view while the new one is planned
+  else { $('results').hidden = true; stageStart(fromPrompt && !preset); }
   try {
     let p;
     const text = $('prompt').value.trim();
@@ -1742,9 +1813,11 @@ async function run(fromPrompt, preset = null) {
       fillForm(p);
       const und = [p._smartErr ? '⚠️ ' + p._smartErr + ' תכננתי לפי פענוח בסיסי, שמבין רק מקום התחלה פשוט. נסו "בנה מסלול" שוב.' : null, p.summary_he ? 'הבנתי: ' + p.summary_he : null, p.story_he || null, p._searched ? '(חיפשתי ברשת כדי לתכנן)' : null].filter(Boolean).join('\n');
       $('understood').hidden = !und; $('understood').textContent = und; $('understood').style.whiteSpace = 'pre-line';
+      stageSummary(p); if (!p._smartErr && !p.story_he) $('understood').hidden = true; // the card says it
     } else {
       p = readForm(current?.p || {});
-      p.story_he = current?.p?.story_he; p._startNote = current?.p?._startNote;
+      p.story_he = current?.p?.story_he; p._startNote = current?.p?._startNote; p.nightPins = current?.p?.nightPins;
+      for (const k of ['offroad_share', 'wild_camping', 'camp_every_days', 'resupply_every_days', 'max_km_per_day', 'night_near_water', 'country']) if (current?.p?.[k] != null && p[k] == null) p[k] = current.p[k];
     }
 
     status('מאתר מקומות…');
@@ -1767,6 +1840,7 @@ async function run(fromPrompt, preset = null) {
       if (v.ferry && (viaLL[i - 1]?.ferry || !next || hav(v.ll[0], v.ll[1], next[0], next[1]) < 20000)) v.ferry = false;
     });
     viaLL.forEach((v, i) => { v.port = v.ferry || !!viaLL[i - 1]?.ferry; });
+    if (!changing) { const all = [sLL, ...(eLL ? [eLL] : []), ...viaLL.map(v => v.ll)]; if (all.length > 1) map.fitBounds(L.latLngBounds(all).pad(0.15), mapPad()); else map.setView(sLL, 11); } // the map moves to the trip right away
     if (lost.length) { p.via = (p.via || []).filter(v => !lost.includes(v.name)); } p._lost = lost;
 
     const multi = (p.days || 1) > 1;
@@ -1859,7 +1933,7 @@ async function run(fromPrompt, preset = null) {
   } catch (err) {
     lastRunErr = err.message || String(err);
     status(err.message || String(err), true);
-  } finally { btns.forEach(b => b.disabled = false); busy = false; if (!$('busyLine').classList.contains('err')) $('busyLine').hidden = true; }
+  } finally { btns.forEach(b => b.disabled = false); busy = false; stageEnd(); $('results').classList.remove('working'); if (!$('busyLine').classList.contains('err')) $('busyLine').hidden = true; }
 }
 $('goBtn').onclick = () => run(true);
 $('rebuildBtn').onclick = () => run(false);
@@ -1939,7 +2013,24 @@ function campSub(c) {
   const bits = [c.auth ? (abroad ? c.auth : 'חניון לילה מורשה · ' + c.auth) : 'אתר קמפינג לא מאומת: ייתכן שהלינה בו אסורה'];
   if (c.fee === 'yes') bits.push('בתשלום'); else if (c.fee === 'no') bits.push('ללא תשלום');
   if (c.water === 'yes') bits.push('מים'); if (c.toilets === 'yes') bits.push('שירותים');
-  return bits.join(' · ');
+  return latinName(bits.join(' · '));
+}
+// Greek / Cyrillic / Georgian names in Latin letters, readable at a glance ("Κατασκήνωση Ελαφίνας" -> "Camping Elafinas")
+const TR = (() => {
+  const m = {}; const add = (src, dst) => src.split(' ').forEach((ch, i) => { m[ch] = dst.split(' ')[i]; });
+  add('α β γ δ ε ζ η θ ι κ λ μ ν ξ ο π ρ σ ς τ υ φ χ ψ ω ά έ ή ί ό ύ ώ ϊ ϋ ΐ ΰ', 'a v g d e z i th i k l m n x o p r s s t y f ch ps o a e i i o y o i y i y');
+  add('а б в г д е ё ж з и й к л м н о п р с т у ф х ц ч ш щ ъ ы ь э ю я ђ ј љ њ ћ џ ѓ ќ ѕ і ї є ґ', 'a b v g d e e zh z i y k l m n o p r s t u f kh ts ch sh shch _ y _ e yu ya dj j lj nj c dz gj kj dz i yi ye g');
+  add('ა ბ გ დ ე ვ ზ თ ი კ ლ მ ნ ო პ ჟ რ ს ტ უ ფ ქ ღ ყ შ ჩ ც ძ წ ჭ ხ ჯ ჰ', 'a b g d e v z t i k l m n o p zh r s t u p k gh q sh ch ts dz ts ch kh j h');
+  return m;
+})();
+const NAME_WORDS = [[/κατασκ[ηή]ν[ωώ]σ(η|εις)/gi, 'Camping'], [/кампинг|камп\b/gi, 'Camping'], [/λίμνη|λιμνη/gi, 'Lake'], [/езеро/gi, 'Lake'], [/ტბა/g, 'Lake']];
+function latinName(nm) {
+  nm = String(nm || ''); if (!/[Ͱ-ϿЀ-ӿႠ-ჿ]/.test(nm)) return nm;
+  let t = nm; for (const [rx, w] of NAME_WORDS) t = t.replace(rx, w);
+  t = t.replace(/[\u0370-\u03ff]+/g, w => w.normalize('NFD').replace(/[\u0300-\u036f]/g, '').normalize('NFC')); // Greek accents off
+  t = t.replace(/ου/gi, 'ou').replace(/Ου/g, 'Ou').replace(/αι/g, 'ai').replace(/ει/g, 'ei').replace(/ντ/g, 'nt').replace(/^μπ|(\s)μπ/g, '$1b');
+  t = [...t].map(ch => { const lo = ch.toLowerCase(), r = TR[lo]; if (r == null) return ch; const o = r === '_' ? '' : r; return ch !== lo ? o.charAt(0).toUpperCase() + o.slice(1) : o; }).join('');
+  return t.replace(/\b([a-z])/g, (x, c, i, all) => (i === 0 || all[i - 1] === ' ') ? c.toUpperCase() : c);
 }
 // links out: book a campsite, buy ferry tickets, navigate there
 function placeLinks(pt) {
@@ -1963,7 +2054,7 @@ function placeLinks(pt) {
 function placePopup(pt, title, sub) {
   const div = document.createElement('div');
   div.innerHTML = `<div class="poptitle"></div><div class="popsub"></div><div class="wxpop"></div><div class="thumbs"></div>`;
-  div.querySelector('.poptitle').textContent = title; div.querySelector('.popsub').textContent = sub || '';
+  div.querySelector('.poptitle').textContent = latinName(title); div.querySelector('.popsub').textContent = sub || '';
   div.querySelector('.popsub').after(placeLinks(pt));
   let loaded = false;
   return { div, load: () => {
@@ -2285,7 +2376,7 @@ function render(i, day = null) {
     const label = !crowded || (dayBox && dayBox.contains([pt.lat, pt.lon]));
     const ic = L.divIcon({ className: '', html: label ? `<div class="poi-ic"></div>` : `<div class="poi-dot"></div>`, iconSize: null, iconAnchor: [0, 0] });
     const m = L.marker([pt.lat, pt.lon], { icon: ic, title: pt.name }).addTo(markLayer);
-    m.getElement()?.querySelector('.poi-ic')?.append(document.createTextNode((D && pt.type === 'nightcamp' && pt.day ? `לילה ${pt.day}: ` : '') + pt.name));
+    m.getElement()?.querySelector('.poi-ic')?.append(document.createTextNode((D && pt.type === 'nightcamp' && pt.day ? `לילה ${pt.day}: ` : '') + latinName(pt.name)));
     const pp = placePopup(pt, pt.name, pt.type === 'nightcamp' ? campSub(pt) : (pt.note || POI_TYPES[pt.type]?.he || 'נקודת חובה'));
     m.bindPopup(pp.div, { maxWidth: 320, minWidth: 220 }).on('popupopen', pp.load);
   });
@@ -2357,16 +2448,39 @@ function render(i, day = null) {
   renderElevation(dv ? { ...r, coords: r.coords.slice(dv.from, dv.to + 1) } : r);
   $('dayPlan').innerHTML = '';
   if (D) {
-    const box = document.createElement('div'); box.className = 'dayplan';
+    const box = document.createElement('div'); box.className = 'dayplan cards';
     D.forEach((d, k) => {
-      const b = document.createElement('button'); b.className = 'dayrow';
-      b.innerHTML = `<span class="dn"></span><span class="dt"></span><span class="dm"></span><span class="ds"></span>`;
-      b.querySelector('.dn').textContent = `יום ${k + 1}`; b.querySelector('.dn').style.cssText = `background:${DAYC[k % DAYC.length]};color:#fff`;
-      b.querySelector('.dt').textContent = d.camp ? (d.camp.type === 'dayend' ? d.camp.name : `לינה: ${d.camp.name}`) : k === D.length - 1 ? 'סיום הטיול' : 'סוף היום: אין קמפינג רשמי קרוב';
-      b.querySelector('.dm').textContent = `${(d.len / 1000).toFixed(0)} ק"מ · ${fmtH(d.hrs)}${d.ferH > 0.3 ? ` · ⛴ ${fmtH(d.ferH)}` : ''}`;
-      b.querySelector('.ds').textContent = [d.mid ? 'עצירה: ' + d.mid.name : null, d.camp ? (d.camp.type === 'dayend' ? 'אין חניון לילה מורשה קרוב. בדקו חלופה לפני היציאה.' : campSub(d.camp)) : null].filter(Boolean).join(' · ');
-      b.onclick = () => render(i, k);
-      box.append(b);
+      const card = document.createElement('div'); card.className = 'daycard' + (day === k ? ' sel' : '');
+      const head = document.createElement('button'); head.className = 'dayrow'; head.type = 'button';
+      head.innerHTML = `<span class="dn"></span><span class="dt"></span><span class="dm"></span><span class="dbar"><i></i></span>`;
+      head.querySelector('.dn').textContent = `יום ${k + 1}`; head.querySelector('.dn').style.cssText = `background:${DAYC[k % DAYC.length]};color:#fff`;
+      const offP = d.len ? Math.round((d.off ?? 0) / d.len * 100) : 0;
+      head.querySelector('.dt').textContent = d.mid ? 'עצירה: ' + latinName(d.mid.name) : (d.off != null ? `${Math.round((d.off || 0) / 1000)} ק"מ שטח · ${offP}%` : '');
+      head.querySelector('.dm').textContent = `${(d.len / 1000).toFixed(0)} ק"מ · ${fmtH(d.hrs)}${d.ferH > 0.3 ? ` · ⛴ ${fmtH(d.ferH)}` : ''}`;
+      if (d.off != null) head.querySelector('.dbar i').style.width = offP + '%'; else head.querySelector('.dbar').remove();
+      head.onclick = () => render(i, k);
+      card.append(head);
+      const night = document.createElement('div'); night.className = 'dnight';
+      const last = k === D.length - 1;
+      const c = d.camp;
+      const t = document.createElement('div'); t.className = 'dnt';
+      t.textContent = c ? (c.type === 'dayend' ? c.name : `🌙 ${latinName(c.name)}`) : last ? '🏁 סיום הטיול' : 'סוף היום: אין קמפינג רשמי קרוב';
+      night.append(t);
+      if (c && c.type !== 'dayend') { const sub = document.createElement('div'); sub.className = 'dns'; sub.textContent = c.ferry ? c.auth : campSub(c); night.append(sub); if (!c.ferry) night.append(placeLinks(c)); }
+      const alts = c?.alts || [];
+      if (alts.length && current.res.results[i].overland && !current.saved) {
+        const sw = document.createElement('details'); sw.className = 'dalts';
+        sw.innerHTML = `<summary>החלף לינה (${alts.length} אפשרויות)</summary>`;
+        for (const a of alts) {
+          const b = document.createElement('button'); b.type = 'button'; b.className = 'alt';
+          b.innerHTML = '<b></b><small></small>'; b.querySelector('b').textContent = latinName(a.name); b.querySelector('small').textContent = `${a.km} ק"מ מסוף היום · ${a.wild ? 'בטבע' : a.lake ? 'קמפינג על שפת אגם' : 'קמפינג'}`;
+          b.onclick = () => { const pins = { ...(current.p.nightPins || {}) }; const { alts: _a, day: _d, km: _k, ...keep } = a; pins[k] = keep; current.p.nightPins = pins; run(false); };
+          sw.append(b);
+        }
+        night.append(sw);
+      }
+      card.append(night);
+      box.append(card);
     });
     $('dayPlan').append(box);
   }
@@ -2377,7 +2491,7 @@ function render(i, day = null) {
     for (const x of r.pois) {
       const li = document.createElement('li');
       li.innerHTML = `<span></span> <span style="color:var(--muted)"></span><div class="thumbs"></div>`;
-      li.children[0].textContent = x.name; li.children[1].textContent = '· ' + (x.type === 'nightcamp' ? campSub(x) : (x.sunset ? 'תצפית לשקיעה' : (x.note || POI_TYPES[x.type]?.he || 'נקודת חובה')));
+      li.children[0].textContent = latinName(x.name); li.children[1].textContent = '· ' + (x.type === 'nightcamp' ? campSub(x) : (x.sunset ? 'תצפית לשקיעה' : (x.note || POI_TYPES[x.type]?.he || 'נקודת חובה')));
       li.querySelector('.thumbs').before(placeLinks(x));
       ul.append(li); fillThumbs(li.querySelector('.thumbs'), x);
     }
