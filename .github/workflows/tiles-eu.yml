@@ -24,8 +24,9 @@ jobs:
         env:
           REMOTE: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
         run: |
-          mkdir -p out && cd out
-          git init -q -b tiles-eu
+          # start from what is published, so countries stay available while they are rebuilt
+          git clone -q --depth 1 -b tiles-eu "$REMOTE" out || (mkdir -p out && cd out && git init -q -b tiles-eu)
+          cd out
           git config user.name "tiles-bot"; git config user.email "tiles-bot@users.noreply.github.com"
           git config http.postBuffer 1048576000
           first=1
@@ -35,7 +36,9 @@ jobs:
             python ../tools/build_tiles.py ../x.osm.pbf . --world --merge
             rm -f ../x.osm.pbf
             git add -A; git commit -qm "$(basename $path .osm.pbf) $(date -u +%Y-%m-%d)"
-            if [ $first = 1 ]; then git push -qf "$REMOTE" tiles-eu; first=0; else git push -q "$REMOTE" tiles-eu; fi
+            git push -q "$REMOTE" HEAD:tiles-eu
             echo "published $(basename $path -latest.osm.pbf): $(ls *.json.gz | wc -l) tiles, $(du -sh . --exclude=.git | cut -f1)"
             echo "::endgroup::"
           done
+          # squash the month into one commit so the branch history does not grow
+          git checkout -q --orphan squashed && git commit -qm "tiles $(date -u +%Y-%m-%d)" && git push -qf "$REMOTE" squashed:tiles-eu

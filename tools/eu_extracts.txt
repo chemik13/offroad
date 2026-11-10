@@ -8,4 +8,9 @@ europe/croatia-latest.osm.pbf
 europe/romania-latest.osm.pbf
 europe/portugal-latest.osm.pbf
 europe/georgia-latest.osm.pbf
+europe/serbia-latest.osm.pbf
+europe/kosovo-latest.osm.pbf
+europe/slovenia-latest.osm.pbf
+europe/bulgaria-latest.osm.pbf
+europe/austria-latest.osm.pbf
 europe/italy-latest.osm.pbf

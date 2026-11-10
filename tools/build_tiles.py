@@ -21,7 +21,7 @@ BBOX = (29.3, 34.1, 33.5, 36.0)  # s, w, n, e: Israel incl. Golan, Judea & Samar
 MAIN_HW = {"track", "unclassified", "tertiary", "secondary", "primary", "trunk", "tertiary_link", "secondary_link", "primary_link", "trunk_link"}
 UNPAVED = {"unpaved", "gravel", "fine_gravel", "dirt", "ground", "sand", "compacted", "rock", "pebblestone", "earth", "mud"}
 WAY_TAGS = ["highway", "tracktype", "surface", "smoothness", "4wd_only", "access", "motor_vehicle", "motorcar", "vehicle", "oneway", "name", "name:he", "ref"]
-POI_TAGS = ["amenity", "brand", "backcountry", "group_only", "website", "access", "tourism", "natural", "historic", "name", "name:he", "image", "wikimedia_commons", "wikidata", "operator", "owner", "operator:he", "operator:en", "fee", "drinking_water", "toilets"]
+POI_TAGS = ["shop", "amenity", "brand", "backcountry", "group_only", "website", "access", "tourism", "natural", "historic", "name", "name:he", "image", "wikimedia_commons", "wikidata", "operator", "owner", "operator:he", "operator:en", "fee", "drinking_water", "toilets"]
 MIL_TAGS = ["landuse", "military", "leisure", "boundary", "protect_class", "name", "name:he", "name:en"]
 MIL_KINDS = {"danger_area", "training_area", "range"}
 
@@ -45,6 +45,7 @@ def keep_way(t):
 
 def poi_node(t):
     return (t.get("tourism") in ("viewpoint", "camp_site", "caravan_site", "picnic_site") or t.get("amenity") in ("fuel", "drinking_water") or t.get("natural") == "spring"
+            or t.get("shop") in ("supermarket", "convenience")  # food resupply on long trips
             or (t.get("natural") in ("peak", "water") and "name" in t) or ("historic" in t and "name" in t))
 
 
