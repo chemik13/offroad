@@ -227,6 +227,10 @@ ul.pois li{margin-bottom:8px}
 .poi-ic{display:inline-flex;align-items:center}
 .poi-ic .ico{width:12px;height:12px;margin-inline-end:3px}
 .fly3d .ico{margin-inline-end:6px}
+.dsched{padding:2px 12px 8px;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.dsched.late{color:#b4401a;font-weight:600}
+.hardlinks{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:8px 0 2px;font-size:13px}
+.hardlinks .hl-lab{color:var(--muted)}
 .flybtn .ico{width:20px;height:20px;margin:0}
 .warn .ico{color:var(--warnline);width:16px;height:16px}
 .livenight{width:26px;height:26px;border-radius:50%;background:#fff;color:var(--ink);display:grid;place-items:center;box-shadow:0 1px 4px rgba(0,0,0,.35)}
@@ -577,7 +581,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
   </div>
   <button class="ghost" id="inviteBtn" type="button" style="margin-top:10px">קישור הזמנה לחבר (עם הקוד)</button>
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.59 · 10.11.2026 17:45</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.60 · 10.11.2026 19:14</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2562,7 +2566,7 @@ async function renderElevation(r) {
   box.innerHTML = '<div class="wx"><h3>גובה ועליות<small>טוען…</small></h3></div>';
   if (elevLayer) { elevLayer.remove(); elevLayer = null; }
   let samples, elev;
-  try { samples = sampleRoute(r.coords, 300); elev = await elevations(samples); } catch { if (tok === renderElevation.tok) box.innerHTML = ''; return; }
+  try { samples = sampleRoute(r.coords, 300); elev = await elevations(samples); r._elev = { samples, elev }; } catch { r._elev = { fail: true }; if (tok === renderElevation.tok) box.innerHTML = ''; return; }
   if (tok !== renderElevation.tok) return;
   const A = analyzeElevation(samples, elev, 15);
   // chart
@@ -3485,6 +3489,128 @@ function latinName(nm) {
   t = [...t].map(ch => { const lo = ch.toLowerCase(), r = TR[lo]; if (r == null) return ch; const o = r === '_' ? '' : r; return ch !== lo ? o.charAt(0).toUpperCase() + o.slice(1) : o; }).join('');
   return t.replace(/\b([a-z])/g, (x, c, i, all) => (i === 0 || all[i - 1] === ' ') ? c.toUpperCase() : c);
 }
+// ---------- trip checks: the clock and sunset, seasons, fuel, the group's field reports ----------
+// sunrise / sunset (sunrise equation, ±2 min) in UTC ms
+function sunUTC(lat, lon, iso) {
+  const rad = Math.PI / 180, J = new Date(iso + 'T12:00:00Z') / 864e5 + 2440587.5, n = Math.round(J - 2451545 + 0.0008);
+  const Js = n - lon / 360, M = (357.5291 + 0.98560028 * Js) % 360, C = 1.9148 * Math.sin(M * rad) + 0.02 * Math.sin(2 * M * rad) + 0.0003 * Math.sin(3 * M * rad);
+  const lam = (M + C + 180 + 102.9372) % 360, Jt = 2451545 + Js + 0.0053 * Math.sin(M * rad) - 0.0069 * Math.sin(2 * lam * rad);
+  const dec = Math.asin(Math.sin(lam * rad) * Math.sin(23.4397 * rad));
+  const cw = (Math.sin(-0.833 * rad) - Math.sin(lat * rad) * Math.sin(dec)) / (Math.cos(lat * rad) * Math.cos(dec));
+  const w = Math.acos(Math.max(-1, Math.min(1, cw))) / rad, ms = j => (j - 2440587.5) * 864e5;
+  return [ms(Jt - w / 360), ms(Jt + w / 360)];
+}
+const TZ = { IL: 'Asia/Jerusalem', PS: 'Asia/Jerusalem', JO: 'Asia/Amman', EG: 'Africa/Cairo', GE: 'Asia/Tbilisi', AM: 'Asia/Yerevan', AZ: 'Asia/Baku', TR: 'Europe/Istanbul', CY: 'Asia/Nicosia',
+  GR: 'Europe/Athens', BG: 'Europe/Sofia', RO: 'Europe/Bucharest', MD: 'Europe/Chisinau', UA: 'Europe/Kyiv', FI: 'Europe/Helsinki', EE: 'Europe/Tallinn', LV: 'Europe/Riga', LT: 'Europe/Vilnius',
+  PT: 'Europe/Lisbon', GB: 'Europe/London', IE: 'Europe/Dublin', IS: 'Atlantic/Reykjavik', MA: 'Africa/Casablanca' };
+function zoneAt(p, la, lo) { // the time zone of the nearest place of the trip that has a country
+  if (inIsrael(la, lo)) return 'Asia/Jerusalem';
+  let best = null, bd = Infinity;
+  for (const x of [p.start, p.end, ...(p.via || [])]) { if (!x?.country) continue; const ll = x.latlng || (x.lat ? [x.lat, x.lon] : null); if (!ll) continue; const d = hav(la, lo, ll[0], ll[1]); if (d < bd) { bd = d; best = x.country.toUpperCase(); } }
+  return TZ[best] || (best ? 'Europe/Rome' : (lo > 40 ? 'Asia/Tbilisi' : lo > 22 ? 'Europe/Athens' : lo < -6 ? 'Europe/Lisbon' : 'Europe/Rome'));
+}
+const localH = (ms, tz) => { const [h, m] = new Date(ms).toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).split(':').map(Number); return (h % 24) + m / 60; };
+function daySchedule(r, p, d, k, single = false) {
+  const date = p.date || $('pDate').value || isoToday(), iso = addDays(date, k);
+  const c = r.coords[Math.min(r.coords.length - 1, d.to)] || r.coords[r.coords.length - 1];
+  const tz = zoneAt(p, c[0], c[1]), [, set] = sunUTC(c[0], c[1], iso), sunset = localH(set, tz);
+  const start = timeToH($('pTime').value || '08:00');
+  const stops = single ? 0 : (d.mid ? 0.25 : 0) + 0.5; // a lunch break on a full day
+  const finish = start + d.hrs + stops, late = finish > sunset - 0.25;
+  const end = single ? 'סיום' : (k === (r.days?.length || 1) - 1 ? 'סיום' : 'הגעה ללינה');
+  return { day: k + 1, late, text: `${hToTime(start)} יציאה · ${end} ~${hToTime(finish)} · שקיעה ${hToTime(sunset)}${late ? ' · אחרי החושך' : ''}`,
+    warn: `${single ? '' : `ביום ${k + 1} `}הסיום המשוער (${hToTime(finish)}) ${finish > sunset ? 'אחרי השקיעה' : 'קרוב לשקיעה'} (${hToTime(sunset)}). צאו מוקדם יותר או קצרו.` };
+}
+// roads that are open only part of the year (typical seasons; the exact opening changes with the snow)
+const SEASONAL = [
+  { n: 'טרנספגרשאן (DN7C)', pts: [[45.6024, 24.614], [45.56, 24.62]], open: [7, 10] },
+  { n: 'טרנסלפינה (DN67C)', pts: [[45.4342, 23.6278], [45.3454, 23.6586]], open: [7, 10] },
+  { n: 'דרך תושטי (מעבר אבאנו)', pts: [[42.278, 45.5084]], open: [6, 10] },
+  { n: 'דרך האסייטה', pts: [[45.0703, 6.9571]], open: [7, 9] },
+  { n: 'קול דל סומלייה', pts: [[45.1332, 6.8458]], open: [7, 9] },
+  { n: 'מעבר סטלביו', pts: [[46.529, 10.453]], open: [6, 10] },
+  { n: 'מעבר גאביה', pts: [[46.343, 10.488]], open: [6, 10] },
+  { n: 'קול דה פרפאיון', pts: [[44.4882, 6.6444]], open: [7, 9] },
+  { n: 'מעבר גודרדזי', pts: [[41.6325, 42.5102]], open: [5, 11] },
+  { n: 'מעבר ג׳ברי (הדרך הצבאית הגאורגית)', pts: [[42.5044, 44.4537]], open: [5, 11], soft: true },
+  { n: 'דרך שאטילי (מעבר דטויסג׳וורי)', pts: [[42.5455, 45.1259]], open: [6, 10] },
+];
+const monthOf = iso => +iso.slice(5, 7);
+const inSeason = (m, [a, b]) => a <= b ? m >= a && m <= b : m >= a || m <= b;
+let checksTok = 0;
+async function renderChecks(r, p, D) {
+  const tok = ++checksTok, out = (html) => { if (tok === checksTok) $('warns').insertAdjacentHTML('beforeend', `<div class="warn">${html}</div>`); };
+  const date = p.date || $('pDate').value || null, isoOf = k => addDays(date || isoToday(), k);
+  const days = D || [{ from: 0, to: r.coords.length - 1 }];
+  const dayAt = idx => { const k = days.findIndex(d => idx >= d.from && idx <= d.to); return k < 0 ? 0 : k; };
+  // seasons: known seasonal passes, and snow on high ground in the cold months
+  if (!isIL(r) || r.coords.some(c => c[0] > 33.2)) {
+    for (const sr of SEASONAL) {
+      let at = -1; for (let i = 0; i < r.coords.length && at < 0; i += 3) for (const q of sr.pts) if (hav(r.coords[i][0], r.coords[i][1], q[0], q[1]) < 2500) { at = i; break; }
+      if (at < 0) continue;
+      const k = dayAt(at), m = monthOf(isoOf(k)), MON = ['', 'ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+      if (!inSeason(m, sr.open)) out(`${D ? `ביום ${k + 1} ` : ''}המסלול עובר ב${sr.n}. הקטע הזה ${sr.soft ? 'נסגר לפעמים בשלג מחוץ לחודשים' : 'פתוח בדרך כלל רק בין'} ${MON[sr.open[0]]} ל${MON[sr.open[1]]}${date ? '' : ' (לא נבחר תאריך, בדקתי לפי היום)'}. בדקו שהיא פתוחה לפני היציאה, או בקשו דרך אחרת.`);
+    }
+    try {
+      for (let q = 0; q < 40 && !r._elev; q++) await new Promise(res => setTimeout(res, 250)); // the profile already asks for the heights
+      const smp = r._elev?.samples || sampleRoute(r.coords, 160), el = r._elev?.elev || await elevations(smp);
+      let top = -1; el.forEach((h, i) => { if (h != null && (top < 0 || h > el[top])) top = i; });
+      if (tok === checksTok && top >= 0) {
+        const h = el[top]; let idx = 0, bd = Infinity; for (let i = 0; i < r.coords.length; i += 4) { const d = hav(r.coords[i][0], r.coords[i][1], smp[top].lat, smp[top].lon); if (d < bd) { bd = d; idx = i; } }
+        const k = dayAt(idx), m = monthOf(isoOf(k)), cold = [11, 12, 1, 2, 3, 4].includes(m), deep = [12, 1, 2, 3].includes(m);
+        if ((deep && h > 1500) || (cold && h > 1900)) out(`${D ? `ביום ${k + 1} ` : ''}המסלול עולה עד ${Math.round(h).toLocaleString('he-IL')} מ׳. ${date ? 'בתאריך הזה' : 'בעונה הזאת'} סביר שלג או בוץ קפוא שם, ומעברים גבוהים עלולים להיות סגורים: קחו שרשראות, ובדקו מצב דרכים מקומי.`);
+      }
+    } catch {}
+  }
+  // fuel: the longest stretch with no station near the way
+  if (r.len > 120000) try {
+    const step = Math.max(4000, r.len / 350), smp = sampleRoute(r.coords, Math.ceil(r.len / step) + 1);
+    const got = await poisFromTiles(smp.map(x => [x.lat, x.lon]), 2500);
+    if (tok === checksTok && got && got.supply) {
+      const fuel = got.supply.filter(x => x.kind === 'fuel').map(f => { let bd = Infinity, at = 0; for (const q of smp) { const d = hav(q.lat, q.lon, f.lat, f.lon); if (d < bd) { bd = d; at = q.d; } } return { ...f, d: at }; }).sort((a, b) => a.d - b.d);
+      const covered = got.miss?.length ? got.miss.length / smp.length < 0.2 : true;
+      const marks = [{ d: 0, name: 'נקודת היציאה' }, ...fuel, { d: smp[smp.length - 1].d, name: 'הסוף' }];
+      let gi = 0, gap = 0; for (let i = 1; i < marks.length; i++) if (marks[i].d - marks[i - 1].d > gap) { gap = marks[i].d - marks[i - 1].d; gi = i; }
+      if (covered && gap > 200000) { const a = marks[gi - 1];
+        out(`${ico('fuel')}הקטע הארוך בלי תחנת דלק: כ-${Math.round(gap / 1000)} ק"מ, מק"מ ${Math.round(a.d / 1000)}${gi - 1 > 0 ? ` (תדלוק אחרון: ${a.name})` : ' (מהיציאה)'}. בשטח צריכת הדלק כפולה מבכביש: מלאו מיכל לפני, ושקלו ג'ריקן.`); }
+    }
+  } catch {}
+  // the group's own field reports on this route
+  if (hasGroup()) try {
+    let s0 = 90, n0 = -90, w0 = 180, e0 = -180; for (const c of r.coords) { if (c[0] < s0) s0 = c[0]; if (c[0] > n0) n0 = c[0]; if (c[1] < w0) w0 = c[1]; if (c[1] > e0) e0 = c[1]; }
+    const reps = (await api(`/reports?s=${s0 - 0.01}&w=${w0 - 0.01}&n=${n0 + 0.01}&e=${e0 + 0.01}`)).reports || [];
+    if (tok !== checksTok) return;
+    const cum = [0]; for (let i = 1; i < r.coords.length; i++) cum.push(cum[i - 1] + hav(r.coords[i - 1][0], r.coords[i - 1][1], r.coords[i][0], r.coords[i][1]));
+    const hits = [];
+    for (const x of reps) { let bd = Infinity, at = 0; for (let i = 0; i < r.coords.length; i++) { const d = hav(r.coords[i][0], r.coords[i][1], x.lat, x.lon); if (d < bd) { bd = d; at = i; } } if (bd < 150) hits.push({ ...x, i: at, km: cum[at] / 1000 }); }
+    hits.sort((a, b) => a.i - b.i);
+    if (hits.length) {
+      const esc = t => String(t || '').replace(/[<&>]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+      const line = x => `<li><b>${REPORT_KINDS[x.kind] || 'דיווח'}</b> · ${D ? `יום ${dayAt(x.i) + 1} · ` : ''}ק"מ ${x.km.toFixed(0)}${x.note ? ` · ${esc(x.note)}` : ''} <small>(${esc(x.created_by || 'מישהו')}, ${new Date(x.created_at).toLocaleDateString('he-IL')})</small></li>`;
+      const closed = hits.some(x => x.kind === 'closed' || x.kind === 'missing');
+      out(`${closed ? ico('warn') : ''}${hits.length === 1 ? 'דיווח מהשטח של החבורה על המסלול:' : `${hits.length} דיווחים מהשטח של החבורה על המסלול:`}<ul style="margin:4px 0 0;padding-inline-start:18px">${hits.slice(0, 8).map(line).join('')}</ul>`);
+    }
+  } catch {}
+}
+// the hardest stretch: look at it before you decide (3D fly-over, street-level photos)
+function hardestLinks(r, p) {
+  const segs = (r.segs || []).filter(sg => sg.d === r.maxD && !sg.ferry); if (!segs.length || r.unrated) return null;
+  const longest = segs.reduce((a, b) => (b.pts.length > a.pts.length ? b : a)), mid = longest.pts[Math.floor(longest.pts.length / 2)];
+  const box = document.createElement('div'); box.className = 'plinks hardlinks';
+  const lab = document.createElement('span'); lab.className = 'hl-lab'; lab.textContent = 'הקטע הקשה ביותר:'; box.append(lab);
+  const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.innerHTML = ico('mountain') + 'מעוף תלת-ממד';
+  fb.onclick = () => { // a little before and after the stretch
+    let i0 = 0, bd = Infinity; for (let i = 0; i < r.coords.length; i++) { const d = hav(r.coords[i][0], r.coords[i][1], longest.pts[0][0], longest.pts[0][1]); if (d < bd) { bd = d; i0 = i; } }
+    const from = Math.max(0, i0 - 60), to = Math.min(r.coords.length, i0 + longest.pts.length + 60);
+    flyOver(r.coords.slice(from, to), 'הקטע הקשה ביותר');
+  };
+  box.append(fb);
+  for (const [t, u] of [['תמונות מהשטח', `https://www.mapillary.com/app/?lat=${mid[0].toFixed(5)}&lng=${mid[1].toFixed(5)}&z=16`], ['Street View', `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${mid[0].toFixed(5)},${mid[1].toFixed(5)}`]]) {
+    const a = document.createElement('a'); a.href = u; a.target = '_blank'; a.rel = 'noopener'; a.textContent = t; box.append(a);
+  }
+  return box;
+}
+
 // ---------- 3D fly-over of a day: satellite imagery on real terrain, the camera follows the track ----------
 let mlLoad = null;
 const loadML = () => mlLoad || (mlLoad = new Promise((res, rej) => {
@@ -3671,7 +3797,11 @@ async function renderWeather(r, p, D) {
   const days = D || [{ from: 0, to: r.coords.length - 1, len: r.len, hrs: r.hrs, camp: r.pois.find(x => x.type === 'nightcamp') || null }];
   const pts = days.map(d => r.coords[Math.floor((d.from + d.to) / 2)]);
   const camps = days.map(d => d.camp ? [d.camp.lat, d.camp.lon] : null);
-  const all = [...pts, ...camps.filter(Boolean), r.coords[0]];
+  // flash floods start where it rains, often far up the valley: a ring of points ~30 km around each desert day
+  const ringOf = c => [[c[0] + 0.27, c[1]], [c[0] - 0.27, c[1]], [c[0], c[1] + 0.31], [c[0], c[1] - 0.31]];
+  const desert = c => c[0] < 31.9 && c[0] > 29.3 && c[1] > 34.2 && c[1] < 35.6;
+  const rings = pts.map(c => desert(c) ? ringOf(c) : []);
+  const all = [...pts, ...camps.filter(Boolean), r.coords[0], ...rings.flat()];
   let ws;
   try { ws = await fetchWx(all, addDays(date, 0) < isoToday() ? isoToday() : date, addDays(date, nDays)); }
   catch { if (token === renderWeather.tok) box.innerHTML = '<div class="wx"><h3>מזג אוויר<small>אין חיבור לשירות</small></h3></div>'; return; }
@@ -3691,7 +3821,10 @@ async function renderWeather(r, p, D) {
       const finish = startH + d.hrs + stops, sunsetH = timeToH(sunset);
       html += `<div class="wxrow">${wxIcon(ic)}<span class="wt">${D ? `יום ${k + 1} · ` : ''}${heDay(iso)} · ${txt}</span><span class="wtemp">${tmin}°–${tmax}°</span>
         <span class="wd">גשם ${pp}%${rain > 0.1 ? ` (${rain.toFixed(1)} מ״מ)` : ''} · משבים עד ${gust} קמ״ש · זריחה ${hm(w.daily.sunrise[i])} · שקיעה ${sunset} · סיום משוער ${hToTime(finish)}</span></div>`;
-      if (finish > sunsetH - 0.25) warn.push(`${D ? `ביום ${k + 1} ` : ''}הסיום המשוער (${hToTime(finish)}) קרוב לשקיעה (${sunset}) או אחריה. צאו מוקדם יותר או קצרו.`);
+      const ringBase = pts.length + camps.filter(Boolean).length + 1 + rings.slice(0, k).reduce((t, x) => t + x.length, 0);
+      const ringRain = rings[k].map((_, q) => { const wr = ws[ringBase + q], j = dayIdx(wr, iso); return j >= 0 ? (wr.daily.precipitation_sum[j] || 0) : 0; });
+      const upRain = ringRain.length ? Math.max(...ringRain) : 0;
+      if (!(rain >= 2 || pp >= 60) && upRain >= 3) warn.push(`${D ? `ביום ${k + 1} ` : ''}צפוי גשם עד 30 ק"מ מהמסלול (עד ${upRain.toFixed(0)} מ״מ), גם אם מעליכם יבש. שיטפון יכול להגיע לנחלים שבדרך בלי אזהרה: אל תיכנסו לערוצים, ואם המים עולים צאו לגדה הגבוהה.`);
       if (rain >= 2 || pp >= 60) warn.push(`${D ? `ביום ${k + 1} ` : ''}צפוי גשם באזור (${pp}%${rain > 0.1 ? `, ${rain.toFixed(1)} מ״מ` : ''}). סכנת שיטפונות בנחלים, גם מגשם רחוק במעלה הנחל: אל תיכנסו לערוצים ואל תחנו בהם.`);
       else if (i > 0 && (w.daily.precipitation_sum[i - 1] || 0) >= 3) warn.push(`${D ? `לפני יום ${k + 1} ` : 'יום לפני הטיול '}ירד גשם באזור. השבילים עלולים להיות בוציים או פגועים, והנחלים עוד יכולים לזרום.`);
       if (tmax >= 35) warn.push(`${D ? `ביום ${k + 1} ` : ''}חם מאוד (${tmax}°). קחו הרבה מים, ועדיף לנסוע בבוקר.`);
@@ -3942,6 +4075,7 @@ function render(i, day = null) {
     <div class="stat"><b>${(r.len / 1000).toFixed(1)}</b><span>ק"מ${D ? ' בסה״כ' : ''}</span></div>
     <div class="stat"><b>${fmtH(r.hrs + stopH)}</b><span>${D ? 'שעות נסיעה בסה״כ' : 'שעות (כולל עצירות)'}</span></div>
     <div class="stat${r.unrated ? '' : ' hard'}" id="hardStat"><b>${r.unrated ? 'לא מדורג' : (DIFF[r.maxD]?.he || '—').replace(/ \(.*\)/, '')}</b><span>הקטע הקשה ביותר</span></div>`;
+  $('hardLinks')?.remove(); if (!dv) { const hl = hardestLinks(r, p); if (hl) { hl.id = 'hardLinks'; $('stats').after(hl); } }
   const hs = $('hardStat'); if (hs && !r.unrated) hs.onclick = () => { // zoom to the hardest stretch and flash it
     const segs = r.segs.filter(sg => sg.d === r.maxD && !sg.ferry); if (!segs.length) return;
     const longest = segs.reduce((a, b) => (b.pts.length > a.pts.length ? b : a));
@@ -3963,7 +4097,6 @@ function render(i, day = null) {
   if (!current.saved && p._lost?.length) w.push(`לא מצאתי במפה את ${p._lost.map(n => '"' + n + '"').join(', ')}, אז דילגתי. כתבו בתיבת השינוי מקום קרוב אחר אם חשוב לכם.`);
   if (!current.saved && current.res.note && /^⚠/.test(current.res.note)) w.push(current.res.note);
   for (const t of r.issues || []) if (/^⚠/.test(t)) w.push(t); // important planning notes are not hidden in the list
-  if (current.G?.eRep && r.edges) { const hit = r.edges.filter(e => current.G.eRep[e]).length; if (hit) w.push(`המסלול עובר ליד דיווחים מהשטח של החבורה (קושי שונה מהמפה). לחצו על הסימנים במפה לפרטים.`); }
   if (r.unrated) w.push('המסלול יובא מקובץ. לא בדקתי לו קושי ושטחי אש, רק שטחי A. סעו בו בזהירות כמו במסלול לא מוכר.');
   if (!r.unrated && r.unk / r.len > 0.3) w.push(`ל-${Math.round(r.unk / r.len * 100)}% מהדרך אין דירוג קושי ב-OSM. ההערכה שם שמרנית (בינוני).`);
   const IL = isIL(r);
@@ -3987,7 +4120,13 @@ function render(i, day = null) {
   if (r.res > 300 && !r.unrated) info.push(isIL(r) ? `${(r.res / 1000).toFixed(1)} ק"מ עוברים בתוך שמורת טבע / גן לאומי. בשמורות מותר לנסוע רק בדרכים המסומנות לרכב (סימון שבילים בצבע + שלט "דרך לרכב"), ו-OSM לא תמיד יודע איזו דרך מסומנת. אם אין סימון בשטח, לא נכנסים.` : `${(r.res / 1000).toFixed(1)} ק"מ עוברים בתוך שמורת טבע / פארק לאומי. ברוב אירופה נסיעה ברכב שם מותרת רק בדרכים ציבוריות פתוחות לרכב, וקנסות גבוהים. בדקו את השילוט בכניסה.`);
   const SF = safetyFor(r, dv);
   if (SF && SF.bail && SF.bail.m > 20000) w.push(`הנקודה הכי מרוחקת מכביש: כ-${(SF.bail.m / 1000).toFixed(0)} ק"מ שטח (בק"מ ${SF.bail.km.toFixed(0)}). אם משהו נשבר שם, החילוץ ארוך: צאו לפחות בשני רכבים, עם מים, מדחס, רצועת גרירה וקליטה/מכשיר קשר.`);
-  if (SF && SF.fuelGap > 200 && (D || r.len > 150000)) w.push(`הקטע הארוך ביותר בלי תחנת דלק ליד המסלול: כ-${SF.fuelGap.toFixed(0)} ק"מ. בשטח רכב צורך פי 1.5–2 מבכביש: מלאו מיכל לפני, ושקלו ג'ריקן.`);
+  { // the clock: every day ends before dark
+    const days = D || [{ from: 0, to: r.coords.length - 1, len: r.len, hrs: r.hrs + r.pois.filter(x => x.type !== 'nightcamp' && !POI_TYPES[x.type]?.safety).length * 0.25 }];
+    const late = days.map((d, k) => daySchedule(r, p, d, k, !D)).filter(sc => sc?.late);
+    if (late.length) w.push(late.length > 2 ? `ב-${late.length} ימים מגיעים ללינה אחרי השקיעה או קרוב אליה (${late.map(x => 'יום ' + x.day).join(', ')}). צאו מוקדם יותר (שעת יציאה בהגדרות), או בקשו ימים קצרים יותר.` : late.map(x => x.warn).join(' '));
+    if (!D && days[0]) { const sc = daySchedule(r, p, days[0], 0, true); if (sc) info.push(sc.text); }
+  }
+  if (false) w.push(`הקטע הארוך ביותר בלי תחנת דלק ליד המסלול: כ-${SF.fuelGap.toFixed(0)} ק"מ. בשטח רכב צורך פי 1.5–2 מבכביש: מלאו מיכל לפני, ושקלו ג'ריקן.`);
   info.push('המסלול מבוסס על נתוני OSM. מצב השטח בפועל (שיטפונות, חסימות, סגירת שמורות) יכול להשתנות: בדקו לפני יציאה.');
   $('warns').innerHTML = w.map(t => /^⚠/.test(t) ? `<div class="warn">${ico('warn')}${t.replace(/^⚠️?\s*/, '')}</div>` : `<div class="warn">${t}</div>`).join('');
   const minor = (r.issues || []).filter(t => !/^⚠/.test(t)).concat(info.map(t => t.replace(/<[^>]+>/g, ''))); if (minor.length) { const d = document.createElement('details'); d.className = 'more'; d.innerHTML = `<summary>הערות ומידע (${minor.length})</summary><ul>${minor.map(t => `<li>${t.replace(/</g, '&lt;')}</li>`).join('')}</ul>`; $('warns').prepend(d); }
@@ -4004,6 +4143,7 @@ function render(i, day = null) {
     $('warns').append(row);
   }
   renderWeather(r, { ...p, date: $('pDate').value || p.date }, D);
+  renderChecks(r, { ...p, date: $('pDate').value || p.date }, D);
   renderSafety(r, dv, w);
   renderElevation(dv ? { ...r, coords: r.coords.slice(dv.from, dv.to + 1) } : r);
   $('dayPlan').innerHTML = '';
@@ -4025,6 +4165,7 @@ function render(i, day = null) {
       if (d.off != null) head.querySelector('.dbar i').style.width = offP + '%'; else head.querySelector('.dbar').remove();
       head.onclick = () => render(i, day === k ? null : k); // tap again: back to the whole trip
       card.append(head);
+      { const sc = daySchedule(r, p, d, k); if (sc) { const el = document.createElement('div'); el.className = 'dsched' + (sc.late ? ' late' : ''); el.textContent = sc.text; card.append(el); } }
       { const hero = d.mid || (r.pois || []).find(x => x.type === 'via' && x.day === k + 1 && !/מעבורת/.test(x.name)) || (d.camp && !d.camp.ferry && d.camp.type !== 'dayend' ? d.camp : null);
         if (hero) { const ph = document.createElement('button'); ph.type = 'button'; ph.className = 'dphoto'; ph.hidden = true; card.append(ph);
           dayPhotoObs.observe(ph); ph._pt = hero; } }
