@@ -60,8 +60,14 @@ header button{pointer-events:auto;margin-inline-start:auto}
 .flytitle{color:#fff;font:600 16px var(--display);text-shadow:0 1px 4px rgba(0,0,0,.6)}
 .flybtn{pointer-events:auto;width:44px;height:44px;border-radius:50%;border:0;background:rgba(255,255,255,.92);color:#111;font:600 15px var(--body);cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.35);flex:none}
 .flybar{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);inset-inline:12px;display:flex;gap:10px;align-items:center;background:rgba(0,0,0,.45);backdrop-filter:blur(6px);border-radius:999px;padding:6px}
-.flyprog{flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.25);overflow:hidden}
-.flyprog i{display:block;height:100%;width:0;background:#ffd23f}
+.flyprog{flex:1;position:relative;height:28px;cursor:pointer;touch-action:none;outline:none}
+.flyprog::before{content:'';position:absolute;inset-inline:0;top:11px;height:6px;border-radius:3px;background:rgba(255,255,255,.25)}
+.flyprog i{position:absolute;inset-inline-start:0;top:11px;height:6px;border-radius:3px;width:0;background:#ffd23f}
+.flyprog b{position:absolute;top:6px;width:16px;height:16px;margin-inline-start:-8px;border-radius:50%;background:#ffd23f;box-shadow:0 0 0 3px rgba(0,0,0,.35);pointer-events:none}
+.flyprog:focus-visible b{box-shadow:0 0 0 3px #fff}
+.flyprog .tick{position:absolute;top:4px;width:3px;height:20px;margin-inline-start:-1.5px;border-radius:2px;background:#fff;opacity:.85}
+.flyprog .tick.day{background:#ff8a3d;width:4px;opacity:1}
+.flyprog .tick:hover::after{content:attr(data-n);position:absolute;bottom:26px;inset-inline-start:50%;transform:translateX(50%);white-space:nowrap;background:rgba(0,0,0,.75);color:#fff;font:500 12px var(--body);padding:3px 8px;border-radius:6px}
 .flykm{color:#fff;font:600 13px var(--body);font-variant-numeric:tabular-nums;min-width:62px;text-align:center}
 .flymsg{position:absolute;inset:0;display:grid;place-items:center;color:#fff;font:500 15px var(--body);pointer-events:none}
 .flymsg:empty{display:none}
@@ -544,7 +550,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
 <div id="fly" class="fly" hidden>
   <div id="flyMap"></div>
   <div class="flytop"><button class="flybtn" id="flyClose" type="button" aria-label="סגירה"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button><div class="flytitle" id="flyTitle"></div></div>
-  <div class="flybar"><button class="flybtn play" id="flyPlay" type="button" aria-label="עצירה">❚❚</button><div class="flyprog"><i id="flyProg"></i></div><div class="flykm" id="flyKm"></div><button class="flybtn" id="flySpeed" type="button">1×</button></div>
+  <div class="flybar"><button class="flybtn play" id="flyPlay" type="button" aria-label="עצירה">❚❚</button><div class="flyprog" id="flyBar" role="slider" tabindex="0" aria-label="מיקום במעוף" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="flyProg"></i><b id="flyKnob"></b></div><div class="flykm" id="flyKm"></div><button class="flybtn" id="flySpeed" type="button">1×</button></div>
   <div class="flymsg" id="flyMsg"></div>
 </div>
 <div id="gate" class="gate" hidden>
@@ -2120,7 +2126,7 @@ async function run(fromPrompt, preset = null, changeText = null) {
       const vias = viaLL.map(v => nearestNode(G, v.ll[0], v.ll[1], fac, 3000));
       const bad = vias.findIndex(x => x < 0);
       if (bad >= 0) return { err: `אין שביל מתאים ליד "${viaLL[bad].name}".` };
-      const viaPois = viaLL.map((v, i) => ({ type: 'via', name: v.name, note: v.note, lat: G.lat[vias[i]], lon: G.lon[vias[i]] }));
+      const viaPois = viaLL.map((v, i) => ({ type: 'via', name: v.name, note: v.note, lat: G.lat[vias[i]], lon: G.lon[vias[i]], olat: v.ll[0], olon: v.ll[1] }));
       const multi = (pm.days || 1) > 1;
       const res = multi ? (vias.length ? planMultiVia(G, pm, { s, e, vias, viaPois }, m => status(m)) : planMulti(G, pm, { s, e, vias, viaPois }, m => status(m))) : plan(G, pm, { s, e, vias, viaPois }, m => status(m));
       return { res };
@@ -2317,7 +2323,7 @@ const loadML = () => mlLoad || (mlLoad = new Promise((res, rej) => {
   const js = document.createElement('script'); js.src = 'https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.js'; js.onload = () => res(window.maplibregl); js.onerror = () => { mlLoad = null; rej(new Error('load')); }; document.head.append(js);
 }));
 let flyState = null;
-async function flyOver(coords, title) {
+async function flyOver(coords, title, marks = []) {
   if (!coords || coords.length < 2) return;
   $('fly').hidden = false; $('flyTitle').textContent = title || ''; $('flyMsg').textContent = 'טוען תלת-ממד…'; $('flyProg').style.width = '0';
   let ml; try { ml = await loadML(); } catch { $('flyMsg').textContent = 'לא הצלחתי לטעון את התלת-ממד. בדקו חיבור לאינטרנט.'; return; }
@@ -2329,13 +2335,18 @@ async function flyOver(coords, title) {
   }
   const total = pts[pts.length - 1][2];
   const at = dist => { let lo = 0, hi = pts.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (pts[m][2] < dist) lo = m; else hi = m; } return pts[hi]; };
+  // ticks on the bar: stops and day starts, tap one to jump there
+  const bar = $('flyBar'); bar.querySelectorAll('.tick').forEach(x => x.remove());
+  const near = (la, lo) => { let bi = 0, bd = Infinity; for (let i = 0; i < pts.length; i += 4) { const d = hav(la, lo, pts[i][1], pts[i][0]); if (d < bd) { bd = d; bi = i; } } return bd < 3000 ? pts[bi][2] : null; };
+  for (const m of marks) { const d = m.d != null ? m.d : near(m.lat, m.lon); if (d == null || d < 200 || d > total - 200) continue;
+    const t = document.createElement('span'); t.className = 'tick' + (m.day ? ' day' : ''); t.dataset.n = m.name; t.title = m.name; t.style.insetInlineStart = (d / total * 100).toFixed(2) + '%'; t.dataset.d = d; bar.append(t); }
   if (flyState?.map) flyState.map.remove();
   const map3 = new ml.Map({ container: 'flyMap', attributionControl: { compact: true }, pitch: 68, zoom: 14, center: [pts[0][0], pts[0][1]], maxPitch: 80,
     style: { version: 8,
       sources: { sat: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 18, attribution: 'Esri, Maxar' },
         dem: { type: 'raster-dem', tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'], encoding: 'terrarium', tileSize: 256, maxzoom: 14, attribution: 'Mapzen terrain' } },
       layers: [{ id: 'sat', type: 'raster', source: 'sat' }], sky: { 'sky-color': '#9cc8f0', 'horizon-color': '#e8f0f7', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.7, 'fog-color': '#e8f0f7' } } });
-  flyState = { map: map3, t: 0, speed: 1, playing: true, last: 0 }; flyBtn('pause');
+  flyState = { map: map3, t: 0, speed: 1, playing: true, last: 0, total }; flyBtn('pause');
   // ~35 s for a typical day; long days go faster, short ones slower
   const durS = Math.max(22, Math.min(55, total / 1000 * 0.45)), mps = total / durS;
   map3.on('load', () => {
@@ -2353,7 +2364,7 @@ async function flyOver(coords, title) {
       const want = here === ahead ? (bearing ?? 0) : Math.atan2((ahead[0] - behind[0]) * Math.cos(here[1] * Math.PI / 180), ahead[1] - behind[1]) * 180 / Math.PI;
       if (bearing == null) bearing = want; let dB = ((want - bearing + 540) % 360) - 180; bearing += dB * Math.min(1, dt * 1.6); // smooth turns
       map3.jumpTo({ center: [here[0], here[1]], bearing, pitch: 68, zoom: 14.3 });
-      $('flyProg').style.width = (flyState.t / total * 100).toFixed(1) + '%';
+      const pc = (flyState.t / total * 100).toFixed(2); $('flyProg').style.width = pc + '%'; $('flyKnob').style.insetInlineStart = pc + '%'; bar.setAttribute('aria-valuenow', Math.round(pc));
       $('flyKm').textContent = `${(flyState.t / 1000).toFixed(1)} / ${(total / 1000).toFixed(0)} ק"מ`;
       if (flyState.t >= total && flyState.playing) { flyState.playing = false; flyBtn('replay'); }
       requestAnimationFrame(frame);
@@ -2364,6 +2375,25 @@ async function flyOver(coords, title) {
 $('flyClose').onclick = () => { if (flyState?.map) flyState.map.remove(); flyState = null; $('fly').hidden = true; };
 const flyBtn = k => { $('flyPlay').innerHTML = ico(k); $('flyPlay').dataset.k = k; };
 $('flyPlay').onclick = () => { if (!flyState) return; if ($('flyPlay').dataset.k === 'replay') flyState.t = 0; flyState.playing = !flyState.playing; flyBtn(flyState.playing ? 'pause' : 'play'); flyState.last = 0; };
+// jump anywhere: tap or drag the bar, tap a tick, or use the arrow keys
+{
+  const bar = $('flyBar');
+  const seekTo = ev => {
+    if (!flyState?.total) return; const tk = ev.target.closest?.('.tick'); 
+    if (tk && ev.type === 'pointerdown') { flyState.t = +tk.dataset.d; }
+    else { const r = bar.getBoundingClientRect(), rtl = getComputedStyle(bar).direction === 'rtl'; const f = Math.max(0, Math.min(1, (rtl ? r.right - ev.clientX : ev.clientX - r.left) / r.width)); flyState.t = f * flyState.total; }
+    if ($('flyPlay').dataset.k === 'replay') flyBtn(flyState.playing ? 'pause' : 'play');
+  };
+  bar.addEventListener('pointerdown', ev => { if (!flyState) return; bar.setPointerCapture(ev.pointerId); flyState.dragging = true; seekTo(ev); });
+  bar.addEventListener('pointermove', ev => { if (flyState?.dragging) seekTo(ev); });
+  const up = () => { if (flyState) flyState.dragging = false; }; bar.addEventListener('pointerup', up); bar.addEventListener('pointercancel', up);
+  bar.addEventListener('keydown', ev => {
+    if (!flyState?.total) return; const rtl = getComputedStyle(bar).direction === 'rtl';
+    const step = ev.shiftKey ? flyState.total / 10 : 1000; let d = 0;
+    if (ev.key === 'ArrowRight') d = rtl ? -step : step; else if (ev.key === 'ArrowLeft') d = rtl ? step : -step; else if (ev.key === 'Home') d = -flyState.t; else if (ev.key === 'End') d = flyState.total - flyState.t; else return;
+    ev.preventDefault(); flyState.t = Math.max(0, Math.min(flyState.total, flyState.t + d));
+  });
+}
 $('flySpeed').onclick = () => { if (!flyState) return; flyState.speed = flyState.speed === 1 ? 2 : flyState.speed === 2 ? 4 : 1; $('flySpeed').textContent = flyState.speed + '×'; };
 // links out: book a campsite, buy ferry tickets, navigate there
 function placeLinks(pt) {
@@ -2808,7 +2838,11 @@ function render(i, day = null) {
   renderSafety(r, dv, w);
   renderElevation(dv ? { ...r, coords: r.coords.slice(dv.from, dv.to + 1) } : r);
   $('dayPlan').innerHTML = '';
-  if (!D) { const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.innerHTML = ico('mountain') + 'מעוף תלת-ממד על המסלול'; fb.onclick = () => flyOver(r.coords, routeTitle(r, p)); $('dayPlan').append(fb); }
+  if (!D) { const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.innerHTML = ico('mountain') + 'מעוף תלת-ממד על המסלול'; fb.onclick = () => flyOver(r.coords, routeTitle(r, p), r.pois.filter(x => !POI_TYPES[x.type]?.safety).map(x => ({ lat: x.lat, lon: x.lon, name: x.name }))); $('dayPlan').append(fb); }
+  else { const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.innerHTML = ico('mountain') + 'מעוף על כל הטיול';
+    fb.onclick = () => { let c = 0; const cum = [0]; for (let q = 1; q < r.coords.length; q++) { c += hav(r.coords[q - 1][0], r.coords[q - 1][1], r.coords[q][0], r.coords[q][1]); cum.push(c); }
+      flyOver(r.coords, routeTitle(r, p), D.slice(1).map((d, k) => ({ d: cum[d.from], name: `יום ${k + 2}`, day: true }))); };
+    $('dayPlan').prepend(fb); }
   if (D) {
     const box = document.createElement('div'); box.className = 'dayplan cards';
     D.forEach((d, k) => {
@@ -2844,7 +2878,7 @@ function render(i, day = null) {
         }
         night.append(sw);
       }
-      { const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.innerHTML = ico('mountain') + 'מעוף תלת-ממד'; fb.onclick = () => flyOver(r.coords.slice(d.from, d.to + 1), `יום ${k + 1}`); const row = night.querySelector('.plinks'); if (row) row.prepend(fb); else night.append(fb); }
+      { const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.innerHTML = ico('mountain') + 'מעוף תלת-ממד'; fb.onclick = () => flyOver(r.coords.slice(d.from, d.to + 1), `יום ${k + 1}`, r.pois.filter(x => !POI_TYPES[x.type]?.safety && x.type !== 'nightcamp').map(x => ({ lat: x.lat, lon: x.lon, name: x.name }))); const row = night.querySelector('.plinks'); if (row) row.prepend(fb); else night.append(fb); }
       card.append(night);
       box.append(card);
     });

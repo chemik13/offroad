@@ -31,6 +31,8 @@ const CASES = [
 ];
 const IL = (n, la, lo) => S(n, la, lo, 'IL');
 const CASES_IL = [
+  { id: 'il-uvda-4d', maxSide: 10, p: { ...M, country: 'IL', start: IL('מצפה רמון', 30.6097, 34.8013), end: IL('אילת', 29.5577, 34.9519), loop: false, days: 4, poi_types: ['historic', 'viewpoint', 'nightcamp'],
+    via: [IL('מכתש רמון', 30.58, 34.81), IL('עין סהרונים', 30.39, 34.97), IL('בקעת עובדה (שדה אברהם)', 29.99, 34.92), IL('בקעת הירח', 29.83, 34.93), IL('מצפה הר יואש', 29.58, 34.93)].map(v => ({ ...v, area: true })) } },
   { id: 'il-ramon-avdat-picnic', wantPoi: 'camp', p: { ...M, country: 'IL', start: IL('מצפה רמון', 30.61, 34.80), end: IL('עין עבדת', 30.83, 34.77), loop: false, duration_hours: 4, poi_types: ['camp'] } },
   { id: 'il-raanana-agamon-picnic', trueEnd: [32.3729, 34.9357], p: { ...M, country: 'IL', start: IL('רעננה', 32.184, 34.871), end: IL('אגמון חפר', 32.368, 34.888), loop: false, duration_hours: 3, poi_types: ['camp'] } },
   { id: 'il-ramon-4h', p: { ...M, country: 'IL', start: IL('מצפה רמון', 30.61, 34.80), loop: false, duration_hours: 4 } },
@@ -80,13 +82,18 @@ const CASES_IL = [
         // driving the same ground twice (not counting the loop closing back home)
         const cell = new Map(); let again = 0, tot = 0;
         for (let i = 1; i < r.coords.length; i++) { const d = hav(r.coords[i - 1][0], r.coords[i - 1][1], r.coords[i][0], r.coords[i][1]); tot += d; const k = Math.round(r.coords[i][0] / 0.002) + ',' + Math.round(r.coords[i][1] / 0.0027); const f = cell.get(k); if (f != null && i - f > 40) again += d; else if (f == null) cell.set(k, i); }
+        // running beside where it already drove (a parallel track counts): within ~400 m of ground covered more than 2 km earlier
+        const first = new Map(); let side = 0, cum = 0;
+        for (let i = 1; i < r.coords.length; i++) { const d = hav(r.coords[i - 1][0], r.coords[i - 1][1], r.coords[i][0], r.coords[i][1]); cum += d; const la = Math.round(r.coords[i][0] / 0.0036), lo = Math.round(r.coords[i][1] / 0.0042);
+          let hit = false; for (let dx = -1; dx <= 1 && !hit; dx++) for (let dy = -1; dy <= 1 && !hit; dy++) { const f = first.get((la + dx) + ',' + (lo + dy)); if (f != null && f < cum - 2000) hit = true; }
+          if (hit) side += d; const k = la + ',' + lo; if (!first.has(k)) first.set(k, cum); }
         const nights = D ? D.slice(0, -1).map(d => d.camp ? (d.camp.ferry ? 'ferry' : d.camp.type === 'dayend' ? 'none' : d.camp.wild ? (d.camp.lake ? 'wild-lake' : 'wild') : d.camp.lake ? 'lake' : 'camp') : 'none') : [];
         const startD = P.start ? hav(P.start.lat, P.start.lon, r.coords[0][0], r.coords[0][1]) : 0;
         const endLL = P.loop ? P.start : P.end; const endD = endLL ? hav(endLL.lat, endLL.lon, r.coords[r.coords.length - 1][0], r.coords[r.coords.length - 1][1]) : 0;
         return {
           days: D ? D.length : 1, km: Math.round(r.len / 1000), off: Math.round((r.len - r.asph) / r.len * 100), hrs: +r.hrs.toFixed(1), hrsAll: +(r.hrs + r.pois.filter(x => x.type !== 'nightcamp').length * 0.25).toFixed(1),
           dayKm: D ? D.map(d => Math.round(d.len / 1000)) : [Math.round(r.len / 1000)], dayOff: D ? D.map(d => Math.round((d.off ?? 0) / 1000)) : [],
-          nights, viaMiss, jumps, jumpAt, milKm: +((r.mil || 0) / 1000).toFixed(1), aaKm: +((r.aa || 0) / 1000).toFixed(1), reuseKm: +((r.reuse || 0) / 1000).toFixed(1), again: Math.round(again / tot * 100), startKm: +(startD / 1000).toFixed(1), endKm: +(endD / 1000).toFixed(1),
+          nights, viaMiss, jumps, jumpAt, milKm: +((r.mil || 0) / 1000).toFixed(1), aaKm: +((r.aa || 0) / 1000).toFixed(1), reuseKm: +((r.reuse || 0) / 1000).toFixed(1), again: Math.round(again / tot * 100), side: Math.round(side / tot * 100), startKm: +(startD / 1000).toFixed(1), endKm: +(endD / 1000).toFixed(1),
           warns: [...document.querySelectorAll('.warn')].map(x => x.textContent.slice(0, 110)).filter(t => !/OSM\. מצב השטח|מחוץ לישראל/.test(t)),
           last: r.coords[r.coords.length - 1], stopsText: document.getElementById('stopsBox').textContent.slice(0, 300), issues: (r.issues || []).map(t => t.slice(0, 110)), overland: !!r.overland, note: (r.note || '').slice(0, 160),
         };
@@ -97,6 +104,7 @@ const CASES_IL = [
     const P = { ...c.p, ...(process.env.EXTRA ? JSON.parse(process.env.EXTRA) : {}) }, bad = [];
     if (res.fail) bad.push('FAILED: ' + res.fail.slice(0, 140));
     else {
+      if (c.maxSide != null && res.side > c.maxSide) bad.push(`drives beside ground already covered: ${res.side}%`);
       if (c.wantPoi && !/פיקניק/.test(res.stopsText || '')) bad.push('no picnic stop');
       if (c.trueEnd) { const [a1, o1] = c.trueEnd, [a2, o2] = res.last, d = Math.hypot((a1 - a2) * 111, (o1 - o2) * 94); if (d > 2) bad.push(`ended ${d.toFixed(1)} km from the real finish`); }
       if (P.days > 1 && res.days !== P.days) bad.push(`days ${res.days}≠${P.days}`);

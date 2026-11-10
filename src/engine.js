@@ -903,12 +903,36 @@ function planMulti(G, p, nodes, onProgress = () => {}) {
 // Multi-day trip that must pass ordered stops (a theme / "in the footsteps of"):
 // build the whole route through the stops, then end each day at an authorized night camp
 // near the day's share of the distance, and rebuild through the camps.
+// how much of the way back (b) runs within ~400 m of the way out (a), ignoring the turn point's own surroundings
+function corridorOverlap(G, a, b, tip) {
+  const key = n => Math.round(G.lat[n] / 0.0036) + ',' + Math.round(G.lon[n] / 0.0042);
+  const cells = new Set(); for (const e of a) { cells.add(key(G.eA[e])); cells.add(key(G.eB[e])); }
+  let near = 0, tot = 0;
+  for (const e of b) {
+    const n = G.eA[e]; if (hav(G.lat[n], G.lon[n], G.lat[tip], G.lon[tip]) < 1200) continue;
+    tot += G.eLen[e]; const [la, lo] = [Math.round(G.lat[n] / 0.0036), Math.round(G.lon[n] / 0.0042)];
+    let hit = false; for (let dx = -1; dx <= 1 && !hit; dx++) for (let dy = -1; dy <= 1 && !hit; dy++) if (cells.has((la + dx) + ',' + (lo + dy))) hit = true;
+    if (hit) near += G.eLen[e];
+  }
+  return tot ? near / tot : 0;
+}
 function planMultiVia(G, p, nodes, onProgress = () => {}) {
   const N = Math.max(2, Math.min(7, p.days | 0));
   const fac = factors(G, { ...p, avoid_military: multiMilitary(p) });
   const s = nodes.s, vias = nodes.vias.filter(v => v >= 0);
   const end = p.loop ? s : (nodes.e >= 0 ? nodes.e : vias[vias.length - 1]);
-  const stops0 = [s, ...vias.filter(v => v !== end), end].filter((v, i, a) => i === 0 || v !== a[i - 1]);
+  let stops0 = [s, ...vias.filter(v => v !== end), end].filter((v, i, a) => i === 0 || v !== a[i - 1]);
+  { // an area (a valley, a crater, dunes) is passed through, not driven to its centre and back: if the way past it already crosses it, it is not a stop
+    const AREA = /^(בקעת|מכתש|עמק|רמת|הרי |מדבר|מישור|רכס|חולות|בקעה|עמקי|ערבות)/;
+    const info = new Map(); (nodes.viaPois || []).forEach((vi, k) => { if (vi && nodes.vias[k] >= 0) info.set(nodes.vias[k], vi); });
+    for (let i = 1; i + 1 < stops0.length; i++) {
+      const vi = info.get(stops0[i]); if (!vi || !AREA.test(vi.name || '')) continue;
+      const R = dijkstra(G, stops0[i - 1], fac, null, Infinity, stops0[i + 1]); const path = pathEdges(G, R, stops0[i + 1]); if (!path) continue;
+      const [oa, oo] = vi.olat != null ? [vi.olat, vi.olon] : [G.lat[stops0[i]], G.lon[stops0[i]]];
+      let dmin = Infinity; for (const e of path) { const d = hav(G.lat[G.eA[e]], G.lon[G.eA[e]], oa, oo); if (d < dmin) dmin = d; }
+      if (dmin < 3500) { stops0.splice(i, 1); i--; }
+    }
+  }
   const legs0 = [];
   onProgress('מחשב מסלול דרך כל התחנות…');
   for (let i = 0; i + 1 < stops0.length; i++) {
@@ -926,16 +950,24 @@ function planMultiVia(G, p, nodes, onProgress = () => {}) {
     for (let i = 0; i < legs0.length; i++) {
       const a = stops0[i], b = stops0[i + 1], len = legs0[i].reduce((t, e) => t + G.eLen[e], 0), want = len * stretch;
       const Ra = dijkstra(G, a, fac, null, want * 12), Rb = dijkstra(G, b, fac, null, want * 12);
-      let best = -1, bs = Infinity;
+      const crowAB = hav(G.lat[a], G.lon[a], G.lat[b], G.lon[b]);
+      const pool = [];
       for (let v = 0; v < G.N; v += 2) {
         const t = Ra.len[v] + Rb.len[v]; if (!isFinite(t) || t < want * 0.8 || t > want * 1.15) continue;
-        const sc = (Ra.dist[v] + Rb.dist[v]) / t + Math.abs(t - want) / want; // cost per metre: low = dirt
-        if (sc < bs) { bs = sc; best = v; }
+        const crow = hav(G.lat[a], G.lon[a], G.lat[v], G.lon[v]) + hav(G.lat[v], G.lon[v], G.lat[b], G.lon[b]);
+        if (hav(G.lat[a], G.lon[a], G.lat[v], G.lon[v]) > crowAB * 1.1 + 3000 || hav(G.lat[v], G.lon[v], G.lat[b], G.lon[b]) > crowAB * 1.1 + 3000) continue; // never backwards: the turn point lies between the two stops
+        if (crow < Math.max(crowAB * 1.15, t * 0.45)) continue; // a turn point that the way reaches and leaves along the same valley is just driving back
+        pool.push({ v, sc: (Ra.dist[v] + Rb.dist[v]) / t + Math.abs(t - want) / want }); // cost per metre: low = dirt
       }
-      if (best < 0) continue;
-      const p1 = pathEdges(G, Ra, best), R2 = dijkstra(G, best, fac, null, Infinity, b), p2 = pathEdges(G, R2, b);
+      pool.sort((x, y) => x.sc - y.sc);
       const asphOf = es => es.reduce((t, e) => t + (G.eAsph[e] ? G.eLen[e] : 0), 0) / Math.max(1, es.reduce((t, e) => t + G.eLen[e], 0));
-      if (p1 && p2 && (roomy || asphOf([...p1, ...p2]) < asphOf(legs0[i]) - 0.1)) { legs0[i] = [...p1, ...p2]; ins[i] = best; }
+      for (const { v: best } of pool.slice(0, 12)) {
+        const p1 = pathEdges(G, Ra, best), R2 = dijkstra(G, best, fac, null, Infinity, b), p2 = pathEdges(G, R2, b);
+        if (!p1 || !p2) continue;
+        if (corridorOverlap(G, p1, p2, best) > 0.2) continue; // out on one track and back on the one beside it: the same ground twice
+        if (roomy || asphOf([...p1, ...p2]) < asphOf(legs0[i]) - 0.1) { legs0[i] = [...p1, ...p2]; ins[i] = best; }
+        break;
+      }
     }
     // the turn points become stops, so the route keeps them when the nights are put in
     if (ins.some(x => x != null)) for (let i = legs0.length - 1; i >= 0; i--) if (ins[i] != null) {
@@ -957,7 +989,13 @@ function planMultiVia(G, p, nodes, onProgress = () => {}) {
     let idx = cum.findIndex(x => x >= target); if (idx < 0) idx = cum.length - 1;
     const [la, lo] = [G.lat[seq[idx]], G.lon[seq[idx]]];
     let best = null, bd = Infinity;
-    for (const c of camps) { if (nights.some(n => n.camp.node === c.node)) continue; const d = hav(la, lo, c.lat, c.lon); if (d < bd && d < 15000) { bd = d; best = c; } }
+    const win = total / N * 0.15; let i0 = idx, i1 = idx; while (i0 > 0 && cum[i0] > target - win) i0--; while (i1 < cum.length - 1 && cum[i1] < target + win) i1++;
+    for (const c of camps) {
+      if (nights.some(n => n.camp.node === c.node || hav(n.camp.lat, n.camp.lon, c.lat, c.lon) < 8000)) continue; // not back to last night's area
+      let dr = Infinity; for (let q = i0; q <= i1; q += 3) { const d = hav(G.lat[seq[q]], G.lon[seq[q]], c.lat, c.lon); if (d < dr) dr = d; } // off the way, not off one point
+      const d = dr * 1.6 + hav(la, lo, c.lat, c.lon) * 0.25;
+      if (dr < 15000 && d < bd) { bd = d; best = c; }
+    }
     let pos = 0; while (pos < legEnd.length && legEnd[pos] < idx) pos++;
     if (best) nights.push({ camp: best, leg: pos, idx });
     else { notes.push(`אין חניון לילה מורשה במרחק סביר מסוף יום ${k}. היום מסתיים בשטח.`); nights.push({ camp: { name: 'סוף יום ' + k + ' (בלי חניון מורשה)', lat: la, lon: lo, node: seq[idx], type: 'dayend', auth: null }, leg: pos, idx }); }
@@ -973,9 +1011,20 @@ function planMultiVia(G, p, nodes, onProgress = () => {}) {
   const used = new Uint8Array(G.E); const allEdges = []; const days = []; const pois = [];
   let dayStart = 0, dayLen = 0, dayHrs = 0, dayFrom = 0;
   const viaInfo = nodes.viaPois || [];
+  const viaAt = new Map(); vias.forEach((v, k) => { const vi = viaInfo[k]; if (vi && vi.olat != null) viaAt.set(v, [vi.olat, vi.olon]); });
   for (let i = 0; i + 1 < stops.length; i++) {
-    const leg = stops[i] === stops[i + 1] ? [] : buildRoute(G, fac, [stops[i], stops[i + 1]], Infinity, used);
+    let leg = stops[i] === stops[i + 1] ? [] : buildRoute(G, fac, [stops[i], stops[i + 1]], Infinity, used);
     if (!leg) return { results: [], reason: 'לא הצלחתי לחבר את אחד החניונים למסלול.' };
+    { // a dead-end in and out to a place that is an area (its point is not at the end of that track): skip the spur
+      const o = viaAt.get(stops[i]); const nd = stops[i];
+      if (o && hav(G.lat[nd], G.lon[nd], o[0], o[1]) > 400) {
+        let k = 0, cut = 0; while (k < leg.length && allEdges.length - k - 1 >= dayFrom && allEdges[allEdges.length - 1 - k] === leg[k]) { cut += G.eLen[leg[k]]; k++; }
+        if (k && cut > 300) {
+          for (let q = 0; q < k; q++) { const e = allEdges.pop(); dayLen -= G.eLen[e]; dayHrs -= G.eLen[e] / 1000 / DIFF[G.eD[e]].speed; }
+          leg = leg.slice(k);
+        }
+      }
+    }
     for (const e of leg) { dayLen += G.eLen[e]; dayHrs += G.eLen[e] / 1000 / DIFF[G.eD[e]].speed; }
     allEdges.push(...leg);
     const n = isCamp[i + 1];
