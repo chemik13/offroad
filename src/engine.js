@@ -884,7 +884,7 @@ function planMulti(G, p, nodes, onProgress = () => {}) {
       const camp = k < st.camps.length ? st.camps[k] : null;
       if (mid) pois.push({ ...mid, day: k + 1 });
       if (camp) pois.push({ ...camp, day: k + 1 });
-      days.push({ from: edgeCount, to: edgeCount + edges.length, len: dl, hrs: dh, camp, mid, startNode: a, endNode: b });
+      days.push({ from: edgeCount, to: edgeCount + edges.length, len: dl, hrs: dh, off: edges.reduce((t, e) => t + (G.eAsph[e] ? 0 : G.eLen[e]), 0), camp, mid, startNode: a, endNode: b });
       edgeCount += edges.length; allEdges.push(...edges);
     }
     if (!ok) continue;
@@ -1031,6 +1031,7 @@ function planMultiVia(G, p, nodes, onProgress = () => {}) {
     if (n) { days.push({ from: dayFrom, to: allEdges.length, len: dayLen, hrs: dayHrs, camp: n.camp }); if (n.camp.type === 'nightcamp') pois.push({ ...n.camp, day: days.length }); dayFrom = allEdges.length; dayLen = 0; dayHrs = 0; }
   }
   days.push({ from: dayFrom, to: allEdges.length, len: dayLen, hrs: dayHrs, camp: null });
+  for (const d of days) d.off = allEdges.slice(d.from, d.to).reduce((t, e) => t + (G.eAsph[e] ? 0 : G.eLen[e]), 0);
   vias.forEach((v, k) => { const vi = viaInfo[k]; if (vi) pois.push({ ...vi, lat: G.lat[v], lon: G.lon[v] }); });
   const st = routeStats(G, allEdges, s);
   const r = { edges: allEdges, stops, pois, ...st, days };

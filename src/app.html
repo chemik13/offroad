@@ -2991,12 +2991,14 @@ function render(i, day = null) {
     $('dayPlan').prepend(fb); }
   if (D) {
     const box = document.createElement('div'); box.className = 'dayplan cards';
+    const offUnknown = !r.overland && D.every(x => !x.off) && (r.asph == null || r.asph < r.len * 0.95);
     D.forEach((d, k) => {
       const card = document.createElement('div'); card.className = 'daycard' + (day === k ? ' sel' : '');
       const head = document.createElement('button'); head.className = 'dayrow'; head.type = 'button';
       head.innerHTML = `<span class="dn"></span><span class="dt"></span><span class="dm"></span><span class="dbar"><i></i></span>`;
       head.querySelector('.dn').textContent = `יום ${k + 1}`; head.querySelector('.dn').style.cssText = `background:${DAYC[k % DAYC.length]};color:#fff`;
       const offP = d.len ? Math.round((d.off ?? 0) / d.len * 100) : 0;
+      if (offUnknown) d = { ...d, off: null }; // trips saved before days knew their dirt share
       head.querySelector('.dt').textContent = d.mid ? 'עצירה: ' + latinName(d.mid.name) : (d.off != null ? `${Math.round((d.off || 0) / 1000)} ק"מ שטח · ${offP}%` : '');
       head.querySelector('.dm').textContent = `${(d.len / 1000).toFixed(0)} ק"מ · ${fmtH(d.hrs)}${d.ferH > 0.3 ? ` · ⛴ ${fmtH(d.ferH)}` : ''}`;
       if (d.off != null) head.querySelector('.dbar i').style.width = offP + '%'; else head.querySelector('.dbar').remove();
@@ -3120,7 +3122,7 @@ function packRoute(r) {
     coords: r.coords.map(([a, o]) => [R5(a), R5(o)]),
     waypoints: r.pois.map(x => ({ lat: R5(x.lat), lon: R5(x.lon), name: x.name, type: x.type, auth: x.auth || null, fee: x.fee, water: x.water, toilets: x.toilets, img: x.img, commons: x.commons, wd: x.wd })),
     stats: { len: Math.round(r.len), hrs: +r.hrs.toFixed(2), maxD: r.maxD, byD: r.byD.map(Math.round), unk: Math.round(r.unk), mil: Math.round(r.mil), aa: Math.round(r.aa), js: Math.round(r.js), reuse: Math.round(r.reuse), runs, unrated: !!r.unrated,
-      overland: !!r.overland, asph: Math.round(r.asph || 0), days: r.days && r.days.length > 1 ? r.days.map(d => ({ from: d.from, to: d.to, len: Math.round(d.len), off: Math.round(d.off || 0), hrs: +d.hrs.toFixed(2), camp: d.camp ? { name: d.camp.name, lat: R5(d.camp.lat), lon: R5(d.camp.lon), auth: d.camp.auth, type: 'nightcamp', fee: d.camp.fee, water: d.camp.water, toilets: d.camp.toilets } : null, mid: d.mid ? { name: d.mid.name, type: d.mid.type } : null })) : null },
+      overland: !!r.overland, asph: Math.round(r.asph || 0), days: r.days && r.days.length > 1 ? r.days.map(d => ({ from: d.from, to: d.to, len: Math.round(d.len), off: d.off == null ? null : Math.round(d.off), hrs: +d.hrs.toFixed(2), camp: d.camp ? { name: d.camp.name, lat: R5(d.camp.lat), lon: R5(d.camp.lon), auth: d.camp.auth, type: 'nightcamp', fee: d.camp.fee, water: d.camp.water, toilets: d.camp.toilets } : null, mid: d.mid ? { name: d.mid.name, type: d.mid.type } : null })) : null },
   };
 }
 function unpackRoute(row) {
