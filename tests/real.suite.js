@@ -31,6 +31,7 @@ const CASES = [
 ];
 const IL = (n, la, lo) => S(n, la, lo, 'IL');
 const CASES_IL = [
+  { id: 'il-raanana-agamon-picnic', trueEnd: [32.3729, 34.9357], p: { ...M, country: 'IL', start: IL('רעננה', 32.184, 34.871), end: IL('אגמון חפר', 32.368, 34.888), loop: false, duration_hours: 3, poi_types: ['camp'] } },
   { id: 'il-ramon-4h', p: { ...M, country: 'IL', start: IL('מצפה רמון', 30.61, 34.80), loop: false, duration_hours: 4 } },
   { id: 'il-ramon-loop-hard', p: { ...M, country: 'IL', start: IL('מצפה רמון', 30.61, 34.80), loop: true, duration_hours: 6, difficulty: 'hard' } },
   { id: 'il-ramon-beerot', p: { ...M, country: 'IL', start: IL('מצפה רמון', 30.61, 34.80), end: IL('חניון בארות', 30.588, 34.889), loop: false, poi_types: ['viewpoint'] } },
@@ -86,7 +87,7 @@ const CASES_IL = [
           dayKm: D ? D.map(d => Math.round(d.len / 1000)) : [Math.round(r.len / 1000)], dayOff: D ? D.map(d => Math.round((d.off ?? 0) / 1000)) : [],
           nights, viaMiss, jumps, jumpAt, milKm: +((r.mil || 0) / 1000).toFixed(1), aaKm: +((r.aa || 0) / 1000).toFixed(1), reuseKm: +((r.reuse || 0) / 1000).toFixed(1), again: Math.round(again / tot * 100), startKm: +(startD / 1000).toFixed(1), endKm: +(endD / 1000).toFixed(1),
           warns: [...document.querySelectorAll('.warn')].map(x => x.textContent.slice(0, 110)).filter(t => !/OSM\. מצב השטח|מחוץ לישראל/.test(t)),
-          issues: (r.issues || []).map(t => t.slice(0, 110)), overland: !!r.overland, note: (r.note || '').slice(0, 160),
+          last: r.coords[r.coords.length - 1], stopsText: document.getElementById('stopsBox').textContent.slice(0, 300), issues: (r.issues || []).map(t => t.slice(0, 110)), overland: !!r.overland, note: (r.note || '').slice(0, 160),
         };
       }, c.p);
     } catch (e) { res = { fail: 'timeout/exception: ' + e.message.slice(0, 120) }; }
@@ -95,6 +96,7 @@ const CASES_IL = [
     const P = { ...c.p, ...(process.env.EXTRA ? JSON.parse(process.env.EXTRA) : {}) }, bad = [];
     if (res.fail) bad.push('FAILED: ' + res.fail.slice(0, 140));
     else {
+      if (c.trueEnd) { const [a1, o1] = c.trueEnd, [a2, o2] = res.last, d = Math.hypot((a1 - a2) * 111, (o1 - o2) * 94); if (d > 2) bad.push(`ended ${d.toFixed(1)} km from the real finish`); }
       if (P.days > 1 && res.days !== P.days) bad.push(`days ${res.days}≠${P.days}`);
       if (P.max_km_per_day && Math.max(...res.dayKm) > P.max_km_per_day * 1.25 && !res.warns.concat(res.issues).some(t => /ק"מ ליום|עוברים את/.test(t))) bad.push(`day km up to ${Math.max(...res.dayKm)} > ${P.max_km_per_day}`);
       const want = P.offroad_share ? P.offroad_share * 100 * 0.75 : res.overland ? 15 : 40;

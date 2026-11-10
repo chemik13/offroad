@@ -17,8 +17,10 @@ const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SE
   auth: { persistSession: false },
 });
 
-const LIST_FIELDS = "id,created_at,name,created_by,source,region,tags,notes,driven,stats,offroad_url";
+const LIST_FIELDS = "id,created_at,name,created_by,source,region,tags,notes,driven,stats,offroad_url,trip_id,version,change";
 const EDITABLE = ["name", "tags", "notes", "driven", "region", "offroad_url"];
+const TRIP_WIDE = ["name", "tags", "notes", "driven", "region"]; // the same for every version of a trip
+const CONTENT = ["coords", "waypoints", "stats", "params"]; // the chosen alternative of this version
 
 // Daily caps protect the owner's API key if the group code leaks. Limits live in app_config (cap_*).
 const capCache: Record<string, { v: number; t: number }> = {};
@@ -143,11 +145,21 @@ Deno.serve(async (req) => {
     }
 
     // ---- route library ----
+    // ---- versions of one trip ----
+    const mv = path.match(/^\/routes\/([0-9a-f-]{36})\/versions$/);
+    if (mv && req.method === "GET") {
+      const { data: one, error: e1 } = await db.from("routes").select("trip_id").eq("id", mv[1]).single();
+      if (e1 || !one) return json({ error: "המסלול לא נמצא" }, 404);
+      const { data, error } = await db.from("routes").select("id,version,created_at,change,created_by,stats").eq("trip_id", one.trip_id).order("version", { ascending: false }).limit(200);
+      if (error) throw error;
+      return json({ versions: data });
+    }
+
     const m = path.match(/^\/routes(?:\/([0-9a-f-]{36}))?$/);
     if (m) {
       const id = m[1];
-      if (req.method === "GET" && !id) {
-        const { data, error } = await db.from("routes").select(LIST_FIELDS).order("created_at", { ascending: false }).limit(300);
+      if (req.method === "GET" && !id) { // the library: latest version of every trip
+        const { data, error } = await db.from("routes_latest").select(LIST_FIELDS + ",versions,first_at").order("created_at", { ascending: false }).limit(300);
         if (error) throw error;
         return json({ routes: data });
       }
@@ -166,7 +178,14 @@ Deno.serve(async (req) => {
           coords: b.coords, waypoints: Array.isArray(b.waypoints) ? b.waypoints.slice(0, 500) : [],
           stats: b.stats || {}, region: b.region || null, tags: Array.isArray(b.tags) ? b.tags.slice(0, 20).map(String) : [],
           notes: b.notes ? String(b.notes).slice(0, 4000) : null,
+          change: b.change ? String(b.change).slice(0, 300) : null,
         };
+        // a new version of an existing trip, or a new trip
+        if (b.trip_id && /^[0-9a-f-]{36}$/.test(String(b.trip_id))) {
+          const { data: last } = await db.from("routes").select("version").eq("trip_id", b.trip_id).order("version", { ascending: false }).limit(1).maybeSingle();
+          if (!last) return json({ error: "הטיול לא נמצא" }, 404);
+          Object.assign(row, { trip_id: b.trip_id, version: last.version + 1 });
+        } else { const nid = crypto.randomUUID(); Object.assign(row, { id: nid, trip_id: nid, version: 1 }); }
         const { data, error } = await db.from("routes").insert(row).select(LIST_FIELDS).single();
         if (error) throw error;
         return json({ route: data }, 201);
@@ -175,13 +194,17 @@ Deno.serve(async (req) => {
         const b = await req.json();
         const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
         for (const k of EDITABLE) if (k in b) patch[k] = b[k];
+        if (Array.isArray(b.coords) && b.coords.length >= 2 && b.coords.length <= 50000) for (const k of CONTENT) if (k in b) patch[k] = b[k];
+        const wide: Record<string, unknown> = {}; for (const k of TRIP_WIDE) if (k in b) wide[k] = b[k];
+        if (Object.keys(wide).length) { const { data: one } = await db.from("routes").select("trip_id").eq("id", id).single(); if (one) await db.from("routes").update(wide).eq("trip_id", one.trip_id); }
         if ("offroad_url" in patch && patch.offroad_url !== null && !/^https:\/\/off-road\.io\/track\/\d{6,24}$/.test(String(patch.offroad_url))) return json({ error: "קישור Off-Road לא תקין" }, 400);
         const { data, error } = await db.from("routes").update(patch).eq("id", id).select(LIST_FIELDS).single();
         if (error) throw error;
         return json({ route: data });
       }
-      if (req.method === "DELETE" && id) {
-        const { error } = await db.from("routes").delete().eq("id", id);
+      if (req.method === "DELETE" && id) { // the whole trip, all its versions
+        const { data: one } = await db.from("routes").select("trip_id").eq("id", id).single();
+        const { error } = one ? await db.from("routes").delete().eq("trip_id", one.trip_id) : await db.from("routes").delete().eq("id", id);
         if (error) throw error;
         return json({ ok: true });
       }

@@ -111,6 +111,17 @@ header button{pointer-events:auto;margin-inline-start:auto}
 #tripHead .th{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 #tripHead b{font-family:var(--display);font-size:17px;font-weight:600;line-height:1.3}
 #tripHead small{font-size:13px;color:var(--muted);line-height:1.4}
+.verbtn{flex:none;background:var(--stone);border:1px solid var(--line);border-radius:999px;padding:5px 11px;font:600 13px var(--body);color:var(--ink);cursor:pointer}
+.verbtn::after{content:'';display:inline-block;margin-inline-start:6px;border:4px solid transparent;border-top-color:currentColor;vertical-align:-2px}
+.verlist{display:flex;flex-direction:column;margin-top:8px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel)}
+.verlist[hidden]{display:none}
+.verlist button{display:grid;grid-template-columns:auto 1fr;column-gap:10px;text-align:start;background:none;border:0;border-top:1px solid var(--line);padding:9px 12px;font:14px var(--body);color:var(--ink);cursor:pointer}
+.verlist button:first-child{border-top:0}
+.verlist button[aria-current]{background:var(--stone)}
+.verlist button b{font-weight:600}
+.verlist button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.verlist button small{grid-column:2;color:var(--muted);font-size:12px}
+.verlist .vl-empty{padding:10px 12px;color:var(--muted);font-size:14px}
 .linkbtn{flex:none;background:none;border:1px solid var(--line);border-radius:999px;padding:5px 12px;font:500 13px var(--body);color:var(--accent);cursor:pointer}
 #sheet:not(.has-results) #busyLine{display:none}
 .busyline{flex:none;font-size:13px;color:var(--ink);padding:8px 10px 6px;margin-top:6px;border-radius:8px;background:var(--accent-soft);position:relative;overflow:hidden}
@@ -263,7 +274,7 @@ ul.pois li{margin-bottom:8px}
 .stops h3{margin:0;padding:8px 10px;font-size:13px;font-weight:600;background:var(--stone);display:flex;justify-content:space-between;align-items:center}
 .stop{display:grid;grid-template-columns:22px 1fr auto;gap:2px 8px;align-items:center;padding:7px 10px;border-top:1px solid var(--line)}
 .stop .sn{width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center}
-.stop .sn.st{background:#2e9b4f}.stop .sn.en{background:#1d2320}
+.stop .sn.st{background:#2e9b4f}.stop .sn.en{background:#1d2320} .stop .sn.pk{background:var(--panel);color:var(--accent);border:2px solid var(--accent)}
 .stop .tx{font-size:14px;min-width:0}
 .stop .tx small{display:block;font-size:12px;color:var(--muted)}
 .stop .bt{display:flex;gap:2px}
@@ -449,8 +460,10 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     </div>
     <div id="tripHead" hidden>
       <div class="th"><b id="thTitle"></b><small id="thSub"></small></div>
+      <button class="verbtn" id="verBtn" type="button" hidden aria-label="גרסאות הטיול"></button>
       <button class="linkbtn" id="newTripBtn" type="button">טיול חדש</button>
     </div>
+    <div id="verList" class="verlist" hidden></div>
     <div id="status" role="status"></div>
     <div id="planCard" class="plancard" hidden><div class="pc-sum"></div><ol class="pc-steps"></ol><div class="pc-time"></div></div>
     <div id="understood" class="understood" hidden></div>
@@ -491,7 +504,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
         <button class="ghost" id="drivenBtn">סמן: נסענו בזה</button>
         <button class="danger" id="delBtn">מחיקה</button>
       </div>
-      <div class="confirm" id="delConfirm" style="margin-top:8px" hidden>למחוק את המסלול מהספרייה של כולם?
+      <div class="confirm" id="delConfirm" style="margin-top:8px" hidden>למחוק את הטיול, עם כל הגרסאות שלו, מהספרייה של כולם?
         <button class="danger" id="delYes">כן, למחוק</button><button class="ghost" id="delNo">ביטול</button></div>
     </div>
     <details class="params" id="params">
@@ -558,7 +571,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
   </div>
   <button class="ghost" id="inviteBtn" type="button" style="margin-top:10px">קישור הזמנה לחבר (עם הקוד)</button>
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.55 · 10.11.2026 15:02</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.56 · 10.11.2026 15:55</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -1794,12 +1807,12 @@ function seg(el, opts, val, onPick) {
   el.dataset.v = val;
 }
 function drawPickers() {
-  seg($('diffSeg'), DIFFS, $('pDiff').value || 'medium', k => { $('pDiff').value = k; drawPickers(); rebuildWith(); });
+  seg($('diffSeg'), DIFFS, $('pDiff').value || 'medium', k => { $('pDiff').value = k; drawPickers(); pendingChange = 'קושי: ' + (DIFFS.find(d => d[0] === k)?.[1] || k); rebuildWith(); });
 }
 function rebuildWith() { if (!busy && current?.p) run(false); }
 $('clrBtn').onclick = () => { $('prompt').value = ''; store.set('lastPrompt', ''); growPrompt(); $('prompt').focus(); };
 $('newTripBtn').onclick = () => {
-  $('sheet').classList.remove('has-results', 'min', 'full'); $('results').hidden = true; $('tripHead').hidden = true; $('composer').hidden = true; $('understood').hidden = true;
+  $('sheet').classList.remove('has-results', 'min', 'full'); $('results').hidden = true; $('tripHead').hidden = true; $('verList').hidden = true; $('composer').hidden = true; $('understood').hidden = true;
   status(''); drawPickers(); $('prompt').focus(); $('prompt').select();
 };
 setTimeout(drawPickers, 0);
@@ -1964,8 +1977,8 @@ const TOOL = {
     type: 'object',
     properties: {
       country: { type: 'string', description: 'ISO 3166-1 alpha-2 code of the trip country (IL for Israel, FR, IT, RO…)' },
-      start: { type: 'object', properties: { name: { type: 'string', description: 'Place name: Hebrew as on an Israeli map; abroad, the local/English name' }, lat: { type: 'number' }, lon: { type: 'number' } }, description: 'Start point. If the user did not name one, choose a town or trailhead at the edge of the requested area (never omit it).' },
-      end: { type: 'object', properties: { name: { type: 'string' }, lat: { type: 'number' }, lon: { type: 'number' } }, description: 'Destination for point-to-point routes. Omit for loops.' },
+      start: { type: 'object', properties: { name: { type: 'string', description: 'Place name: Hebrew as on an Israeli map; abroad, the local/English name' }, lat: { type: 'number' }, lon: { type: 'number' } }, required: ['name'], description: 'Start point. If the user did not name one, choose a town or trailhead at the edge of the requested area (never omit it).' },
+      end: { type: 'object', properties: { name: { type: 'string', description: 'The place name exactly as the user wrote it (e.g. אגמון חפר)' }, lat: { type: 'number' }, lon: { type: 'number' } }, required: ['name'], description: 'Destination for point-to-point routes: whenever the user says where to finish (מסיים ב / סיום ב / עד / ל...), set it, even with a duration. Omit only for loops or when no finish place is named.' },
       loop: { type: 'boolean', description: 'True ONLY if the user asks for a loop / circular route / to return to the start. Default false (point-to-point). If no destination is given, leave end empty and the planner picks one.' },
       duration_hours: { type: 'number', description: 'Total trip duration in hours, if stated (single-day trips only)' },
       days: { type: 'integer', description: 'Number of trip days for multi-day trips (2-30; for long journeys = total km / max_km_per_day). סופ"ש / weekend = 2. Omit for a single day.' },
@@ -1999,7 +2012,7 @@ const SYSTEM = () => `Today is ${new Date().toISOString().slice(0, 10)} (${new D
 - Europe: names in the local/English form. Prefer regions and routes where driving unpaved public roads is legal (e.g. known overland/4x4 routes, TET sections), start at a town, and for several days rely on official campsites (nightcamp). Israeli rules (firing zones, Area A) do not apply abroad. Use web_search when you are not sure of a place's location or when the request is themed.
 - Themed requests (a historical event or military operation, a book, a person, a named trail, "in the footsteps of", "בעקבות"): research the theme, then choose the real sites in order as start, via and end. Prefer points reachable by 4x4 (trailheads, memorial sites, viewpoints, ruins) over city centers, and skip sites that are now inside military bases or Area A. Add a short Hebrew note per via and a 2-4 sentence Hebrew story_he. Keep at most 8 vias and keep notes short. The theme's final destination MUST be "end" (with lat/lon), never left out or put only in via.
 - Refinement requests come with the current parameters as JSON: return the full updated parameters, changing only what was asked.
-- Start and end are exactly the places the user named, in that order ("מטירנה לקוטור" = start Tirana, end Kotor; "מסלוניקי" = start Thessaloniki). Never replace a named place with another.
+- Start and end are exactly the places the user named, in that order ("מטירנה לקוטור" = start Tirana, end Kotor; "מסלוניקי" = start Thessaloniki). Never replace a named place with another. A finish place given together with a duration ("3 שעות מרעננה ומסיימים באגמון חפר") is still end, with its name; never write in summary_he that there is no destination when one was named. A wish like "פיקניק באמצע" goes in poi_types (camp), not in end.
 - Always set start. If the user did not say where to start, choose it yourself: a town or trailhead at the edge of the area the trip is about (for themed trips the theme's natural starting point), with lat/lon. Only if they say "from my location", set from_my_location instead.
 - "יום כולל לילה" / a day and a night = days 2.
 - The group always drives a lifted Land Cruiser with diff lockers. Defaults: difficulty medium, point-to-point (loop=false). For several days set days, and include nightcamp in poi_types.`;
@@ -2059,8 +2072,17 @@ async function geocode(place) {
   if (geoCache[name]) return geoCache[name];
   const abroad = (place.country && place.country !== 'IL') || (place.lat && place.lon && !inIsrael(place.lat, place.lon));
   const local = abroad ? null : lookupPlace(name);
-  if (place.lat && place.lon && place.researched) { // coordinates Claude looked up win, unless our list agrees with them
-    return local && hav(local[0], local[1], place.lat, place.lon) < 15000 ? local : [place.lat, place.lon];
+  if (place.lat && place.lon && place.researched) { // coordinates Claude looked up win, unless our list or the map has that exact place nearby
+    if (local && hav(local[0], local[1], place.lat, place.lon) < 15000) return local;
+    if (!abroad && name) { // Claude's guess for a small Israeli site can be a few km off: the map's point of that name is exact
+      try {
+        const j = await (await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=5&accept-language=he&viewbox=34.2,33.45,35.95,29.4&bounded=1&q=' + encodeURIComponent(name))).json();
+        const norm = t => String(t || '').replace(/[\s"'״׳-]/g, '');
+        const hit = j.filter(x => norm(x.name) === norm(name) && !/^(highway|waterway|building|boundary|landuse|railway|office|shop)$/.test(x.class) && hav(+x.lat, +x.lon, place.lat, place.lon) < 15000)[0]; // a place, not a street of the same name
+        if (hit) return (geoCache[name] = [+hit.lat, +hit.lon]);
+      } catch {}
+    }
+    return [place.lat, place.lon];
   }
   if (local) return local;
   let ll = null;
@@ -2392,7 +2414,7 @@ const talk = (() => {
     for (const pl of [np.start, np.end, ...(np.via || [])]) if (pl && pl.lat && pl.lon) pl.researched = true;
     if (current?.p) { for (const k of ['start', 'end']) if (np[k] && current.p[k] && np[k].name === current.p[k].name && current.p[k].latlng) np[k].latlng = current.p[k].latlng; if (!np.date && current.p.date) np.date = current.p.date; }
     np.vehicle = myVehicle();
-    await run(true, np);
+    await run(true, np, ctx && current?.trip ? userText.slice(0, 200) : null);
     const summary = lastRunErr ? 'לא הצלחתי לבנות מסלול: ' + lastRunErr : routeSummary();
     pendingTool = { type: 'tool_result', tool_use_id: tu.id, content: lastRunErr ? 'נכשל: ' + lastRunErr : 'נבנה: ' + summary };
     const spoken = summary + (lastRunErr ? ' מה לשנות?' : ' רוצים לשנות משהו?');
@@ -3018,7 +3040,7 @@ function reportForm(ll, popup) {
     b.onclick = async () => {
       if (!hasGroup()) { d.querySelector('.repmsg').textContent = 'דיווחים נשמרים בספרייה המשותפת: הכניסו קוד קבוצה ב-⚙.'; return; }
       try {
-        const j = await api('/reports', { method: 'POST', body: JSON.stringify({ lat: ll[0], lon: ll[1], kind: k, note: d.querySelector('.repnote').value.trim() || null, created_by: store.get('nick') || null, route_id: current?.saved?.id || null }) });
+        const j = await api('/reports', { method: 'POST', body: JSON.stringify({ lat: ll[0], lon: ll[1], kind: k, note: d.querySelector('.repnote').value.trim() || null, created_by: store.get('nick') || null, route_id: tripRow()?.id || null }) });
         reports.push(j.report);
         const G = current?.G || gcache?.G; let n = 0;
         if (G) { n = applyReports(G, reports.filter(r => r.kind !== 'note')); }
@@ -3033,7 +3055,7 @@ function reportForm(ll, popup) {
 }
 
 // ---------- background prefetch ----------
-let busy = false, bgNote = '';
+let busy = false, bgNote = '', pendingChange = null;
 function bgStatus(t) { bgNote = t; if (!busy && $('results').hidden) status(t); }
 async function prefetch(keys, label) {
   if (busy || !keys.length || keys.length > 16) return;
@@ -3069,7 +3091,10 @@ map.on('moveend', () => {
 // ---------- run ----------
 let current = null; // {p, plan, G}
 let lastRunErr = null;
-async function run(fromPrompt, preset = null) {
+async function run(fromPrompt, preset = null, changeText = null) {
+  // every plan is saved; a change of the trip on screen becomes its next version
+  const baseTrip = (!fromPrompt || changeText) ? (current?.trip || null) : null;
+  const change = !baseTrip ? null : changeText || pendingChange || 'שינוי בהגדרות'; pendingChange = null;
   const btns = [$('goBtn'), $('rebuildBtn')]; btns.forEach(b => b.disabled = true); busy = true; bgNote = '';
   const changing = !$('results').hidden && $('sheet').classList.contains('has-results');
   if (changing) $('results').classList.add('working'); // the old trip stays in view while the new one is planned
@@ -3129,8 +3154,8 @@ async function run(fromPrompt, preset = null) {
     const abroadTrip = !inIsrael(sLL[0], sLL[1]);
     if (abroadTrip && p.avoid_asphalt == null && fromPrompt) { p.avoid_asphalt = true; $('pAsph').checked = true; } // abroad: dirt first, roads only to connect
     let eLL = null;
-    if (!p.loop && p.end) { eLL = await geocode(p.end); if (!eLL) throw new Error(`לא מצאתי את היעד "${p.end.name}".`); setEnd(eLL); }
-    else if (endMarker) { endMarker.remove(); endMarker = null; }
+    if (!p.loop && p.end) { eLL = await geocode(p.end); if (!eLL) throw new Error(`לא מצאתי את היעד "${p.end.name}".`); setEnd(eLL); p._endLL = eLL; }
+    else { pickedEnd = null; if (endMarker) { endMarker.remove(); endMarker = null; } }
     const viaLL = [];
     const lost = [];
     for (const v of p.via || []) { const ll = await geocode(v); if (!ll) { lost.push(v.name); continue; } viaLL.push({ ll, name: v.name, note: v.note, ferry: !!v.ferry_to_next, ferryHours: v.ferry_hours || null }); }
@@ -3157,7 +3182,7 @@ async function run(fromPrompt, preset = null) {
       const r = await planOverland(p, sLL, eLL, viaLL);
       lastRunErr = null;
       current = { p, res: { results: [r], L: r.len, note: r.note }, G: null, sel: 0, saved: null, prompt: fromPrompt ? text : (current?.prompt || '') };
-      status(''); render(0);
+      status(''); render(0); autoSave(baseTrip, change);
     };
     const allIL = keys.every(k => { const b = tileBBox(k); return inIsrael((b[0] + b[2]) / 2, (b[1] + b[3]) / 2); }) || inIsrael(sLL[0], sLL[1]) && (!eLL || inIsrael(eLL[0], eLL[1]));
     if (p._forceOverland || (span > 300000 && !allIL) || (keys.length > 36 && !allIL && !keys.every(k => { const b = tileBBox(k); return inIsrael((b[0] + b[2]) / 2, (b[1] + b[3]) / 2); }))) return await overland();
@@ -3205,7 +3230,7 @@ async function run(fromPrompt, preset = null) {
     }
     if (!multi && !out.err && p.duration_hours && !p.distance_km && out.res.results.length) {
       const r0 = out.res.results[0], stopH = r0.pois.filter(x => x.type !== 'nightcamp').length * 0.25, h0 = r0.hrs + stopH;
-      if (h0 < p.duration_hours * 0.7 || h0 > p.duration_hours * 1.35) {
+      if (h0 < p.duration_hours * 0.8 || h0 > p.duration_hours * 1.3) {
         status(h0 < p.duration_hours ? 'המסלול יצא קצר מהזמן שביקשתם, מאריך…' : 'המסלול יצא ארוך מהזמן שביקשתם, מקצר…');
         const base = r0.len / 1000 * p.duration_hours / Math.max(0.3, h0);
         let best = null, bd = Math.abs(h0 - p.duration_hours);
@@ -3228,7 +3253,7 @@ async function run(fromPrompt, preset = null) {
     lastRunErr = null;
     current = { p, res, G, sel: 0, saved: null, prompt: fromPrompt ? text : (current?.prompt || '') };
     status('');
-    render(0);
+    render(0); autoSave(baseTrip, change);
   } catch (err) {
     lastRunErr = err.message || String(err);
     status(err.message || String(err), true);
@@ -3645,16 +3670,29 @@ function renderStops(p, r) {
     el.append(d);
   };
   row('st', '▶', stopName(p.start), p._startNote || 'התחלה', []);
-  vias.forEach((v, i) => row('', String(i + 1), stopName(v), v.note || '', [
-    ['↑', 'להקדים', () => moveStop(i, -1)], ['↓', 'לאחר', () => moveStop(i, 1)], ['✕', 'להסיר', () => removeStop(i)],
-  ].filter(([t]) => !(t === '↑' && i === 0) && !(t === '↓' && i === vias.length - 1))));
+  // the stops in driving order: yours (editable) and the ones the planner picked (picnic, viewpoint, spring…), with where along the way
+  const cum = [0]; for (let k = 1; k < r.coords.length; k++) cum.push(cum[k - 1] + hav(r.coords[k - 1][0], r.coords[k - 1][1], r.coords[k][0], r.coords[k][1]));
+  const along = (la, lo) => { let bi = 0, bd = Infinity; for (let k = 0; k < r.coords.length; k += 2) { const d = hav(la, lo, r.coords[k][0], r.coords[k][1]); if (d < bd) { bd = d; bi = k; } } return cum[bi]; };
+  const when = m => { const h = r.hrs * m / Math.max(1, r.len); return `ק"מ ${Math.round(m / 1000)} · בערך ${h < 1 ? Math.max(5, Math.round(h * 12) * 5) + ' דק\'' : (Math.round(h * 4) / 4).toString().replace('.25', ':15').replace('.5', ':30').replace('.75', ':45') + ' שע\''} מהיציאה`; };
+  const multiDay = r.days && r.days.length > 1;
+  const items = vias.map((v, i) => { const ll = v.latlng || (v.lat ? [v.lat, v.lon] : null); const pv = r.pois.find(x => x.type === 'via' && x.name === v.name); return { v, i, m: pv ? along(pv.lat, pv.lon) : ll ? along(ll[0], ll[1]) : null }; });
+  if (!multiDay) for (const x of r.pois) if (x.type !== 'via' && x.type !== 'nightcamp' && !POI_TYPES[x.type]?.safety) items.push({ x, m: along(x.lat, x.lon) });
+  if (items.every(t => t.m != null)) items.sort((a, b) => a.m - b.m);
+  let n = 0;
+  for (const t of items) {
+    n++;
+    if (t.v) { const { v, i } = t; row('', String(n), stopName(v), [v.note, t.m != null && !multiDay ? when(t.m) : null].filter(Boolean).join(' · '), [
+      ['↑', 'להקדים', () => moveStop(i, -1)], ['↓', 'לאחר', () => moveStop(i, 1)], ['✕', 'להסיר', () => removeStop(i)],
+    ].filter(([tt]) => !(tt === '↑' && i === 0) && !(tt === '↓' && i === vias.length - 1))); }
+    else { const x = t.x; row('pk', String(n), x.name, [x.sunset ? 'תצפית לשקיעה' : (x.type === 'camp' ? 'עצירת פיקניק' : POI_TYPES[x.type]?.he), when(t.m)].filter(Boolean).join(' · '), [['⌖', 'להראות במפה', () => { map.setView([x.lat, x.lon], 15); if (innerWidth < 900) $('sheet').classList.add('min'); }]]); }
+  }
   row('en', '■', p.loop ? stopName(p.start) + ' (לופ)' : p.end ? stopName(p.end) : 'נבחר אוטומטית', p.loop ? 'חזרה להתחלה' : p.end ? 'סיום' : 'אין יעד: המערכת בחרה סיום', []);
   box.append(el);
   $('addStopBtn').onclick = () => status('לחצו על המפה במקום הרצוי ובחרו "תחנה בדרך".');
 }
 function syncViaField() { $('pVia').value = (current.p.via || []).map(v => v.name).join(', '); }
-function moveStop(i, d) { const v = current.p.via; [v[i], v[i + d]] = [v[i + d], v[i]]; syncViaField(); run(false); }
-function removeStop(i) { current.p.via.splice(i, 1); syncViaField(); run(false); }
+function moveStop(i, d) { const v = current.p.via; [v[i], v[i + d]] = [v[i + d], v[i]]; syncViaField(); pendingChange = 'סדר התחנות שונה'; run(false); }
+function removeStop(i) { pendingChange = 'הוסרה תחנה: ' + (current.p.via[i]?.name || ''); current.p.via.splice(i, 1); syncViaField(); run(false); }
 function addStopAt(ll) {
   if (!current) { status('קודם בנו מסלול, ואז אפשר להוסיף לו תחנות.'); return; }
   const n = (current.p.via || []).filter(v => v.name.startsWith('📍')).length + 1;
@@ -3664,7 +3702,7 @@ function addStopAt(ll) {
   let at = (current.p.via || []).length;
   if (pts.every(Boolean) && pts.length > 1) { let best = Infinity; for (let i = 0; i + 1 < pts.length; i++) { const c = hav(pts[i][0], pts[i][1], ll[0], ll[1]) + hav(ll[0], ll[1], pts[i + 1][0], pts[i + 1][1]) - hav(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1]); if (c < best) { best = c; at = i; } } }
   (current.p.via ||= []).splice(Math.min(at, current.p.via.length), 0, v);
-  syncViaField(); run(false);
+  syncViaField(); pendingChange = 'נוספה תחנה: ' + (v.name || ''); run(false);
 }
 $('refineBtn').onclick = async () => {
   const ask = $('refineIn').value.trim(); if (!ask || !current) return;
@@ -3678,7 +3716,7 @@ $('refineBtn').onclick = async () => {
     if (!np.date && current.p.date) np.date = current.p.date;
     current.p = { ...np, story_he: np.story_he || current.p.story_he };
     fillForm(current.p); $('refineIn').value = '';
-    await run(false);
+    pendingChange = ask.slice(0, 200); await run(false);
   } catch (e) { status('העדכון נכשל: ' + (e.detail || e.message), true); }
   finally { $('refineBtn').disabled = false; }
 };
@@ -3715,10 +3753,10 @@ function render(i, day = null) {
   res.results.forEach((x, k) => {
     const b = document.createElement('button');
     b.setAttribute('aria-pressed', k === i); b.innerHTML = `<span>חלופה ${k + 1}</span><small>${(x.len / 1000).toFixed(0)} ק"מ</small>`;
-    b.onclick = () => render(k); $('tabs').append(b);
+    b.onclick = () => { render(k); syncAlt(); }; $('tabs').append(b);
   });
   routeLayer.clearLayers(); markLayer.clearLayers();
-  res.results.forEach((x, k) => { if (k !== i) L.polyline(x.coords, { color: '#646b66', weight: 3, opacity: .5, dashArray: '4 6' }).addTo(routeLayer).on('click', () => render(k)); });
+  res.results.forEach((x, k) => { if (k !== i) L.polyline(x.coords, { color: '#646b66', weight: 3, opacity: .5, dashArray: '4 6' }).addTo(routeLayer).on('click', () => { render(k); syncAlt(); }); });
   L.polyline(r.coords, { color: '#fff', weight: 9, opacity: dv ? .6 : 1 }).addTo(routeLayer);
   if (D && !dv) { // whole trip: one colour per day, numbered dot where each day starts
     D.forEach((d, k) => {
@@ -3802,6 +3840,7 @@ function render(i, day = null) {
   if (r.unrated) $('legend').innerHTML = `<span><i style="--c:${DCOL('x')}"></i>מסלול מיובא: אין דירוג קושי לקטעים</span>`;
   if (r.overland) $('legend').hidden = true; else $('legend').hidden = false; // long trips: the stats line already says dirt vs road
   const w = [];
+  if (!current.saved && !p.loop && p.end?.name && p._endLL) { const c = r.coords[r.coords.length - 1], d = hav(c[0], c[1], p._endLL[0], p._endLL[1]); if (d > 1500) w.push(`השביל הכי קרוב ל${p.end.name.replace(/^📍\s*/, '')} נגמר ${(d / 1000).toFixed(1)} ק"מ ממנו. משם ממשיכים בכביש.`); }
   if (!current.saved && p._lost?.length) w.push(`לא מצאתי במפה את ${p._lost.map(n => '"' + n + '"').join(', ')}, אז דילגתי. כתבו בתיבת השינוי מקום קרוב אחר אם חשוב לכם.`);
   if (!current.saved && current.res.note && /^⚠/.test(current.res.note)) w.push(current.res.note);
   for (const t of r.issues || []) if (/^⚠/.test(t)) w.push(t); // important planning notes are not hidden in the list
@@ -3833,7 +3872,7 @@ function render(i, day = null) {
     const cur = p.military_mode || 'auto';
     for (const [v, t] of [['auto', p.date ? 'לפי התאריך' : 'לפי התאריך (לא נבחר)'], ['allow', 'לכלול'], ['avoid', 'להימנע']]) {
       const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.setAttribute('aria-pressed', cur === v);
-      b.onclick = () => { if (cur === v) return; $('pMil').value = v; milNote(); run(false); };
+      b.onclick = () => { if (cur === v) return; $('pMil').value = v; milNote(); pendingChange = 'שטחי אש'; run(false); };
       row.append(b);
     }
     const c = document.createElement('button'); c.type = 'button'; c.className = 'cal'; c.textContent = 'לוח'; c.onclick = openCalendar; row.append(c);
@@ -3874,7 +3913,7 @@ function render(i, day = null) {
         for (const a of alts) {
           const b = document.createElement('button'); b.type = 'button'; b.className = 'alt';
           b.innerHTML = '<b></b><small></small>'; setName(b.querySelector('b'), a.name, a); b.querySelector('small').textContent = `${a.km} ק"מ מסוף היום · ${a.wild ? 'בטבע' : a.lake ? 'קמפינג על שפת אגם' : 'קמפינג'}`;
-          b.onclick = () => { const pins = { ...(current.p.nightPins || {}) }; const { alts: _a, day: _d, km: _k, ...keep } = a; pins[k] = keep; current.p.nightPins = pins; run(false); };
+          b.onclick = () => { const pins = { ...(current.p.nightPins || {}) }; const { alts: _a, day: _d, km: _k, ...keep } = a; pins[k] = keep; current.p.nightPins = pins; pendingChange = `לילה ${k + 1}: ${keep.name || ''}`; run(false); };
           sw.append(b);
         }
         night.append(sw);
@@ -3900,17 +3939,11 @@ function render(i, day = null) {
     $('poiList').append(ul);
   }
   // save / saved state
-  const sv = current.saved;
-  $('routeName').value = sv ? sv.name : routeTitle(r, p);
-  $('saveRow').hidden = !!sv || !hasGroup();
-  $('savedActions').hidden = !sv; $('delConfirm').hidden = true; $('orHint').hidden = true;
+  const sv = current.saved || current.trip;
+  drawTripMeta();
+  $('delConfirm').hidden = true; $('orHint').hidden = true;
   $('orLinkRow').hidden = !sv; $('orLink').value = sv?.offroad_url || '';
   $('offroadBtn').lastChild.textContent = sv?.offroad_url ? 'פתיחה ב-Off-Road (ישיר)' : 'פתיחה ב-Off-Road';
-  $('savedTag').hidden = !sv;
-  if (sv) {
-    $('savedTag').textContent = `${sv.source === 'imported' ? 'יובא' : 'נשמר'} ע״י ${sv.created_by || 'מישהו'} · ${new Date(sv.created_at).toLocaleDateString('he-IL')}${sv.driven ? ' · נסענו בזה ✓' : ''}`;
-    $('drivenBtn').textContent = sv.driven ? 'בטל סימון "נסענו בזה"' : 'סמן: נסענו בזה';
-  }
   $('results').hidden = false;
   $('sheet').classList.remove('min', 'full'); $('sheet').classList.add('has-results');
 }
@@ -3996,36 +4029,110 @@ function pathLen(c) { let s = 0; for (let i = 1; i < c.length; i++) s += hav(c[i
 function showSaved(row) {
   const r = unpackRoute(row);
   const p = row.params || { start: { name: (r.pois[0]?.name) || null }, loop: false };
-  current = { p, res: { results: [r], L: null }, G: null, sel: 0, saved: row, prompt: row.prompt || '' };
+  current = { p, res: { results: [r], L: null }, G: null, sel: 0, saved: row, trip: row.trip_id ? row : null, prompt: row.prompt || '' };
+  $('verList').hidden = true;
   if (row.prompt) $('prompt').value = row.prompt;
   $('understood').hidden = true; status('');
   render(0);
 }
 
+// ---------- auto-save with versions ----------
+// every plan is saved to the group library right away; a change of the trip on screen is saved as its next version
+const tripRow = () => current?.saved || current?.trip || null;
+async function tripReady() { // the saved row of what is on screen, waiting for a save in flight, or saving now
+  if (!current) return null;
+  if (!tripRow() && current.tripSaving) await current.tripSaving.catch(() => {});
+  if (!tripRow()) await $('saveBtn').onclick();
+  return tripRow();
+}
+function tripBody(cur, r) {
+  return { created_by: store.get('nick') || null, source: 'planned', prompt: cur.prompt, params: cur.p, region: cur.p.start?.name || null, ...packRoute(r) };
+}
+function autoSave(base, change) {
+  if (!hasGroup() || !current || current.saved) return;
+  const cur = current, r = cur.res.results[cur.sel];
+  const body = { ...tripBody(cur, r), name: base?.name || routeTitle(r, cur.p), ...(base ? { trip_id: base.trip_id, change } : {}) };
+  cur.tripSaving = api('/routes', { method: 'POST', body: JSON.stringify(body) })
+    .then(j => { cur.trip = { ...j.route }; cur.tripSel = cur.sel; libCache = null; if (current === cur) { drawTripMeta(); if (cur.sel !== cur.tripSel) syncAlt(); } })
+    .catch(e => { cur.tripErr = e.message; if (current === cur) drawTripMeta(); });
+}
+let altTimer = null;
+function syncAlt() { // the version keeps the alternative you picked
+  clearTimeout(altTimer);
+  altTimer = setTimeout(async () => {
+    const cur = current; if (!cur || cur.saved || !cur.trip || cur.tripSel === cur.sel) return;
+    const sel = cur.sel, r = cur.res.results[sel], b = tripBody(cur, r);
+    try { const j = await api('/routes/' + cur.trip.id, { method: 'PATCH', body: JSON.stringify({ coords: b.coords, waypoints: b.waypoints, stats: b.stats, params: b.params }) }); Object.assign(cur.trip, j.route); cur.tripSel = sel; libCache = null; } catch {}
+  }, 600);
+}
+function drawTripMeta() {
+  if (!current) return;
+  const sv = tripRow(), r = current.res.results[current.sel];
+  if (document.activeElement !== $('routeName')) $('routeName').value = sv ? sv.name : routeTitle(r, current.p);
+  $('saveRow').hidden = !hasGroup();
+  $('saveBtn').textContent = sv ? 'שינוי שם' : 'שמירה';
+  $('savedActions').hidden = !sv; $('orLinkRow').hidden = !sv; $('orLink').value = sv?.offroad_url || '';
+  $('offroadBtn').lastChild.textContent = sv?.offroad_url ? 'פתיחה ב-Off-Road (ישיר)' : 'פתיחה ב-Off-Road';
+  const v = sv?.version || 0;
+  $('verBtn').hidden = !v; $('verBtn').textContent = v ? `גרסה ${v}` : '';
+  $('savedTag').hidden = !sv && !current.tripErr;
+  if (sv) {
+    const when = new Date(sv.created_at).toLocaleDateString('he-IL');
+    $('savedTag').textContent = current.saved
+      ? `${sv.source === 'imported' ? 'יובא' : 'נשמר'} ע״י ${sv.created_by || 'מישהו'} · ${when}${v > 1 && sv.change ? ` · שינוי: ${sv.change}` : ''}${sv.driven ? ' · נסענו בזה ✓' : ''}`
+      : `נשמר אוטומטית בספרייה${v > 1 ? ` כגרסה ${v} של הטיול` : ''}${sv.driven ? ' · נסענו בזה ✓' : ''}`;
+    $('drivenBtn').textContent = sv.driven ? 'בטל סימון "נסענו בזה"' : 'סמן: נסענו בזה';
+  } else if (current.tripErr) $('savedTag').textContent = 'השמירה האוטומטית נכשלה. לחצו "שמירה".';
+}
+// the versions of this trip: newest first, tap to open one; a change made from an old version becomes the newest
+$('verBtn').onclick = async () => {
+  const box = $('verList');
+  if (!box.hidden) { box.hidden = true; return; }
+  const sv = tripRow(); if (!sv) return;
+  box.hidden = false; box.innerHTML = '<div class="vl-empty">טוען גרסאות…</div>';
+  try {
+    const j = await api('/routes/' + sv.id + '/versions'); box.innerHTML = '';
+    for (const v of j.versions || []) {
+      const b = document.createElement('button'); b.type = 'button'; if (v.id === sv.id) b.setAttribute('aria-current', 'true');
+      b.innerHTML = '<b></b><span></span><small></small>';
+      b.querySelector('b').textContent = `גרסה ${v.version}`;
+      b.querySelector('span').textContent = v.version === 1 ? 'התכנון הראשון' : (v.change || 'שינוי');
+      b.querySelector('small').textContent = [v.stats?.len ? Math.round(v.stats.len / 1000) + ' ק"מ' : null, v.stats?.days?.length ? v.stats.days.length + ' ימים' : null, v.created_by, new Date(v.created_at).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })].filter(Boolean).join(' · ');
+      b.onclick = async () => { if (v.id === sv.id) { box.hidden = true; return; } try { const k = await api('/routes/' + v.id); box.hidden = true; showSaved(k.route); } catch { status('לא הצלחתי לפתוח את הגרסה.', true); } };
+      box.append(b);
+    }
+  } catch { box.innerHTML = '<div class="vl-empty">לא הצלחתי לטעון את הגרסאות.</div>'; }
+};
 $('saveBtn').onclick = async () => {
   const r = current.res.results[current.sel];
   const name = $('routeName').value.trim() || routeTitle(r, current.p);
   $('saveBtn').disabled = true;
   try {
-    const body = current.importRow ? { ...current.importRow, name } : { name, created_by: store.get('nick') || null, source: 'planned', prompt: current.prompt, params: current.p, region: current.p.start?.name || null, ...packRoute(r) };
+    const sv = tripRow();
+    if (sv) { // already saved: the name is the trip's name, on every version
+      const j = await api('/routes/' + sv.id, { method: 'PATCH', body: JSON.stringify({ name }) }); Object.assign(sv, j.route);
+      libCache = null; drawTripMeta(); status('השם עודכן.'); return;
+    }
+    const body = current.importRow ? { ...current.importRow, name } : { ...tripBody(current, r), name };
     const j = await api('/routes', { method: 'POST', body: JSON.stringify(body) });
-    current.saved = { ...j.route, coords: body.coords, waypoints: body.waypoints, params: body.params, prompt: body.prompt };
+    if (current.importRow) current.saved = { ...j.route, coords: body.coords, waypoints: body.waypoints, params: body.params, prompt: body.prompt };
+    else { current.trip = { ...j.route }; current.tripSel = current.sel; current.tripErr = null; }
     render(current.sel);
     libCache = null; current.importRow = null;
     status('נשמר בספרייה המשותפת.');
   } catch (e) { status('השמירה נכשלה: ' + e.message, true); }
   finally { $('saveBtn').disabled = false; }
 };
-// share: a link that opens this trip on any phone of the group (saves first if needed)
+// share: a link that opens this version of the trip on any phone of the group
 $('shareBtn').onclick = async () => {
   if (!hasGroup()) { status('שיתוף צריך קוד קבוצה (⚙).', true); return; }
-  if (!current.saved) { await $('saveBtn').onclick(); if (!current.saved) return; }
-  const url = location.origin + location.pathname + '#r=' + current.saved.id;
-  try { if (navigator.share) await navigator.share({ title: current.saved.name, text: 'הטיול שלנו', url }); else { await navigator.clipboard.writeText(url); status('הקישור הועתק. שלחו אותו לחבורה.'); } }
+  const sv = await tripReady(); if (!sv) return;
+  const url = location.origin + location.pathname + '#r=' + sv.id;
+  try { if (navigator.share) await navigator.share({ title: sv.name, text: 'הטיול שלנו', url }); else { await navigator.clipboard.writeText(url); status('הקישור הועתק. שלחו אותו לחבורה.'); } }
   catch { prompt('הקישור לטיול:', url); }
 };
-// a shared link opens the trip
 // the group's latest trips on the start screen: one tap to open
+const verCount = r => r.versions > 1 ? `${r.versions} גרסאות` : null;
 async function loadRecent() {
   if (!hasGroup()) return;
   try {
@@ -4033,7 +4140,7 @@ async function loadRecent() {
     const list = document.querySelector('#recent .rlist'); list.innerHTML = '';
     for (const r of rows) {
       const b = document.createElement('button'); b.type = 'button'; b.innerHTML = '<b></b><small></small>';
-      b.querySelector('b').textContent = r.name; b.querySelector('small').textContent = [r.stats?.len ? Math.round(r.stats.len / 1000) + ' ק"מ' : null, r.created_by, new Date(r.created_at).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' })].filter(Boolean).join(' · ');
+      b.querySelector('b').textContent = r.name; b.querySelector('small').textContent = [r.stats?.len ? Math.round(r.stats.len / 1000) + ' ק"מ' : null, verCount(r), r.created_by, new Date(r.created_at).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' })].filter(Boolean).join(' · ');
       b.onclick = async () => { try { const k = await api('/routes/' + r.id); showSaved(k.route); } catch { status('לא הצלחתי לפתוח את הטיול.', true); } };
       list.append(b);
     }
@@ -4045,14 +4152,15 @@ async function checkSharedLink() { const m = location.hash.match(/#r=([0-9a-f-]{
   try { status('פותח את הטיול ששותף…'); const j = await api('/routes/' + m[1]); showSaved(j.route); status(''); } catch { status('לא הצלחתי לפתוח את הטיול ששותף. בדקו את קוד הקבוצה ב-⚙.', true); } }
 checkSharedLink();
 $('drivenBtn').onclick = async () => {
-  const sv = current.saved; if (!sv) return;
-  try { const j = await api('/routes/' + sv.id, { method: 'PATCH', body: JSON.stringify({ driven: !sv.driven }) }); Object.assign(sv, j.route); render(0); libCache = null; }
+  const sv = tripRow(); if (!sv) return;
+  try { const j = await api('/routes/' + sv.id, { method: 'PATCH', body: JSON.stringify({ driven: !sv.driven }) }); Object.assign(sv, j.route); drawTripMeta(); libCache = null; }
   catch (e) { status(e.message, true); }
 };
 $('delBtn').onclick = () => { $('delConfirm').hidden = false; };
 $('delNo').onclick = () => { $('delConfirm').hidden = true; };
 $('delYes').onclick = async () => {
-  try { await api('/routes/' + current.saved.id, { method: 'DELETE' }); libCache = null; current = null; routeLayer.clearLayers(); markLayer.clearLayers(); $('results').hidden = true; status('המסלול נמחק.'); }
+  const sv = tripRow(); if (!sv) return;
+  try { await api('/routes/' + sv.id, { method: 'DELETE' }); libCache = null; current = null; routeLayer.clearLayers(); markLayer.clearLayers(); $('results').hidden = true; $('tripHead').hidden = true; $('verList').hidden = true; status('הטיול נמחק, עם כל הגרסאות שלו.'); }
   catch (e) { status(e.message, true); }
 };
 
@@ -4071,14 +4179,14 @@ function drawLib() {
   const q = $('libSearch').value.trim();
   const list = (libCache || []).filter(r => !q || [r.name, r.region, r.created_by, ...(r.tags || [])].join(' ').includes(q));
   $('libList').innerHTML = '';
-  if (!list.length) { $('libList').innerHTML = `<div class="empty">${libCache?.length ? 'אין התאמות לחיפוש.' : 'הספרייה ריקה. בנו מסלול ולחצו "שמירה", או ייבאו קובץ GPX.'}</div>`; return; }
+  if (!list.length) { $('libList').innerHTML = `<div class="empty">${libCache?.length ? 'אין התאמות לחיפוש.' : 'הספרייה ריקה. כל מסלול שתבנו נשמר כאן לבד, או ייבאו קובץ GPX.'}</div>`; return; }
   for (const r of list) {
     const st = r.stats || {};
     const b = document.createElement('button'); b.className = 'litem';
     b.innerHTML = `<span class="dchip"></span><span class="lt"><span class="ln"></span><span class="lm"></span></span>`;
     b.querySelector('.dchip').style.setProperty('--c', DCOL(st.unrated || st.maxD == null ? 'x' : st.maxD));
     b.querySelector('.ln').textContent = r.name;
-    b.querySelector('.lm').textContent = [st.len ? (st.len / 1000).toFixed(0) + ' ק"מ' : null, r.source === 'imported' ? 'מיובא' : null, r.created_by, new Date(r.created_at).toLocaleDateString('he-IL'), r.driven ? 'נסענו ✓' : null].filter(Boolean).join(' · ');
+    b.querySelector('.lm').textContent = [st.len ? (st.len / 1000).toFixed(0) + ' ק"מ' : null, r.source === 'imported' ? 'מיובא' : null, verCount(r), r.created_by, new Date(r.created_at).toLocaleDateString('he-IL'), r.driven ? 'נסענו ✓' : null].filter(Boolean).join(' · ');
     b.onclick = async () => {
       $('libStatus').textContent = 'טוען מסלול…';
       try { const j = await api('/routes/' + r.id); $('library').close(); $('libStatus').textContent = ''; showSaved(j.route); }
@@ -4171,7 +4279,7 @@ const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platfor
 // Off-Road has no public deep link, so we hand the GPX to it through the phone's share sheet.
 $('offroadBtn').onclick = async () => {
   // saved route that already lives in Off-Road: open it directly (universal link opens the app)
-  if (current?.saved?.offroad_url) { location.href = current.saved.offroad_url; return; }
+  if (tripRow()?.offroad_url) { location.href = tripRow().offroad_url; return; }
   const { file, title } = gpxFile();
   const canShareFile = navigator.canShare && (() => { try { return navigator.canShare({ files: [file] }); } catch { return false; } })();
   if (canShareFile) {
@@ -4193,7 +4301,8 @@ $('offroadBtn').onclick = async () => {
 $('orLinkSave').onclick = async () => {
   const v = $('orLink').value.trim(); const m = v.match(/https:\/\/off-road\.io\/track\/\d{6,24}/);
   if (v && !m) { status('זה לא קישור של Off-Road. הוא נראה כך: https://off-road.io/track/…', true); return; }
-  try { const j = await api('/routes/' + current.saved.id, { method: 'PATCH', body: JSON.stringify({ offroad_url: m ? m[0] : null }) }); Object.assign(current.saved, j.route); libCache = null; render(0); status(m ? 'נשמר. מעכשיו "פתיחה ב-Off-Road" פותח את המסלול ישר באפליקציה.' : 'הקישור הוסר.'); }
+  const sv = await tripReady(); if (!sv) return;
+  try { const j = await api('/routes/' + sv.id, { method: 'PATCH', body: JSON.stringify({ offroad_url: m ? m[0] : null }) }); Object.assign(sv, j.route); libCache = null; render(current.sel); status(m ? 'נשמר. מעכשיו "פתיחה ב-Off-Road" פותח את המסלול ישר באפליקציה.' : 'הקישור הוסר.'); }
   catch (e) { status(e.message, true); }
 };
 $('gpxBtn').onclick = () => { const { file } = gpxFile(); downloadFile(file); status('קובץ ה-GPX ירד.'); };
