@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
       const pts = url.searchParams.get("path") || "";
       if (!/^-?\d{1,3}\.\d{1,6},-?\d{1,2}\.\d{1,6}(;-?\d{1,3}\.\d{1,6},-?\d{1,2}\.\d{1,6}){1,99}$/.test(pts)) return json({ error: "bad path" }, 400);
       try {
-        const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${pts}?overview=full&geometries=geojson&steps=false`, { headers: { "user-agent": "offroad-planner/1.0 (group trip planner)" }, signal: AbortSignal.timeout(40_000) });
+        const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${pts}?overview=full&geometries=geojson&steps=true`, { headers: { "user-agent": "offroad-planner/1.0 (group trip planner)" }, signal: AbortSignal.timeout(40_000) });
         return new Response(r.body, { status: r.status, headers: { ...CORS, "content-type": "application/json" } });
       } catch { return json({ error: "routing busy" }, 503); }
     }

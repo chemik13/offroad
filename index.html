@@ -389,7 +389,7 @@ ul.pois li{margin-bottom:8px}
       <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off"></details>
   </div>
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.38 · 10.11.2026 09:46</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.39 · 10.11.2026 09:49</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2164,14 +2164,24 @@ function maxKmPerDay(t) {
 // ---------- long journeys: road legs (OSRM) + off-road loops at the highlights + campsites + resupply ----------
 async function osrm(pts) {
   const path = pts.map(q => q[1].toFixed(5) + ',' + q[0].toFixed(5)).join(';');
-  const u = 'https://router.project-osrm.org/route/v1/driving/' + path + '?overview=full&geometries=geojson&steps=false';
+  const u = 'https://router.project-osrm.org/route/v1/driving/' + path + '?overview=full&geometries=geojson&steps=true';
   let lastErr;
   for (let a = 0; a < 4; a++) {
     try {
       const viaServer = a % 2 === 1 && hasGroup(); // every other try through our server (another network path)
       const r = await fetch(viaServer ? API + '/osrm?path=' + encodeURIComponent(path) : u, { signal: AbortSignal.timeout(30000), ...(viaServer ? { headers: { 'x-group-code': store.get('groupCode') || '' } } : {}) });
       const j = await r.json();
-      if (j.code === 'Ok') return { coords: j.routes[0].geometry.coordinates.map(c => [c[1], c[0]]), legs: j.routes[0].legs.map(l => ({ m: l.distance, s: l.duration })) };
+      if (j.code === 'Ok') {
+        const coords = j.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+        // ferries: OSRM picks them when they are the faster way; mark their coordinates so they count as sailing, not driving
+        const fk = new Map();
+        for (const l of j.routes[0].legs) for (const st of l.steps || []) if (st.mode === 'ferry' && st.geometry) {
+          const f = { name: st.name || '', m: st.distance, s: st.duration };
+          for (const c of st.geometry.coordinates) fk.set(c[1].toFixed(5) + ',' + c[0].toFixed(5), f);
+        }
+        const ferry = coords.map(c => fk.get(c[0].toFixed(5) + ',' + c[1].toFixed(5)) || null);
+        return { coords, ferry, legs: j.routes[0].legs.map(l => ({ m: l.distance, s: l.duration })) };
+      }
       lastErr = j.message || j.code; if (j.code === 'NoRoute') break;
     } catch (e) { lastErr = e.message; }
     await new Promise(r => setTimeout(r, 1500 * (a + 1)));
@@ -2243,9 +2253,11 @@ async function planOverland(p, sLL, eLL, viaLL) {
   for (let l = 0; l < sk.legs.length; l++) {
     const sp = sk.legs[l].s / Math.max(1, sk.legs[l].m); // s per m
     for (let i = legIdx0[l]; i < legIdx0[l + 1]; i++) {
-      timeline.push({ i, km, h, c: sk.coords[i] });
+      timeline.push({ i, km, h, c: sk.coords[i], sea: !!(sk.ferry[i] && sk.ferry[i + 1]) });
       const d = hav(sk.coords[i][0], sk.coords[i][1], sk.coords[i + 1][0], sk.coords[i + 1][1]);
-      km += d / 1000; h += d * sp / 3600 * 1.15; // + breaks
+      const f = sk.ferry[i] && sk.ferry[i + 1];
+      if (f) h += d / Math.max(1, f.m) * f.s / 3600; // on the boat: hours pass, no driving km
+      else { km += d / 1000; h += d * sp / 3600 * 1.15; } // + breaks
     }
     const pc = pieces[l]; if (pc) { km += pc.len / 1000; h += pc.hrs; }
   }
@@ -2262,6 +2274,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
     let st = timeline[0];
     for (let i = 1; i < timeline.length; i++) {
       const t = timeline[i];
+      if (t.sea) continue; // never end a day on the boat
       if (t.km - st.km > maxKm * 0.85 || /* room for the detour to the campsite */ t.h - st.h > maxH * 1.15) {
         const prev = timeline[i - 1].km - st.km > 5 ? timeline[i - 1] : t; // an off-road loop longer than the gap: end after it
         if (km - prev.km < 5) break;
@@ -2271,7 +2284,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
     }
     if (cuts.length + 1 > 30) cuts = cuts.slice(0, 29);
     p.days = cuts.length + 1; if ($('pDays')) $('pDays').value = p.days;
-  } else for (let k = 1; k < N; k++) { const target = h * k / N; cuts.push(timeline.find(t => t.h >= target) || timeline[timeline.length - 1]); }
+  } else for (let k = 1; k < N; k++) { const target = h * k / N; cuts.push(timeline.find(t => t.h >= target && !t.sea) || timeline[timeline.length - 1]); }
   if (askedDays && cuts.length + 1 > askedDays) notes.push(`ביקשתם ${askedDays} ימים, אבל ${Math.round(km)} ק"מ ב-${askedDays} ימים זה ${Math.round(km / askedDays)} ק"מ ליום. כדי לעמוד ב${maxKm ? `-${maxKm} ק"מ` : ` ${maxH} שעות נסיעה`} ליום חילקתי ל-${cuts.length + 1} ימים.`);
   // 2b. an off-road stretch every day: replace part of the day's road with trails between two road points
   const dayOff = [];
@@ -2283,7 +2296,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
       if (spanKm < 25 || vias.some((_, l) => pieces[l] && legIdx0[l + 1] > st.i && legIdx0[l + 1] <= en.i)) continue; // this day already has a highlight piece
       const want = Math.min(35, spanKm * 0.5); // road km to swap for trails
       const A = timeline.find(t => t.km >= st.km + spanKm * 0.2), B = timeline.find(t => t.km >= A.km + want);
-      if (!A || !B || B.i >= en.i) continue;
+      if (!A || !B || B.i >= en.i || timeline.some(t => t.sea && t.i >= A.i && t.i <= B.i)) continue;
       jobs.push({ d, A, B });
     }
     let done = 0; const deadline = Date.now() + 240000; // first-time downloads abroad are slow: cap the search at 4 minutes
@@ -2334,12 +2347,23 @@ async function planOverland(p, sLL, eLL, viaLL) {
   const coords = [], segs = [], days = [], pois = [];
   let dayFrom = 0, dKm = 0, dH = 0, dOff = 0;
   const byD = [0, 0, 0, 0, 0, 0]; let len = 0, hrs = 0, asph = 0, unk = 0, res = 0, maxD = 0;
+  const ferries = []; let sea = 0, seaH = 0;
   const pushRoad = (a, b, sp) => {
-    const part = thin(fin.coords.slice(a, b + 1));
-    let m = 0; for (let i = 1; i < part.length; i++) m += hav(part[i][0], part[i][1], part[i - 1][0], part[i - 1][1]);
-    if (coords.length) part.shift();
-    coords.push(...part); segs.push({ d: 0, pts: [coords[Math.max(0, coords.length - part.length - 1)], ...part], road: true });
-    len += m; asph += m; byD[0] += m; const hh = m * sp / 3600 * 1.15; hrs += hh; dKm += m; dH += hh;
+    for (let i = a; i < b;) { // runs of driving / sailing
+      const f = fin.ferry[i] && fin.ferry[i + 1] ? fin.ferry[i] : null;
+      let j = i + 1; while (j < b && !!(fin.ferry[j] && fin.ferry[j + 1]) === !!f) j++;
+      const part = f ? fin.coords.slice(i, j + 1) : thin(fin.coords.slice(i, j + 1));
+      let m = 0; for (let q = 1; q < part.length; q++) m += hav(part[q][0], part[q][1], part[q - 1][0], part[q - 1][1]);
+      const at = coords.length ? coords[coords.length - 1] : part[0];
+      if (coords.length) part.shift();
+      coords.push(...part); segs.push({ d: 0, pts: [at, ...part], road: !f, ferry: !!f });
+      if (f) {
+        const hh = m / Math.max(1, f.m) * f.s / 3600; sea += m; seaH += hh; hrs += hh; dH += hh;
+        const prevF = ferries[ferries.length - 1];
+        if (prevF && prevF.f === f) { prevF.m += m; prevF.h += hh; } else ferries.push({ f, m, h: hh, lat: at[0], lon: at[1], day: days.length + 1 });
+      } else { len += m; asph += m; byD[0] += m; const hh = m * sp / 3600 * 1.15; hrs += hh; dKm += m; dH += hh; }
+      i = j;
+    }
   };
   for (let k = 0; k < seq.length - 1; k++) {
     const sp = fin.legs[k].s / Math.max(1, fin.legs[k].m);
@@ -2378,8 +2402,10 @@ async function planOverland(p, sLL, eLL, viaLL) {
       else notes.push(`ליד חניון לילה ${k + 1} לא מצאתי ${kind === 'fuel' ? 'תחנת דלק' : 'סופרמרקט'}; תדלקו/הצטיידו מוקדם יותר באותו יום.`);
     }
   });
+  for (const x of ferries) pois.push({ type: 'via', name: '⛴ מעבורת' + (x.f.name ? ': ' + x.f.name : ''), note: `מעבורת ביום ${x.day}: כ-${Math.round(x.m / 1000)} ק"מ בים, כ-${fmtH(x.h)} שעות שיט. בדקו לוח זמנים והזמינו מקום לרכב מראש.`, lat: x.lat, lon: x.lon });
+  if (ferries.length) notes.push(`המסלול כולל ${ferries.length === 1 ? 'מעבורת' : ferries.length + ' מעבורות'} (כ-${Math.round(sea / 1000)} ק"מ בים) כי זו הדרך המהירה יותר. זמני השיט לפי מפת הדרכים, והם לא כוללים המתנה: בדקו לוח זמנים, והזמינו מקום לרכב בעונה.`);
   const off = len - asph;
-  notes.unshift(`טיול ארוך: ${days.length} ימים, כ-${Math.round(len / 1000)} ק"מ: כ-${Math.round(off / 1000)} ק"מ שטח (${Math.round(off / len * 100)}%) וכ-${Math.round((len - off) / 1000)} ק"מ כביש. בכל יום מחפשים קטע שטח פתוח לרכב ליד הדרך.`);
+  notes.unshift(`טיול ארוך: ${days.length} ימים, כ-${Math.round(len / 1000)} ק"מ: כ-${Math.round(off / 1000)} ק"מ שטח (${Math.round(off / len * 100)}%) וכ-${Math.round((len - off) / 1000)} ק"מ כביש${ferries.length ? `, ועוד ${ferries.length === 1 ? 'מעבורת' : ferries.length + ' מעבורות'}` : ''}. בכל יום מחפשים קטע שטח פתוח לרכב ליד הדרך.`);
   return { coords, segs, pois, stops: [], len, hrs, asph, unk, res, maxD, byD, mil: 0, aa: 0, js: 0, reuse: 0, days: days.length > 1 ? days : null, overland: true, note: notes[0], issues: notes.slice(1) };
 }
 
@@ -3000,6 +3026,7 @@ function render(i, day = null) {
       L.marker(c, { icon: L.divIcon({ className: '', html: `<div class="daydot" style="--c:${DAYC[k % DAYC.length]}">${k + 1}</div>`, iconSize: [22, 22], iconAnchor: [11, 11] }), zIndexOffset: 800 }).addTo(markLayer).bindTooltip('תחילת יום ' + (k + 1));
     });
   } else for (const sg of r.segs) L.polyline(sg.pts, { color: DCOL(sg.d < 0 ? 'x' : sg.d), weight: 5, opacity: dv ? .25 : 1 }).addTo(routeLayer);
+  for (const sg of r.segs) if (sg.ferry) { L.polyline(sg.pts, { color: '#fff', weight: 8 }).addTo(routeLayer); L.polyline(sg.pts, { color: '#1f6fd6', weight: 4, dashArray: '2 8', lineCap: 'round' }).addTo(routeLayer); }
   if (dv) {
     L.polyline(r.coords.slice(dv.from, dv.to + 1), { color: '#fff', weight: 11 }).addTo(routeLayer);
     for (const sg of segsInRange(r, dv.from, dv.to)) L.polyline(sg.pts, { color: DCOL(sg.d < 0 ? 'x' : sg.d), weight: 6 }).addTo(routeLayer);
