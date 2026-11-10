@@ -296,7 +296,7 @@ function factors(G, p) {
     // paved public roads stay open through firing zones and military land (OSM base polygons often cover public roads)
     if (G.eMil[e] === 2 && !G.eAsph[e]) { f[e] = Infinity; continue; }
     if (G.eMil[e] === 1 && p.avoid_military && !G.eAsph[e]) { f[e] = Infinity; continue; }
-    if (G.eAsph[e]) { f[e] = p.avoid_asphalt ? 4 : 1.6; continue; }
+    if (G.eAsph[e]) { f[e] = p.avoid_asphalt ? 7 : 1.6; continue; }
     if (d > maxD) { f[e] = Infinity; continue; }
     f[e] = 1 + 0.45 * Math.abs(d - tD) + (G.eUnk[e] ? 0.15 : 0) + (G.eRes && G.eRes[e] ? 0.35 : 0); // reserves: prefer going around
   }
@@ -455,7 +455,8 @@ function genericCands(G, s, R0, target, k) {
     const ang = Math.atan2((G.lat[i] - G.lat[s]), (G.lon[i] - G.lon[s]) * 0.87);
     const sec = Math.floor(((ang + Math.PI) / (2 * Math.PI)) * 8) % 8;
     const crow = hav(G.lat[s], G.lon[s], G.lat[i], G.lon[i]);
-    const sc = Math.abs(L - target) / target + (R0.dist[i] / L - 1) * 0.5 - crow / L * 0.8;
+    let onTrail = false; for (let j = G.start[i]; j < G.start[i + 1]; j++) if (!G.eAsph[G.adj[j]]) { onTrail = true; break; }
+    const sc = Math.abs(L - target) / target + (R0.dist[i] / L - 1) * 0.5 - crow / L * 0.8 + (onTrail ? 0 : 0.6); // aim the turn points at dirt
     if (!sectors[sec] || sc < sectors[sec].sc) sectors[sec] = { node: i, sc };
   }
   return sectors.filter(Boolean).sort((a, b) => a.sc - b.sc).slice(0, k)
@@ -526,7 +527,7 @@ function plan(G, p, nodes, onProgress = () => {}) {
     for (const o of options.slice(0, 24)) {
       const r = mk(o.stops, o.pois);
       if (!r) continue;
-      r.score = 3 * Math.abs(r.len - L) / L + (r.reuse / r.len) * 1.2 - o.w;
+      r.score = 3 * Math.abs(r.len - L) / L + (r.reuse / r.len) * 1.2 - o.w + (p.avoid_asphalt ? 1.2 : 0.6) * (r.asph / r.len);
       built.push(r);
     }
     built.sort((x, y) => x.score - y.score);
@@ -559,13 +560,13 @@ function plan(G, p, nodes, onProgress = () => {}) {
     combos.sort((x, y) => x.sc - y.sc);
     onProgress('מרכיב מסלולים…');
     const built = [];
-    for (const c of combos.slice(0, 8)) {
+    for (const c of combos.slice(0, 16)) {
       const A = cands[c.i], B = cands[c.j];
       const stops = c.i === c.j ? [s, A.node, s] : [s, A.node, B.node, s];
       const poiList = [A, B].filter((x, k) => x.type && (k === 0 || c.i !== c.j));
       const r = mk(stops, poiList);
       if (!r) continue;
-      r.score = 2 * Math.abs(r.len - L) / L + (r.reuse / r.len) * 1.2 - 0.35 * poiList.length;
+      r.score = 2 * Math.abs(r.len - L) / L + (r.reuse / r.len) * 1.2 - 0.35 * poiList.length + (p.avoid_asphalt ? 1.2 : 0.6) * (r.asph / r.len);
       built.push(r);
     }
     built.sort((x, y) => x.score - y.score);
@@ -584,17 +585,26 @@ function plan(G, p, nodes, onProgress = () => {}) {
     cands = cands.filter(c => R0.len[c.node] + Re.len[c.node] <= budget * 1.15)
       .sort((a, b) => (R0.len[a.node] + Re.len[a.node]) - (R0.len[b.node] + Re.len[b.node])).slice(0, 8);
     const options = [{ stops: [s, e], pois: [] }];
+    if ((p.duration_hours || p.distance_km) && L > direct * 1.3) {
+      // asked for longer than the direct way: detour through points whose way there + onward ≈ the asked length
+      const pool = [];
+      for (let v = 0; v < G.N; v += 2) { const t = R0.len[v] + Re.len[v]; if (isFinite(t) && t > L * 0.75 && t < L * 1.12 && !G.mil?.[v]) pool.push(v); }
+      pool.sort((a, b) => Math.abs(R0.len[a] + Re.len[a] - L) - Math.abs(R0.len[b] + Re.len[b] - L));
+      const picked = [];
+      for (const v of pool) { if (picked.length >= 10) break; if (picked.every(u => hav(G.lat[u], G.lon[u], G.lat[v], G.lon[v]) > 4000)) picked.push(v); }
+      for (const v of picked) options.push({ stops: [s, v, e], pois: [] });
+    }
     for (const c of cands) options.push({ stops: [s, c.node, e], pois: [c] });
     for (let i = 0; i < cands.length; i++) for (let j = i + 1; j < cands.length; j++) {
       const [a, b] = R0.len[cands[i].node] < R0.len[cands[j].node] ? [cands[i], cands[j]] : [cands[j], cands[i]];
       options.push({ stops: [s, a.node, b.node, e], pois: [a, b] });
     }
     const built = [];
-    for (const o of options.slice(0, 24)) {
+    for (const o of options.slice(0, 30)) {
       const r = mk(o.stops, o.pois);
       if (!r) continue;
       const tgt = p.duration_hours || p.distance_km ? L : direct;
-      r.score = Math.abs(r.len - tgt) / tgt + (r.reuse / r.len) * 1.2 - 0.3 * o.pois.length + (r.len > budget * 1.2 ? 1 : 0);
+      r.score = (p.duration_hours || p.distance_km ? 2 : 1) * Math.abs(r.len - tgt) / tgt + (r.reuse / r.len) * 1.2 - 0.3 * o.pois.length + (r.len > budget * 1.2 ? 1 : 0) + (r.asph / r.len) * 0.8 + ((r.js || 0) / r.len) * 0.6;
       built.push(r);
     }
     built.sort((x, y) => x.score - y.score);
@@ -775,9 +785,12 @@ function multiMilitary(p) {
 function planMulti(G, p, nodes, onProgress = () => {}) {
   const N = Math.max(2, Math.min(7, p.days | 0));
   const fac = factors(G, { ...p, avoid_military: multiMilitary(p) });
-  const dayL = targetLengthM({ ...p, distance_km: p.distance_km ? p.distance_km / N : null, duration_hours: p.hours_per_day || p.duration_hours || 6 });
-  const maxCost = dayL * 6;
+  let dayL = targetLengthM({ ...p, distance_km: p.distance_km ? p.distance_km / N : null, duration_hours: p.hours_per_day || p.duration_hours || 6 });
   const s = nodes.s, end = p.loop ? s : nodes.e;
+  // a far destination sets the pace: the days share the distance, never one huge last day
+  if (end >= 0 && end !== s) { const D0 = dijkstra(G, s, fac, null, Infinity, end).len[end]; if (isFinite(D0)) dayL = D0 * 1.15 / N > dayL ? D0 * 1.15 / N : Math.max(25000, Math.min(dayL, D0 * 1.3 / N)); } // a near destination: share it evenly
+  if (p.max_km_per_day) dayL = Math.min(dayL, p.max_km_per_day * 1000 * 0.95);
+  const maxCost = dayL * 6;
   const types = (p.poi_types || []).filter(t => t !== 'nightcamp');
   const camps = G.pois.filter(c => c.type === 'nightcamp' && c.auth).map(c => ({ ...c, node: nearestNode(G, c.lat, c.lon, fac, 2500) })).filter(c => c.node >= 0);
   const Rend = end >= 0 ? dijkstra(G, end, fac, null, Infinity) : null;
@@ -804,6 +817,7 @@ function planMulti(G, p, nodes, onProgress = () => {}) {
           if (!isFinite(rem)) continue;
           // remaining distance should fit the remaining days (not too much, not too little)
           const want = remainingDays * dayL;
+          if (!p.loop && rem > remainingDays * dayL * 1.6) continue; // the rest would not fit the days left
           sc += 0.8 * Math.max(0, rem - want * 1.3) / dayL + (p.loop ? 0 : 0.4 * Math.max(0, want * 0.4 - rem) / dayL);
         }
         sc += (R.dist[c.node] / d - 1) * 0.4;
@@ -888,6 +902,32 @@ function planMultiVia(G, p, nodes, onProgress = () => {}) {
     const path = pathEdges(G, R, stops0[i + 1]);
     if (!path) return { results: [], reason: `אין דרך מתאימה בין התחנות ${i + 1} ל-${i + 2} לפי התנאים (רמת רכב, שטחי אש, שטחי A). נסו לאפשר יותר, או לוותר על אחת התחנות.` };
     legs0.push(path);
+  }
+  { // the stops are close for this many days: take longer, dirtier ways between them
+    let dayL0 = targetLengthM({ ...p, distance_km: null, duration_hours: p.hours_per_day || 6 });
+    if (p.max_km_per_day) dayL0 = Math.min(dayL0, p.max_km_per_day * 1000 * 0.9);
+    const tot0 = legs0.flat().reduce((t, e) => t + G.eLen[e], 0);
+    const stretch = Math.min(2.2, dayL0 * N * 0.85 / Math.max(1, tot0));
+    const ins = [];
+    if (stretch > 1.25) for (let i = 0; i < legs0.length; i++) {
+      const a = stops0[i], b = stops0[i + 1], len = legs0[i].reduce((t, e) => t + G.eLen[e], 0), want = len * stretch;
+      const Ra = dijkstra(G, a, fac, null, want * 12), Rb = dijkstra(G, b, fac, null, want * 12);
+      let best = -1, bs = Infinity;
+      for (let v = 0; v < G.N; v += 2) {
+        const t = Ra.len[v] + Rb.len[v]; if (!isFinite(t) || t < want * 0.8 || t > want * 1.15) continue;
+        const sc = (Ra.dist[v] + Rb.dist[v]) / t + Math.abs(t - want) / want; // cost per metre: low = dirt
+        if (sc < bs) { bs = sc; best = v; }
+      }
+      if (best < 0) continue;
+      const p1 = pathEdges(G, Ra, best), R2 = dijkstra(G, best, fac, null, Infinity, b), p2 = pathEdges(G, R2, b);
+      if (p1 && p2) { legs0[i] = [...p1, ...p2]; ins[i] = best; }
+    }
+    // the turn points become stops, so the route keeps them when the nights are put in
+    if (ins.some(x => x != null)) for (let i = legs0.length - 1; i >= 0; i--) if (ins[i] != null) {
+      const v = ins[i], a = stops0[i], b = stops0[i + 1];
+      const l1 = pathEdges(G, dijkstra(G, a, fac, null, Infinity, v), v), l2 = pathEdges(G, dijkstra(G, v, fac, null, Infinity, b), b);
+      if (l1 && l2) { stops0.splice(i + 1, 0, v); legs0.splice(i, 1, l1, l2); }
+    }
   }
   const all0 = legs0.flat(); const total = all0.reduce((t, e) => t + G.eLen[e], 0);
   // node sequence with cumulative distance
