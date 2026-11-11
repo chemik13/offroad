@@ -133,6 +133,7 @@ header button{pointer-events:auto;margin-inline-start:auto}
 .hrow.ok i{background:#2e8b57}.hrow.info i{background:#9aa3ad}.hrow.warn i{background:#e0a100}.hrow.bad i{background:#c0392b}
 .hrow b{font-weight:600}
 .hrow small{grid-column:2;color:var(--muted);font-size:12px}
+.tetrow{display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:4px 0;border-top:1px solid var(--line)}
 .hgroup{font-size:12px;color:var(--muted);margin:10px 0 2px}
 .verbtn{flex:none;background:var(--stone);border:1px solid var(--line);border-radius:999px;padding:5px 11px;font:600 13px var(--body);color:var(--ink);cursor:pointer}
 .verbtn::after{content:'';display:inline-block;margin-inline-start:6px;border:4px solid transparent;border-top-color:currentColor;vertical-align:-2px}
@@ -601,17 +602,17 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
   </div>
   <button class="ghost" id="inviteBtn" type="button" style="margin-top:10px">קישור הזמנה לחבר (עם הקוד)</button>
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
-  <details class="health" id="tetBox"><summary>מסלולי TET (Trans Euro Trail)</summary>
-    <p style="font-size:13px;margin:8px 0">רשת דרכי עפר באירופה שמתנדבים מתחזקים. הורידו את קובצי ה-GPX של המדינות שאתם נוסעים אליהן מ-<a href="https://transeurotrail.org/" target="_blank" rel="noopener">transeurotrail.org</a> (בהסכמה לתנאים שלהם: לשימוש אישי, בלי להעביר הלאה), וייבאו אותם כאן. הם נשמרים רק בדפדפן הזה, והמתכנן יעדיף שבילים שעליהם.</p>
+  <details class="health" id="tetBox"><summary>מסלולים מועדפים לכל החבורה (למשל TET)</summary>
+    <p style="font-size:13px;margin:8px 0">מעלים פעם אחת קובצי GPX של רשתות דרכי עפר (למשל TET מ-<a href="https://transeurotrail.org/" target="_blank" rel="noopener">transeurotrail.org</a>), והמתכנן של כל החבורה מעדיף שבילים שעליהם. אף אחד אחר לא צריך לעשות כלום. נשמר בשרת שלנו, רק למי שיש קוד קבוצה.</p>
     <input type="file" id="tetFile" accept=".gpx,application/gpx+xml" multiple style="font-size:13px">
     <div id="tetState" style="font-size:13px;color:var(--muted);margin-top:6px"></div>
-    <button class="ghost" id="tetClear" type="button" hidden style="margin-top:6px">מחיקת מסלולי TET מהמכשיר</button>
+    <div id="tetList" class="hlist"></div>
   </details>
   <details id="healthBox" class="health"><summary>מצב המערכת <span id="healthSum"></span></summary>
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.73 · 11.11.2026 13:45</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.74 · 11.11.2026 13:51</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2012,7 +2013,7 @@ const HEALTH = [
   ['נתוני שבילים (נבנים אצלנו מ-OpenStreetMap)', [
     ['שבילים בישראל', async () => tilesHealth(STATIC_TILES, 'tiles.yml', 10, 'שבועי')],
     ['שבילים בחו״ל (אירופה, טורקיה, ירדן, מרוקו ועוד)', async () => tilesHealth(STATIC_EU, 'tiles-eu.yml', 40, 'שבועי, כל מדינה פעם בחודש')],
-    ['מסלולי TET במכשיר הזה', async () => { const l = await tetList(); return ['info', l.length ? `${l.length} קבצים · ${l.reduce((s, t) => s + (t.km || 0), 0).toLocaleString('he-IL')} ק"מ` : 'לא יובאו (אפשר לייבא בהגדרות)']; }],
+    ['מסלולים מועדפים (TET ועוד)', async () => { const l = await tetList(); return ['info', l.length ? `${l.length} מסלולים · ${l.reduce((s, t) => s + (t.km || 0), 0).toLocaleString('he-IL')} ק"מ, לכל החבורה` : 'לא הועלו (אפשר להעלות בהגדרות)']; }],
     ['מטמון השבילים בדפדפן', async () => { const n = await new Promise(res => { try { const r = indexedDB.open('offroad', 1); r.onupgradeneeded = () => r.result.createObjectStore('tiles'); r.onsuccess = () => { try { const q = r.result.transaction('tiles').objectStore('tiles').count(); q.onsuccess = () => res(q.result); q.onerror = () => res(-1); } catch { res(-1); } }; r.onerror = () => res(-1); } catch { res(-1); } }); return n < 0 ? ['warn', 'לא זמין (מצב פרטי?). הכול יעבוד, רק לאט יותר'] : ['ok', `${n} אריחים שמורים`]; }],
   ]],
   ['שירותים חיצוניים', [
@@ -2036,7 +2037,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.73 · 11.11.2026 13:45']],
+    ['גרסת האפליקציה', async () => ['ok', '1.74 · 11.11.2026 13:51']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -2071,10 +2072,12 @@ async function runHealth() {
 }
 $('healthBox').addEventListener('toggle', () => { if ($('healthBox').open) runHealth(); });
 $('tetBox').addEventListener('toggle', () => { if ($('tetBox').open) tetShow(); });
-$('tetFile').onchange = async () => { const fs = [...$('tetFile').files]; if (!fs.length) return; $('tetState').textContent = 'מייבא…';
-  try { const r = await tetImport(fs); $('tetFile').value = ''; await tetShow(); status(r.added ? `יובאו ${r.added} קבצי TET (${r.km.toLocaleString('he-IL')} ק"מ). תכנון הבא ישתמש בהם.` : 'לא מצאתי מסלול בקבצים.', !r.added); }
+$('tetFile').onchange = async () => { const fs = [...$('tetFile').files]; if (!fs.length) return;
+  if (!hasGroup()) { $('tetState').textContent = 'צריך קוד קבוצה.'; return; }
+  $('tetState').textContent = 'מעלה…';
+  try { const r = await tetImport(fs); $('tetFile').value = ''; await tetShow(); status(r.added ? `הועלו ${r.added} מסלולים (${r.km.toLocaleString('he-IL')} ק"מ) לכל החבורה. התכנון הבא ישתמש בהם.` : 'לא מצאתי מסלול בקבצים.', !r.added); }
   catch (e) { $('tetState').textContent = 'הייבוא נכשל: ' + e.message; } };
-$('tetClear').onclick = async () => { try { await tetStore('readwrite', st => st.clear()); tetGrid = null; gcache = null; await tetShow(); } catch {} };
+
 $('healthRun').onclick = runHealth;
 
 $('inviteBtn').onclick = async () => { const c = store.get('groupCode'); if (!c) return; const url = location.origin + location.pathname + '#code=' + encodeURIComponent(c); try { if (navigator.share) await navigator.share({ title: 'מתכנן מסלולי שטח', text: 'הצטרפו למתכנן המסלולים שלנו', url }); else { await navigator.clipboard.writeText(url); $('connState').textContent = 'הקישור הועתק. שלחו אותו בוואטסאפ.'; } } catch {} };
@@ -4356,7 +4359,7 @@ function render(i, day = null) {
     if (late.length) w.push(late.length > 2 ? `ב-${late.length} ימים מגיעים ללינה אחרי השקיעה או קרוב אליה (${late.map(x => 'יום ' + x.day).join(', ')}). צאו מוקדם יותר (שעת יציאה בהגדרות), או בקשו ימים קצרים יותר.` : late.map(x => x.warn).join(' '));
     if (!D && days[0]) { const sc = daySchedule(r, p, days[0], 0, true); if (sc) info.push(sc.text); }
     if (!current.saved && r.marked > 1000) info.push(`${(r.marked / 1000).toFixed(0)} ק"מ בשבילים מסומנים`);
-    if (!current.saved && r.tet > 1000) info.push(`${(r.tet / 1000).toFixed(0)} ק"מ על מסלול TET`);
+    if (!current.saved && r.tet > 1000) info.push(`${(r.tet / 1000).toFixed(0)} ק"מ על המסלולים המועדפים (TET)`);
   }
   if (false) w.push(`הקטע הארוך ביותר בלי תחנת דלק ליד המסלול: כ-${SF.fuelGap.toFixed(0)} ק"מ. בשטח רכב צורך פי 1.5–2 מבכביש: מלאו מיכל לפני, ושקלו ג'ריקן.`);
   info.push('המסלול מבוסס על נתוני OSM. מצב השטח בפועל (שיטפונות, חסימות, סגירת שמורות) יכול להשתנות: בדקו לפני יציאה.');
@@ -4704,18 +4707,23 @@ $('libClose').onclick = () => $('library').close();
 $('libSearch').oninput = drawLib;
 
 // ---------- import GPX / KML ----------
-// ---------- TET (Trans Euro Trail) tracks, on this device only ----------
-// TET GPX is free for personal use on your own devices; it may not be redistributed or fetched on behalf of others.
-// So each person downloads it themselves from transeurotrail.org and imports it here; it stays in this browser,
-// and the planner prefers trails that are on it.
-const tetDB = (() => { let dbp = null; return () => dbp || (dbp = new Promise((res, rej) => { try { const r = indexedDB.open('offroad-tet', 1); r.onupgradeneeded = () => r.result.createObjectStore('tracks'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); } })); })();
-const tetStore = async (mode, fn) => { const db = await tetDB(); return new Promise((res, rej) => { const tx = db.transaction('tracks', mode), st = tx.objectStore('tracks'); const q = fn(st); tx.oncomplete = () => res(q?.result); tx.onerror = () => rej(tx.error); }); };
-let tetGrid = null; // cell -> true, ~60 m cells
+// ---------- the group's preferred tracks (e.g. TET GPX): one person uploads, everyone's planner prefers trails on them ----------
+// Kept on our server behind the group code (not in the public repo); each device keeps a copy and refreshes when the list changes.
+const prefDB = (() => { let dbp = null; return () => dbp || (dbp = new Promise((res, rej) => { try { const r = indexedDB.open('offroad-pref', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); } })); })();
+const prefKV = async (mode, fn) => { const db = await prefDB(); return new Promise((res, rej) => { const tx = db.transaction('kv', mode), st = tx.objectStore('kv'); const q = fn(st); tx.oncomplete = () => res(q?.result); tx.onerror = () => rej(tx.error); }); };
+let tetGrid = null, tetGridAt = 0; // cell -> true, ~60 m cells
 const tetCell = (la, lo) => Math.round(la / 0.0006) + ',' + Math.round(lo / 0.00072);
 async function tetLoad() {
-  if (tetGrid) return tetGrid;
-  tetGrid = new Set();
-  try { const all = await tetStore('readonly', st => st.getAll()); for (const t of all || []) { const a = t.pts; for (let i = 0; i + 1 < a.length; i += 2) tetGrid.add(tetCell(a[i], a[i + 1])); } } catch {}
+  if (tetGrid && Date.now() - tetGridAt < 600000) return tetGrid;
+  if (!hasGroup()) return (tetGrid = new Set());
+  try {
+    const list = (await api('/tracks')).tracks || [], sig = list.map(t => t.name + '@' + t.created_at).join('|');
+    let cached = null; try { cached = await prefKV('readonly', st => st.get('tracks')); } catch {}
+    let all = cached?.sig === sig ? cached.tracks : null;
+    if (!all) { all = list.length ? ((await api('/tracks?full=1')).tracks || []) : []; try { await prefKV('readwrite', st => st.put({ sig, tracks: all }, 'tracks')); } catch {} }
+    const g = new Set(); for (const t of all) { const a = t.pts || []; for (let i = 0; i + 1 < a.length; i += 2) g.add(tetCell(a[i], a[i + 1])); }
+    tetGrid = g; tetGridAt = Date.now();
+  } catch { tetGrid = tetGrid || new Set(); }
   return tetGrid;
 }
 const tetNear = (g, la, lo) => { const a = Math.round(la / 0.0006), b = Math.round(lo / 0.00072); for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) if (g.has((a + x) + ',' + (b + y))) return true; return false; };
@@ -4725,7 +4733,7 @@ async function tetMarkGraph(G) {
   for (let e = 0; e < G.E; e++) { const a = G.eA[e], b = G.eB[e]; if (tetNear(g, G.lat[a], G.lon[a]) && tetNear(g, G.lat[b], G.lon[b])) { m[e] = 1; n++; } }
   if (n) G.eTet = m;
 }
-async function tetImport(files) {
+async function tetImport(files) { // GPX -> thinned points -> the group's server
   let added = 0, km = 0;
   for (const f of files) {
     const text = await f.text(), pts = []; let last = null, len = 0;
@@ -4735,17 +4743,21 @@ async function tetImport(files) {
       pts.push(+la.toFixed(5), +lo.toFixed(5)); last = [la, lo];
     }
     if (pts.length < 4) continue;
-    await tetStore('readwrite', st => st.put({ name: f.name, pts, km: Math.round(len / 1000), at: Date.now() }, f.name));
+    await api('/tracks', { method: 'POST', body: JSON.stringify({ name: f.name.replace(/\.gpx$/i, ''), pts, km: Math.round(len / 1000), created_by: store.get('nick') || null }) });
     added++; km += len / 1000;
   }
   tetGrid = null; gcache = null; // re-read, and rebuild graphs with the new tracks
   return { added, km: Math.round(km) };
 }
-async function tetList() { try { return (await tetStore('readonly', st => st.getAll())) || []; } catch { return []; } }
+async function tetList() { try { return hasGroup() ? (await api('/tracks')).tracks || [] : []; } catch { return []; } }
 async function tetShow() {
-  const l = await tetList(), box = $('tetState'); if (!box) return;
-  box.textContent = l.length ? `במכשיר הזה: ${l.map(t => t.name.replace(/\.gpx$/i, '')).join(', ')} · ${l.reduce((s, t) => s + (t.km || 0), 0).toLocaleString('he-IL')} ק"מ. המתכנן מעדיף שבילים שעליהם.` : 'עוד לא יובאו מסלולי TET למכשיר הזה.';
-  $('tetClear').hidden = !l.length;
+  const box = $('tetState'), list = $('tetList'); if (!box) return;
+  const l = await tetList(); list.innerHTML = '';
+  box.textContent = l.length ? `${l.length} מסלולים · ${l.reduce((s, t) => s + (t.km || 0), 0).toLocaleString('he-IL')} ק"מ. המתכנן של כל החבורה מעדיף שבילים שעליהם.` : 'עוד לא הועלו מסלולים.';
+  for (const t of l) { const row = document.createElement('div'); row.className = 'tetrow'; const nm = document.createElement('span'); nm.textContent = `${t.name} · ${t.km || 0} ק"מ${t.created_by ? ' · ' + t.created_by : ''}`;
+    const del = document.createElement('button'); del.type = 'button'; del.className = 'linkbtn'; del.textContent = 'הסרה';
+    del.onclick = async () => { if (del.dataset.sure !== '1') { del.dataset.sure = '1'; del.textContent = 'בטוח? להסיר לכולם'; return; } try { await api('/tracks/' + encodeURIComponent(t.name), { method: 'DELETE' }); tetGrid = null; gcache = null; tetShow(); } catch (e) { status(e.message, true); } };
+    row.append(nm, del); list.append(row); }
 }
 
 function parseTrackText(text) {

@@ -210,6 +210,28 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ---- preferred tracks for the group (GPX one person uploads once; the planner prefers trails on them) ----
+    if (path === "/tracks" && req.method === "GET") {
+      const full = url.searchParams.get("full") === "1";
+      const { data, error } = await db.from("pref_tracks").select(full ? "name,km,created_by,created_at,pts" : "name,km,created_by,created_at").order("name");
+      if (error) throw error;
+      return json({ tracks: data });
+    }
+    if (path === "/tracks" && req.method === "POST") {
+      const b = await req.json();
+      const name = String(b.name || "").slice(0, 120).trim();
+      if (!name || !Array.isArray(b.pts) || b.pts.length < 4 || b.pts.length > 4_000_000 || b.pts.some((x: unknown) => typeof x !== "number")) return json({ error: "מסלול לא תקין" }, 400);
+      const { error } = await db.from("pref_tracks").upsert({ name, pts: b.pts, km: Math.round(Number(b.km) || 0), created_by: b.created_by ? String(b.created_by).slice(0, 60) : null, created_at: new Date().toISOString() });
+      if (error) throw error;
+      return json({ ok: true }, 201);
+    }
+    const tk = path.match(/^\/tracks\/(.+)$/);
+    if (tk && req.method === "DELETE") {
+      const { error } = await db.from("pref_tracks").delete().eq("name", decodeURIComponent(tk[1]));
+      if (error) throw error;
+      return json({ ok: true });
+    }
+
     // ---- field reports (closed / harder / easier segments) ----
     if (path === "/reports" && req.method === "GET") {
       const b = ["s", "w", "n", "e"].map((k) => Number(url.searchParams.get(k)));
