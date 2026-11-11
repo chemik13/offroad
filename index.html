@@ -626,7 +626,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.82 · 11.11.2026 20:33</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.83 · 11.11.2026 20:38</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2110,7 +2110,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.82 · 11.11.2026 20:33']],
+    ['גרסת האפליקציה', async () => ['ok', '1.83 · 11.11.2026 20:38']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -3925,7 +3925,10 @@ async function flyOver(coords, title, marks = []) {
       layers: [{ id: 'sat', type: 'raster', source: 'sat' }], sky: { 'sky-color': '#9cc8f0', 'horizon-color': '#e8f0f7', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.7, 'fog-color': '#e8f0f7' } } });
   flyState = { map: map3, t: 0, speed: 1, playing: true, last: 0, total }; flyBtn('pause');
   // ~35 s for a typical day; long days go faster, short ones slower
-  const durS = Math.max(22, Math.min(55, total / 1000 * 0.45)), mps = total / durS;
+  // the whole trip: about 40 s per day, so it reads like the single-day flight (the seek bar jumps ahead)
+  const nDays = marks.filter(m => m.day).length;
+  const durS = nDays > 1 ? Math.max(40 * nDays, Math.min(55, total / 1000 * 0.45)) : Math.max(22, Math.min(55, total / 1000 * 0.45)), mps = total / durS;
+  let zoomNow = 14.7;
   map3.on('load', () => {
     map3.setTerrain({ source: 'dem', exaggeration: 1.35 });
     map3.addSource('trk', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: pts.map(p => [p[0], p[1]]) } } });
@@ -3965,7 +3968,10 @@ async function flyOver(coords, title, marks = []) {
       if (heading == null) heading = hd; heading += (((hd - heading + 540) % 360) - 180) * Math.min(1, dt * 6);
       car.setLngLat([here[0], here[1]]).setRotation(heading); showDay(flyState.t);
       const look = at(Math.min(total, flyState.t + 220)); // the camera looks a little ahead, so the car sits low in the view
-      map3.jumpTo({ center: [look[0], look[1]], bearing, pitch: 66, zoom: 14.7 });
+      // faster than the imagery can load: climb higher, so the ground stays visible
+      const v = mps * flyState.speed, zWant = Math.max(11, 14.7 - Math.log2(Math.max(1, v / 4500)));
+      zoomNow += (zWant - zoomNow) * Math.min(1, dt * 1.5);
+      map3.jumpTo({ center: [look[0], look[1]], bearing, pitch: 66, zoom: zoomNow });
       const pc = (flyState.t / total * 100).toFixed(2); $('flyProg').style.width = pc + '%'; $('flyKnob').style.insetInlineStart = pc + '%'; bar.setAttribute('aria-valuenow', Math.round(pc));
       $('flyKm').textContent = `${(flyState.t / 1000).toFixed(1)} / ${(total / 1000).toFixed(0)} ק"מ`;
       if (flyState.t >= total && flyState.playing) { flyState.playing = false; flyBtn('replay'); }
@@ -3996,7 +4002,7 @@ $('flyPlay').onclick = () => { if (!flyState) return; if ($('flyPlay').dataset.k
     ev.preventDefault(); flyState.t = Math.max(0, Math.min(flyState.total, flyState.t + d));
   });
 }
-$('flySpeed').onclick = () => { if (!flyState) return; flyState.speed = flyState.speed === 1 ? 2 : flyState.speed === 2 ? 4 : 1; $('flySpeed').textContent = flyState.speed + '×'; };
+$('flySpeed').onclick = () => { if (!flyState) return; flyState.speed = flyState.speed === 0.5 ? 1 : flyState.speed === 1 ? 2 : flyState.speed === 2 ? 4 : 0.5; $('flySpeed').textContent = (flyState.speed === 0.5 ? '½' : flyState.speed) + '×'; };
 // links out: book a campsite, buy ferry tickets, navigate there
 function placeLinks(pt) {
   const ll = `${(+pt.lat).toFixed(5)},${(+pt.lon).toFixed(5)}`, q = s => encodeURIComponent(s);
