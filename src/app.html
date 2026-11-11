@@ -2731,9 +2731,8 @@ async function flyOver(coords, title, marks = []) {
       layers: [{ id: 'sat', type: 'raster', source: 'sat' }], sky: { 'sky-color': '#9cc8f0', 'horizon-color': '#e8f0f7', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.7, 'fog-color': '#e8f0f7' } } });
   flyState = { map: map3, t: 0, speed: 1, playing: true, last: 0, total }; flyBtn('pause');
   // ~35 s for a typical day; long days go faster, short ones slower
-  // the whole trip: about 80 s per day, so it reads like the single-day flight (the seek bar jumps ahead)
-  const nDays = marks.filter(m => m.day).length;
-  const durS = nDays > 1 ? Math.max(80 * nDays, Math.min(55, total / 1000 * 0.45)) : Math.max(22, Math.min(55, total / 1000 * 0.45)), mps = total / durS;
+    const nDays = marks.filter(m => m.day).length;
+  const durS = nDays > 1 ? total / 700 : Math.max(22, Math.min(55, total / 1000 * 0.45)), mps = total / durS; // whole trip: ~700 m a second (a 250 km day ≈ 6 min), the speed button goes up to ×16
   let zoomNow = 14.7;
   map3.on('load', () => {
     map3.setTerrain({ source: 'dem', exaggeration: 1.35 });
@@ -2808,7 +2807,7 @@ $('flyPlay').onclick = () => { if (!flyState) return; if ($('flyPlay').dataset.k
     ev.preventDefault(); flyState.t = Math.max(0, Math.min(flyState.total, flyState.t + d));
   });
 }
-$('flySpeed').onclick = () => { if (!flyState) return; flyState.speed = flyState.speed === 0.5 ? 1 : flyState.speed === 1 ? 2 : flyState.speed === 2 ? 4 : 0.5; $('flySpeed').textContent = (flyState.speed === 0.5 ? '½' : flyState.speed) + '×'; };
+$('flySpeed').onclick = () => { if (!flyState) return; { const SP = [0.5, 1, 2, 4, 8, 16]; flyState.speed = SP[(SP.indexOf(flyState.speed) + 1) % SP.length]; } $('flySpeed').textContent = (flyState.speed === 0.5 ? '½' : flyState.speed) + '×'; };
 // links out: book a campsite, buy ferry tickets, navigate there
 function placeLinks(pt) {
   const ll = `${(+pt.lat).toFixed(5)},${(+pt.lon).toFixed(5)}`, q = s => encodeURIComponent(s);
