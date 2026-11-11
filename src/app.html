@@ -1011,7 +1011,7 @@ const SYSTEM = () => `Today is ${new Date().toISOString().slice(0, 10)} (${new D
 - Europe: names in the local/English form. Prefer regions and routes where driving unpaved public roads is legal (e.g. known overland/4x4 routes, TET sections), start at a town, and for several days rely on official campsites (nightcamp). Israeli rules (firing zones, Area A) do not apply abroad. Use web_search when you are not sure of a place's location or when the request is themed.
 - Themed requests (a historical event or military operation, a book, a person, a named trail, "in the footsteps of", "בעקבות"): research the theme, then choose the real sites in order as start, via and end. Prefer points reachable by 4x4 (trailheads, memorial sites, viewpoints, ruins) over city centers, and skip sites that are now inside military bases or Area A. Add a short Hebrew note per via and a 2-4 sentence Hebrew story_he. Keep at most 8 vias and keep notes short. The theme's final destination MUST be "end" (with lat/lon), never left out or put only in via.
 - Refinement requests come with the current parameters as JSON: return the full updated parameters, changing only what was asked.
-- Start and end are exactly the places the user named, in that order ("מטירנה לקוטור" = start Tirana, end Kotor; "מסלוניקי" = start Thessaloniki). Never replace a named place with another. A finish place given together with a duration ("3 שעות מרעננה ומסיימים באגמון חפר") is still end, with its name; never write in summary_he that there is no destination when one was named. A wish like "פיקניק באמצע" goes in poi_types (camp), not in end.
+- Start and end are exactly the places the user named, in that order ("מטירנה לקוטור" = start Tirana, end Kotor; "מסלוניקי" = start Thessaloniki). Never replace a named place with another. When the user pastes coordinates, use them exactly for lat/lon and name the place "נקודה ליד <nearest village>". A finish place given together with a duration ("3 שעות מרעננה ומסיימים באגמון חפר") is still end, with its name; never write in summary_he that there is no destination when one was named. A wish like "פיקניק באמצע" goes in poi_types (camp), not in end.
 - Always set start. If the user did not say where to start, choose it yourself: a town or trailhead at the edge of the area the trip is about (for themed trips the theme's natural starting point), with lat/lon. Only if they say "from my location", set from_my_location instead.
 - "יום כולל לילה" / a day and a night = days 2.
 - The group always drives a lifted Land Cruiser with diff lockers. Defaults: difficulty medium, point-to-point (loop=false). For several days set days, and include nightcamp in poi_types.`;
@@ -1073,6 +1073,10 @@ function fixPlace(x) {
   }
   if (!x || typeof x !== 'object') return null;
   if (x.name != null) x.name = String(x.name).trim();
+  if (x.name && /קואורדינט|coordinates|נקודה ששלחת|המיקום שנשלח/i.test(x.name)) { // coordinates the user pasted: call it by the place it is near
+    const near = (x.name.match(/\(([^)]+)\)/)?.[1] || '').replace(/^\s*(באזור|ליד|סמוך ל-?)\s*/, '').split(',')[0].trim();
+    x.name = near ? `נקודה ליד ${near}` : 'הנקודה ששלחת';
+  }
   for (const k of ['lat', 'lon']) if (x[k] != null) { x[k] = parseFloat(x[k]); if (!isFinite(x[k])) delete x[k]; }
   if (!x.name && !(x.lat && x.lon) && !x.latlng) return null;
   return x;
@@ -1802,7 +1806,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
       const M = timeline.find(t => t.km >= st.km + spanKm * 0.5 && !t.sea && t.i < en.i);
       if (tries.length || M) jobs.push({ d, more, st, span: spanKm, tries, M, target: spanKm * sh - pieceOff, room: Math.max(10, (maxKm || spanKm * 1.3) - spanKm + 15) + (more ? 40 : 0), loopKm: Math.max(8, Math.min(40, want, (maxKm || want * 2) - spanKm + 10)) });
     }
-    let done = 0; const deadline = Date.now() + 120000;
+    let done = 0; const deadline = Date.now() + 95000;
     // a day whose road has no trail beside it: try a way through the nearby area with the most trails (left or right of the road), road ends kept
     const seekTrails = async (j, have) => {
       const A = timeline.find(t => t.km >= j.st.km + j.span * 0.05 && !t.sea), B = [...timeline].reverse().find(t => t.km <= j.st.km + j.span * 0.95 && !t.sea);

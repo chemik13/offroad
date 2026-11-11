@@ -965,13 +965,15 @@ function planMultiVia(G, p, nodes, onProgress = () => {}) {
       }
       pool.sort((x, y) => x.sc - y.sc);
       const asphOf = es => es.reduce((t, e) => t + (G.eAsph[e] ? G.eLen[e] : 0), 0) / Math.max(1, es.reduce((t, e) => t + G.eLen[e], 0));
-      for (const { v: best } of pool.slice(0, 12)) {
-        const p1 = pathEdges(G, Ra, best), R2 = dijkstra(G, best, fac, null, Infinity, b), p2 = pathEdges(G, R2, b);
+      let pickV = null; // the cheapest turn point whose way back does not run beside the way out; if all do, the one that does least
+      for (const { v: cand } of pool.slice(0, 12)) {
+        const p1 = pathEdges(G, Ra, cand), R2 = dijkstra(G, cand, fac, null, Infinity, b), p2 = pathEdges(G, R2, b);
         if (!p1 || !p2) continue;
-        if (corridorOverlap(G, p1, p2, best) > 0.5) continue; // out on one track and back on the one beside it: the same ground twice
-        if (roomy || asphOf([...p1, ...p2]) < asphOf(legs0[i]) - 0.1) { legs0[i] = [...p1, ...p2]; ins[i] = best; }
-        break;
+        const ov = corridorOverlap(G, p1, p2, cand);
+        if (!pickV || ov < pickV.ov) pickV = { v: cand, p1, p2, ov };
+        if (ov <= 0.25) break;
       }
+      if (pickV && pickV.ov <= 0.6 && (roomy || asphOf([...pickV.p1, ...pickV.p2]) < asphOf(legs0[i]) - 0.1)) { legs0[i] = [...pickV.p1, ...pickV.p2]; ins[i] = pickV.v; }
     }
     // the turn points become stops, so the route keeps them when the nights are put in
     if (ins.some(x => x != null)) for (let i = legs0.length - 1; i >= 0; i--) if (ins[i] != null) {
