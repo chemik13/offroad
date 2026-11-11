@@ -212,8 +212,17 @@ Deno.serve(async (req) => {
 
     // ---- preferred tracks for the group (GPX one person uploads once; the planner prefers trails on them) ----
     if (path === "/tracks" && req.method === "GET") {
-      const full = url.searchParams.get("full") === "1";
-      const { data, error } = await db.from("pref_tracks").select(full ? "name,km,created_by,created_at,pts" : "name,km,created_by,created_at").order("name");
+      const bb = (url.searchParams.get("bbox") || "").split(",").map(Number); // s,w,n,e: only the points inside (a trip's area)
+      if (bb.length === 4 && bb.every(isFinite)) {
+        const [s0, w0, n0, e0] = bb;
+        if (n0 - s0 > 6 || e0 - w0 > 8) return json({ error: "area too big" }, 400);
+        const { data, error } = await db.from("pref_tracks").select("name,pts").lte("s", n0).gte("n", s0).lte("w", e0).gte("e", w0);
+        if (error) throw error;
+        const pts: number[] = [];
+        for (const t of data || []) { const a = t.pts as number[]; for (let i = 0; i + 1 < a.length; i += 2) if (a[i] >= s0 && a[i] <= n0 && a[i + 1] >= w0 && a[i + 1] <= e0) pts.push(a[i], a[i + 1]); }
+        return json({ pts, names: (data || []).map((t: any) => t.name) });
+      }
+      const { data, error } = await db.from("pref_tracks").select("name,km,created_by,created_at").order("name");
       if (error) throw error;
       return json({ tracks: data });
     }
@@ -221,7 +230,8 @@ Deno.serve(async (req) => {
       const b = await req.json();
       const name = String(b.name || "").slice(0, 120).trim();
       if (!name || !Array.isArray(b.pts) || b.pts.length < 4 || b.pts.length > 4_000_000 || b.pts.some((x: unknown) => typeof x !== "number")) return json({ error: "מסלול לא תקין" }, 400);
-      const { error } = await db.from("pref_tracks").upsert({ name, pts: b.pts, km: Math.round(Number(b.km) || 0), created_by: b.created_by ? String(b.created_by).slice(0, 60) : null, created_at: new Date().toISOString() });
+      let s0 = 90, n0 = -90, w0 = 180, e0 = -180; for (let i = 0; i + 1 < b.pts.length; i += 2) { const la = b.pts[i], lo = b.pts[i + 1]; if (la < s0) s0 = la; if (la > n0) n0 = la; if (lo < w0) w0 = lo; if (lo > e0) e0 = lo; }
+      const { error } = await db.from("pref_tracks").upsert({ name, pts: b.pts, km: Math.round(Number(b.km) || 0), created_by: b.created_by ? String(b.created_by).slice(0, 60) : null, created_at: new Date().toISOString(), s: s0, w: w0, n: n0, e: e0 });
       if (error) throw error;
       return json({ ok: true }, 201);
     }

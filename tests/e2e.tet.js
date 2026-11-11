@@ -5,7 +5,9 @@ await pg.route(/fonts\.g|opentopomap|arcgis|tile\.openstreetmap/,r=>r.abort());
 const TR=[];
 await pg.route(/functions\/v1\/api/,async r=>{const u=new URL(r.request().url()),path=u.pathname.replace(/^.*\/api/,''),m=r.request().method();const J=(o,st=200)=>r.fulfill({status:st,contentType:'application/json',body:JSON.stringify(o)});
   if(path==='/health')return J({ok:true,claude:false,group:true});
-  if(path==='/tracks'&&m==='GET')return J({tracks:TR.map(t=>u.searchParams.get('full')==='1'?t:{name:t.name,km:t.km,created_at:t.created_at})});
+  if(path==='/tracks'&&m==='GET'){const bb=(u.searchParams.get('bbox')||'').split(',').map(Number);
+    if(bb.length===4){const pts=[];for(const t of TR)for(let i=0;i+1<t.pts.length;i+=2){const la=t.pts[i],lo=t.pts[i+1];if(la>=bb[0]&&la<=bb[2]&&lo>=bb[1]&&lo<=bb[3])pts.push(la,lo);}return J({pts});}
+    return J({tracks:TR.map(t=>({name:t.name,km:t.km,created_at:t.created_at}))});}
   if(path==='/tracks'&&m==='POST'){const b=JSON.parse(r.request().postData());const i=TR.findIndex(t=>t.name===b.name);const row={...b,created_at:new Date().toISOString()};if(i>=0)TR[i]=row;else TR.push(row);return J({ok:true},201);}
   const d=path.match(/^\/tracks\/(.+)$/);if(d&&m==='DELETE'){const n=decodeURIComponent(d[1]);const i=TR.findIndex(t=>t.name===n);if(i>=0)TR.splice(i,1);return J({ok:true});}
   return J({error:'nf'},404);});

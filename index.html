@@ -612,7 +612,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.75 · 11.11.2026 13:58</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.76 · 11.11.2026 14:06</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2056,7 +2056,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.75 · 11.11.2026 13:58']],
+    ['גרסת האפליקציה', async () => ['ok', '1.76 · 11.11.2026 14:06']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -4730,27 +4730,34 @@ $('libSearch').oninput = drawLib;
 // Kept on our server behind the group code (not in the public repo); each device keeps a copy and refreshes when the list changes.
 const prefDB = (() => { let dbp = null; return () => dbp || (dbp = new Promise((res, rej) => { try { const r = indexedDB.open('offroad-pref', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); } })); })();
 const prefKV = async (mode, fn) => { const db = await prefDB(); return new Promise((res, rej) => { const tx = db.transaction('kv', mode), st = tx.objectStore('kv'); const q = fn(st); tx.oncomplete = () => res(q?.result); tx.onerror = () => rej(tx.error); }); };
-let tetGrid = null, tetGridAt = 0; // cell -> true, ~60 m cells
+// fetched per 1° cell of the trip's area (all of Europe is ~1M points: too much for a phone at once), kept in IndexedDB
+let tetSig = null, tetSigAt = 0; const tetCells = new Map(); // "lat,lon" (1°) -> Set of ~60 m cells
 const tetCell = (la, lo) => Math.round(la / 0.0006) + ',' + Math.round(lo / 0.00072);
-async function tetLoad() {
-  if (tetGrid && Date.now() - tetGridAt < 600000) return tetGrid;
-  if (!hasGroup()) return (tetGrid = new Set());
-  try {
-    const list = (await api('/tracks')).tracks || [], sig = list.map(t => t.name + '@' + t.created_at).join('|');
-    let cached = null; try { cached = await prefKV('readonly', st => st.get('tracks')); } catch {}
-    let all = cached?.sig === sig ? cached.tracks : null;
-    if (!all) { all = list.length ? ((await api('/tracks?full=1')).tracks || []) : []; try { await prefKV('readwrite', st => st.put({ sig, tracks: all }, 'tracks')); } catch {} }
-    const g = new Set(); for (const t of all) { const a = t.pts || []; for (let i = 0; i + 1 < a.length; i += 2) g.add(tetCell(a[i], a[i + 1])); }
-    tetGrid = g; tetGridAt = Date.now();
-  } catch { tetGrid = tetGrid || new Set(); }
-  return tetGrid;
+async function tetSignature() {
+  if (tetSig && Date.now() - tetSigAt < 600000) return tetSig;
+  const list = (await api('/tracks')).tracks || []; tetSig = list.map(t => t.name + '@' + t.created_at).join('|'); tetSigAt = Date.now(); return tetSig;
+}
+async function tetCellSet(ci, cj, sig) {
+  const k = ci + ',' + cj; if (tetCells.has(k)) return tetCells.get(k);
+  let pts = null; try { const c = await prefKV('readonly', st => st.get('c' + k)); if (c?.sig === sig) pts = c.pts; } catch {}
+  if (!pts) { pts = (await api(`/tracks?bbox=${ci},${cj},${ci + 1},${cj + 1}`)).pts || []; try { await prefKV('readwrite', st => st.put({ sig, pts }, 'c' + k)); } catch {} }
+  const g = new Set(); for (let i = 0; i + 1 < pts.length; i += 2) g.add(tetCell(pts[i], pts[i + 1]));
+  tetCells.set(k, g); return g;
 }
 const tetNear = (g, la, lo) => { const a = Math.round(la / 0.0006), b = Math.round(lo / 0.00072); for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) if (g.has((a + x) + ',' + (b + y))) return true; return false; };
 async function tetMarkGraph(G) {
-  const g = await tetLoad(); if (!g.size) return;
-  const m = new Uint8Array(G.E); let n = 0;
-  for (let e = 0; e < G.E; e++) { const a = G.eA[e], b = G.eB[e]; if (tetNear(g, G.lat[a], G.lon[a]) && tetNear(g, G.lat[b], G.lon[b])) { m[e] = 1; n++; } }
-  if (n) G.eTet = m;
+  if (!hasGroup() || !G.N) return;
+  try {
+    const sig = await tetSignature(); if (!sig) return;
+    let s0 = 90, n0 = -90, w0 = 180, e0 = -180; for (let i = 0; i < G.N; i++) { const a = G.lat[i], o = G.lon[i]; if (a < s0) s0 = a; if (a > n0) n0 = a; if (o < w0) w0 = o; if (o > e0) e0 = o; }
+    const sets = new Map();
+    for (let ci = Math.floor(s0); ci <= Math.floor(n0); ci++) for (let cj = Math.floor(w0); cj <= Math.floor(e0); cj++) sets.set(ci + ',' + cj, await tetCellSet(ci, cj, sig));
+    if (![...sets.values()].some(g => g.size)) return;
+    const near = (la, lo) => { const g = sets.get(Math.floor(la) + ',' + Math.floor(lo)); return g && g.size && tetNear(g, la, lo); };
+    const m = new Uint8Array(G.E); let n = 0;
+    for (let e = 0; e < G.E; e++) { const a = G.eA[e], b = G.eB[e]; if (near(G.lat[a], G.lon[a]) && near(G.lat[b], G.lon[b])) { m[e] = 1; n++; } }
+    if (n) G.eTet = m;
+  } catch (e) { console.warn('preferred tracks', e?.message || e); }
 }
 async function tetImport(files) { // GPX -> thinned points -> the group's server
   let added = 0, km = 0;
@@ -4765,7 +4772,7 @@ async function tetImport(files) { // GPX -> thinned points -> the group's server
     await api('/tracks', { method: 'POST', body: JSON.stringify({ name: f.name.replace(/\.gpx$/i, ''), pts, km: Math.round(len / 1000), created_by: store.get('nick') || null }) });
     added++; km += len / 1000;
   }
-  tetGrid = null; gcache = null; // re-read, and rebuild graphs with the new tracks
+  tetSig = null; tetCells.clear(); gcache = null; // re-read, and rebuild graphs with the new tracks
   return { added, km: Math.round(km) };
 }
 async function tetList() { try { return hasGroup() ? (await api('/tracks')).tracks || [] : []; } catch { return []; } }
@@ -4775,7 +4782,7 @@ async function tetShow() {
   box.textContent = l.length ? `${l.length} מסלולים · ${l.reduce((s, t) => s + (t.km || 0), 0).toLocaleString('he-IL')} ק"מ. המתכנן של כל החבורה מעדיף שבילים שעליהם.` : 'עוד לא הועלו מסלולים.';
   for (const t of l) { const row = document.createElement('div'); row.className = 'tetrow'; const nm = document.createElement('span'); nm.textContent = `${t.name} · ${t.km || 0} ק"מ${t.created_by ? ' · ' + t.created_by : ''}`;
     const del = document.createElement('button'); del.type = 'button'; del.className = 'linkbtn'; del.textContent = 'הסרה';
-    del.onclick = async () => { if (del.dataset.sure !== '1') { del.dataset.sure = '1'; del.textContent = 'בטוח? להסיר לכולם'; return; } try { await api('/tracks/' + encodeURIComponent(t.name), { method: 'DELETE' }); tetGrid = null; gcache = null; tetShow(); } catch (e) { status(e.message, true); } };
+    del.onclick = async () => { if (del.dataset.sure !== '1') { del.dataset.sure = '1'; del.textContent = 'בטוח? להסיר לכולם'; return; } try { await api('/tracks/' + encodeURIComponent(t.name), { method: 'DELETE' }); tetSig = null; tetCells.clear(); gcache = null; tetShow(); } catch (e) { status(e.message, true); } };
     row.append(nm, del); list.append(row); }
 }
 
