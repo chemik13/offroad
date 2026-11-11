@@ -1,4 +1,5 @@
-# Small countries first, Italy (largest) last. Geofabrik extracts built into the "tiles-eu" branch (one path per line, relative to download.geofabrik.de)
+# Geofabrik extracts built into the "tiles-eu" branch (one path per line, relative to download.geofabrik.de).
+# Small countries first, the largest last; the weekly job builds those older than 25 days, as many as fit in one run.
 europe/greece-latest.osm.pbf
 europe/macedonia-latest.osm.pbf
 europe/albania-latest.osm.pbf
@@ -14,3 +15,14 @@ europe/slovenia-latest.osm.pbf
 europe/bulgaria-latest.osm.pbf
 europe/austria-latest.osm.pbf
 europe/italy-latest.osm.pbf
+europe/cyprus-latest.osm.pbf
+asia/jordan-latest.osm.pbf
+asia/armenia-latest.osm.pbf
+europe/iceland-latest.osm.pbf
+europe/slovakia-latest.osm.pbf
+europe/switzerland-latest.osm.pbf
+europe/hungary-latest.osm.pbf
+africa/morocco-latest.osm.pbf
+europe/turkey-latest.osm.pbf
+europe/spain-latest.osm.pbf
+europe/france-latest.osm.pbf

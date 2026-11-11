@@ -88,7 +88,7 @@ function pointInRing(lat, lon, ring) {
 function buildGraph(elements) {
   const idx = new Map();
   const lat = [], lon = [];
-  const eA = [], eB = [], eLen = [], eD = [], eAsph = [], eMil = [], eAA = [], eJS = [], eUnk = [], eOne = [], eName = [];
+  const eA = [], eB = [], eLen = [], eD = [], eAsph = [], eMil = [], eAA = [], eJS = [], eUnk = [], eOne = [], eName = [], eMark = [];
   const mil = [], res = [], eRes = [];
   const pois = [];
   const ways = [];
@@ -156,7 +156,7 @@ function buildGraph(elements) {
       if (!g[i] || !g[i + 1]) continue;
       const a = nid(w.nodes[i], g[i]), b = nid(w.nodes[i + 1], g[i + 1]);
       eA.push(a); eB.push(b); eLen.push(hav(g[i].lat, g[i].lon, g[i + 1].lat, g[i + 1].lon));
-      eD.push(info.d); eAsph.push(info.asph ? 1 : 0); eMil.push(m); { const ma = (g[i].lat + g[i + 1].lat) / 2, mo = (g[i].lon + g[i + 1].lon) / 2; eAA.push(inAreaA(ma, mo) ? 1 : 0); eJS.push(ma > 31.3 && ma < 32.6 && mo > 34.85 && pointInRing(ma, mo, JS_RING) ? 1 : 0); } eUnk.push(info.unk ? 1 : 0); eRes.push(rv); eOne.push(one ? 1 : 0); eName.push(name);
+      eD.push(info.d); eAsph.push(info.asph ? 1 : 0); eMil.push(m); { const ma = (g[i].lat + g[i + 1].lat) / 2, mo = (g[i].lon + g[i + 1].lon) / 2; eAA.push(inAreaA(ma, mo) ? 1 : 0); eJS.push(ma > 31.3 && ma < 32.6 && mo > 34.85 && pointInRing(ma, mo, JS_RING) ? 1 : 0); } eUnk.push(info.unk ? 1 : 0); eRes.push(rv); eOne.push(one ? 1 : 0); eName.push(name); eMark.push(!info.asph && w.tags.mark ? 1 : 0);
     }
   }
   const N = lat.length, E = eA.length;
@@ -171,7 +171,7 @@ function buildGraph(elements) {
     N, E, lat: Float64Array.from(lat), lon: Float64Array.from(lon), start, adj,
     eA: Int32Array.from(eA), eB: Int32Array.from(eB), eLen: Float64Array.from(eLen),
     eD: Uint8Array.from(eD), eAsph: Uint8Array.from(eAsph), eMil: Uint8Array.from(eMil), eAA: Uint8Array.from(eAA), eJS: Uint8Array.from(eJS), eRes: Uint8Array.from(eRes), res,
-    eUnk: Uint8Array.from(eUnk), eOne: Uint8Array.from(eOne), eName, pois, mil,
+    eUnk: Uint8Array.from(eUnk), eOne: Uint8Array.from(eOne), eMark: Uint8Array.from(eMark), eName, pois, mil,
   };
 }
 
@@ -298,7 +298,7 @@ function factors(G, p) {
     if (G.eMil[e] === 1 && p.avoid_military && !G.eAsph[e]) { f[e] = Infinity; continue; }
     if (G.eAsph[e]) { f[e] = p.avoid_asphalt ? 7 : 1.6; continue; }
     if (d > maxD) { f[e] = Infinity; continue; }
-    f[e] = 1 + 0.45 * Math.abs(d - tD) + (G.eUnk[e] ? 0.15 : 0) + (G.eRes && G.eRes[e] ? 0.35 : 0); // reserves: prefer going around
+    f[e] = (1 + 0.45 * Math.abs(d - tD) + (G.eUnk[e] ? 0.15 : 0) + (G.eRes && G.eRes[e] ? 0.35 : 0)) * (G.eMark && G.eMark[e] ? 0.8 : 1); // reserves: prefer going around; marked jeep trails: preferred (maintained, legal)
   }
   return f;
 }
@@ -410,7 +410,7 @@ function buildRoute(G, fac, stops, maxCost, used = new Uint8Array(G.E)) {
 }
 
 function routeStats(G, edges, startNode) {
-  let len = 0, hrs = 0, asph = 0, mil = 0, unk = 0, maxD = 0, reuse = 0, aa = 0, js = 0, res = 0;
+  let len = 0, hrs = 0, asph = 0, mil = 0, unk = 0, maxD = 0, reuse = 0, aa = 0, js = 0, res = 0, marked = 0;
   const byD = [0, 0, 0, 0, 0, 0];
   const seen = new Uint8Array(G.E);
   const coords = [];
@@ -421,6 +421,7 @@ function routeStats(G, edges, startNode) {
     const L = G.eLen[e], d = G.eD[e];
     len += L; hrs += L / 1000 / DIFF[d].speed; byD[d] += L;
     if (G.eAsph[e]) asph += L; else maxD = Math.max(maxD, d);
+    if (G.eMark && G.eMark[e]) marked += L;
     if (G.eMil[e]) mil += L; if (G.eUnk[e]) unk += L; if (G.eAA[e]) aa += L; if (G.eJS[e]) js += L; if (G.eRes && G.eRes[e]) res += L;
     if (seen[e]) reuse += L; seen[e] = 1;
     const v = G.eA[e] === u ? G.eB[e] : G.eA[e];
@@ -430,7 +431,7 @@ function routeStats(G, edges, startNode) {
     else segs.push({ d, pts: [[G.lat[u], G.lon[u]], [G.lat[v], G.lon[v]]] });
     u = v;
   }
-  return { len, hrs, asph, mil, unk, aa, js, res, maxD, reuse, byD, coords, segs };
+  return { len, hrs, asph, mil, unk, aa, js, res, marked, maxD, reuse, byD, coords, segs };
 }
 
 function snapPois(G, fac, types, R0, minL, maxL, authOnly = true, snapM = 500) {
@@ -743,7 +744,7 @@ function corridorTiles(points, radiusM) {
   return [...keys];
 }
 function tileBBox(key) { const [, i, j] = key.split('_').map(Number); return [i * TILE, j * TILE, (i + 1) * TILE, (j + 1) * TILE]; }
-const WAY_TAGS = ['highway', 'tracktype', 'surface', 'smoothness', '4wd_only', 'access', 'motor_vehicle', 'motorcar', 'vehicle', 'oneway', 'name', 'name:he', 'ref'];
+const WAY_TAGS = ['highway', 'tracktype', 'surface', 'smoothness', '4wd_only', 'access', 'motor_vehicle', 'motorcar', 'vehicle', 'oneway', 'name', 'name:he', 'ref', 'mark'];
 const POI_TAGS = ['amenity', 'brand', 'backcountry', 'group_only', 'website', 'access', 'tourism', 'natural', 'historic', 'name', 'name:he', 'image', 'wikimedia_commons', 'wikidata', 'operator', 'owner', 'operator:he', 'operator:en', 'fee', 'drinking_water', 'toilets'];
 const MIL_TAGS = ['landuse', 'military', 'leisure', 'boundary', 'protect_class', 'name', 'name:he', 'name:en'];
 const pick = (t, keys) => { const o = {}; for (const k of keys) if (t[k] != null) o[k] = t[k]; return o; };
@@ -955,7 +956,10 @@ function planMultiVia(G, p, nodes, onProgress = () => {}) {
       for (let v = 0; v < G.N; v += 2) {
         const t = Ra.len[v] + Rb.len[v]; if (!isFinite(t) || t < want * 0.8 || t > want * 1.15) continue;
         const crow = hav(G.lat[a], G.lon[a], G.lat[v], G.lon[v]) + hav(G.lat[v], G.lon[v], G.lat[b], G.lon[b]);
-        if (hav(G.lat[a], G.lon[a], G.lat[v], G.lon[v]) > crowAB * 1.1 + 3000 || hav(G.lat[v], G.lon[v], G.lat[b], G.lon[b]) > crowAB * 1.1 + 3000) continue; // never backwards: the turn point lies between the two stops
+        { // never backwards: the turn point may lie to the side, but not behind the first stop or past the second
+          const kx = Math.cos(G.lat[a] * Math.PI / 180), bx = (G.lon[b] - G.lon[a]) * kx, by = G.lat[b] - G.lat[a], vx = (G.lon[v] - G.lon[a]) * kx, vy = G.lat[v] - G.lat[a];
+          const tpos = (vx * bx + vy * by) / Math.max(1e-12, bx * bx + by * by); if (tpos < -0.1 || tpos > 1.1) continue;
+        }
         if (crow < Math.max(crowAB * 1.15, t * 0.45)) continue; // a turn point that the way reaches and leaves along the same valley is just driving back
         pool.push({ v, sc: (Ra.dist[v] + Rb.dist[v]) / t + Math.abs(t - want) / want }); // cost per metre: low = dirt
       }
@@ -964,7 +968,7 @@ function planMultiVia(G, p, nodes, onProgress = () => {}) {
       for (const { v: best } of pool.slice(0, 12)) {
         const p1 = pathEdges(G, Ra, best), R2 = dijkstra(G, best, fac, null, Infinity, b), p2 = pathEdges(G, R2, b);
         if (!p1 || !p2) continue;
-        if (corridorOverlap(G, p1, p2, best) > 0.2) continue; // out on one track and back on the one beside it: the same ground twice
+        if (corridorOverlap(G, p1, p2, best) > 0.5) continue; // out on one track and back on the one beside it: the same ground twice
         if (roomy || asphOf([...p1, ...p2]) < asphOf(legs0[i]) - 0.1) { legs0[i] = [...p1, ...p2]; ins[i] = best; }
         break;
       }
@@ -989,11 +993,11 @@ function planMultiVia(G, p, nodes, onProgress = () => {}) {
     let idx = cum.findIndex(x => x >= target); if (idx < 0) idx = cum.length - 1;
     const [la, lo] = [G.lat[seq[idx]], G.lon[seq[idx]]];
     let best = null, bd = Infinity;
-    const win = total / N * 0.15; let i0 = idx, i1 = idx; while (i0 > 0 && cum[i0] > target - win) i0--; while (i1 < cum.length - 1 && cum[i1] < target + win) i1++;
+    const win = total / N * 0.1; let i0 = idx, i1 = idx; while (i0 > 0 && cum[i0] > target - win) i0--; while (i1 < cum.length - 1 && cum[i1] < target + win) i1++;
     for (const c of camps) {
       if (nights.some(n => n.camp.node === c.node || hav(n.camp.lat, n.camp.lon, c.lat, c.lon) < 8000)) continue; // not back to last night's area
       let dr = Infinity; for (let q = i0; q <= i1; q += 3) { const d = hav(G.lat[seq[q]], G.lon[seq[q]], c.lat, c.lon); if (d < dr) dr = d; } // off the way, not off one point
-      const d = dr * 1.6 + hav(la, lo, c.lat, c.lon) * 0.25;
+      const d = hav(la, lo, c.lat, c.lon) + dr * 0.3; // close to where the day should end, a little closer to the way
       if (dr < 15000 && d < bd) { bd = d; best = c; }
     }
     let pos = 0; while (pos < legEnd.length && legEnd[pos] < idx) pos++;

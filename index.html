@@ -130,7 +130,7 @@ header button{pointer-events:auto;margin-inline-start:auto}
 .hrow{display:grid;grid-template-columns:12px 1fr;column-gap:8px;padding:6px 0;border-top:1px solid var(--line);font-size:13px}
 .hrow:first-child{border-top:0}
 .hrow i{width:10px;height:10px;border-radius:50%;margin-top:4px;background:#c9c1b4}
-.hrow.ok i{background:#2e8b57}.hrow.warn i{background:#e0a100}.hrow.bad i{background:#c0392b}
+.hrow.ok i{background:#2e8b57}.hrow.info i{background:#9aa3ad}.hrow.warn i{background:#e0a100}.hrow.bad i{background:#c0392b}
 .hrow b{font-weight:600}
 .hrow small{grid-column:2;color:var(--muted);font-size:12px}
 .hgroup{font-size:12px;color:var(--muted);margin:10px 0 2px}
@@ -605,7 +605,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.70 · 11.11.2026 12:13</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.71 · 11.11.2026 13:10</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -734,7 +734,7 @@ function pointInRing(lat, lon, ring) {
 function buildGraph(elements) {
   const idx = new Map();
   const lat = [], lon = [];
-  const eA = [], eB = [], eLen = [], eD = [], eAsph = [], eMil = [], eAA = [], eJS = [], eUnk = [], eOne = [], eName = [];
+  const eA = [], eB = [], eLen = [], eD = [], eAsph = [], eMil = [], eAA = [], eJS = [], eUnk = [], eOne = [], eName = [], eMark = [];
   const mil = [], res = [], eRes = [];
   const pois = [];
   const ways = [];
@@ -802,7 +802,7 @@ function buildGraph(elements) {
       if (!g[i] || !g[i + 1]) continue;
       const a = nid(w.nodes[i], g[i]), b = nid(w.nodes[i + 1], g[i + 1]);
       eA.push(a); eB.push(b); eLen.push(hav(g[i].lat, g[i].lon, g[i + 1].lat, g[i + 1].lon));
-      eD.push(info.d); eAsph.push(info.asph ? 1 : 0); eMil.push(m); { const ma = (g[i].lat + g[i + 1].lat) / 2, mo = (g[i].lon + g[i + 1].lon) / 2; eAA.push(inAreaA(ma, mo) ? 1 : 0); eJS.push(ma > 31.3 && ma < 32.6 && mo > 34.85 && pointInRing(ma, mo, JS_RING) ? 1 : 0); } eUnk.push(info.unk ? 1 : 0); eRes.push(rv); eOne.push(one ? 1 : 0); eName.push(name);
+      eD.push(info.d); eAsph.push(info.asph ? 1 : 0); eMil.push(m); { const ma = (g[i].lat + g[i + 1].lat) / 2, mo = (g[i].lon + g[i + 1].lon) / 2; eAA.push(inAreaA(ma, mo) ? 1 : 0); eJS.push(ma > 31.3 && ma < 32.6 && mo > 34.85 && pointInRing(ma, mo, JS_RING) ? 1 : 0); } eUnk.push(info.unk ? 1 : 0); eRes.push(rv); eOne.push(one ? 1 : 0); eName.push(name); eMark.push(!info.asph && w.tags.mark ? 1 : 0);
     }
   }
   const N = lat.length, E = eA.length;
@@ -817,7 +817,7 @@ function buildGraph(elements) {
     N, E, lat: Float64Array.from(lat), lon: Float64Array.from(lon), start, adj,
     eA: Int32Array.from(eA), eB: Int32Array.from(eB), eLen: Float64Array.from(eLen),
     eD: Uint8Array.from(eD), eAsph: Uint8Array.from(eAsph), eMil: Uint8Array.from(eMil), eAA: Uint8Array.from(eAA), eJS: Uint8Array.from(eJS), eRes: Uint8Array.from(eRes), res,
-    eUnk: Uint8Array.from(eUnk), eOne: Uint8Array.from(eOne), eName, pois, mil,
+    eUnk: Uint8Array.from(eUnk), eOne: Uint8Array.from(eOne), eMark: Uint8Array.from(eMark), eName, pois, mil,
   };
 }
 
@@ -944,7 +944,7 @@ function factors(G, p) {
     if (G.eMil[e] === 1 && p.avoid_military && !G.eAsph[e]) { f[e] = Infinity; continue; }
     if (G.eAsph[e]) { f[e] = p.avoid_asphalt ? 7 : 1.6; continue; }
     if (d > maxD) { f[e] = Infinity; continue; }
-    f[e] = 1 + 0.45 * Math.abs(d - tD) + (G.eUnk[e] ? 0.15 : 0) + (G.eRes && G.eRes[e] ? 0.35 : 0); // reserves: prefer going around
+    f[e] = (1 + 0.45 * Math.abs(d - tD) + (G.eUnk[e] ? 0.15 : 0) + (G.eRes && G.eRes[e] ? 0.35 : 0)) * (G.eMark && G.eMark[e] ? 0.8 : 1); // reserves: prefer going around; marked jeep trails: preferred (maintained, legal)
   }
   return f;
 }
@@ -1056,7 +1056,7 @@ function buildRoute(G, fac, stops, maxCost, used = new Uint8Array(G.E)) {
 }
 
 function routeStats(G, edges, startNode) {
-  let len = 0, hrs = 0, asph = 0, mil = 0, unk = 0, maxD = 0, reuse = 0, aa = 0, js = 0, res = 0;
+  let len = 0, hrs = 0, asph = 0, mil = 0, unk = 0, maxD = 0, reuse = 0, aa = 0, js = 0, res = 0, marked = 0;
   const byD = [0, 0, 0, 0, 0, 0];
   const seen = new Uint8Array(G.E);
   const coords = [];
@@ -1067,6 +1067,7 @@ function routeStats(G, edges, startNode) {
     const L = G.eLen[e], d = G.eD[e];
     len += L; hrs += L / 1000 / DIFF[d].speed; byD[d] += L;
     if (G.eAsph[e]) asph += L; else maxD = Math.max(maxD, d);
+    if (G.eMark && G.eMark[e]) marked += L;
     if (G.eMil[e]) mil += L; if (G.eUnk[e]) unk += L; if (G.eAA[e]) aa += L; if (G.eJS[e]) js += L; if (G.eRes && G.eRes[e]) res += L;
     if (seen[e]) reuse += L; seen[e] = 1;
     const v = G.eA[e] === u ? G.eB[e] : G.eA[e];
@@ -1076,7 +1077,7 @@ function routeStats(G, edges, startNode) {
     else segs.push({ d, pts: [[G.lat[u], G.lon[u]], [G.lat[v], G.lon[v]]] });
     u = v;
   }
-  return { len, hrs, asph, mil, unk, aa, js, res, maxD, reuse, byD, coords, segs };
+  return { len, hrs, asph, mil, unk, aa, js, res, marked, maxD, reuse, byD, coords, segs };
 }
 
 function snapPois(G, fac, types, R0, minL, maxL, authOnly = true, snapM = 500) {
@@ -1389,7 +1390,7 @@ function corridorTiles(points, radiusM) {
   return [...keys];
 }
 function tileBBox(key) { const [, i, j] = key.split('_').map(Number); return [i * TILE, j * TILE, (i + 1) * TILE, (j + 1) * TILE]; }
-const WAY_TAGS = ['highway', 'tracktype', 'surface', 'smoothness', '4wd_only', 'access', 'motor_vehicle', 'motorcar', 'vehicle', 'oneway', 'name', 'name:he', 'ref'];
+const WAY_TAGS = ['highway', 'tracktype', 'surface', 'smoothness', '4wd_only', 'access', 'motor_vehicle', 'motorcar', 'vehicle', 'oneway', 'name', 'name:he', 'ref', 'mark'];
 const POI_TAGS = ['amenity', 'brand', 'backcountry', 'group_only', 'website', 'access', 'tourism', 'natural', 'historic', 'name', 'name:he', 'image', 'wikimedia_commons', 'wikidata', 'operator', 'owner', 'operator:he', 'operator:en', 'fee', 'drinking_water', 'toilets'];
 const MIL_TAGS = ['landuse', 'military', 'leisure', 'boundary', 'protect_class', 'name', 'name:he', 'name:en'];
 const pick = (t, keys) => { const o = {}; for (const k of keys) if (t[k] != null) o[k] = t[k]; return o; };
@@ -1601,7 +1602,10 @@ function planMultiVia(G, p, nodes, onProgress = () => {}) {
       for (let v = 0; v < G.N; v += 2) {
         const t = Ra.len[v] + Rb.len[v]; if (!isFinite(t) || t < want * 0.8 || t > want * 1.15) continue;
         const crow = hav(G.lat[a], G.lon[a], G.lat[v], G.lon[v]) + hav(G.lat[v], G.lon[v], G.lat[b], G.lon[b]);
-        if (hav(G.lat[a], G.lon[a], G.lat[v], G.lon[v]) > crowAB * 1.1 + 3000 || hav(G.lat[v], G.lon[v], G.lat[b], G.lon[b]) > crowAB * 1.1 + 3000) continue; // never backwards: the turn point lies between the two stops
+        { // never backwards: the turn point may lie to the side, but not behind the first stop or past the second
+          const kx = Math.cos(G.lat[a] * Math.PI / 180), bx = (G.lon[b] - G.lon[a]) * kx, by = G.lat[b] - G.lat[a], vx = (G.lon[v] - G.lon[a]) * kx, vy = G.lat[v] - G.lat[a];
+          const tpos = (vx * bx + vy * by) / Math.max(1e-12, bx * bx + by * by); if (tpos < -0.1 || tpos > 1.1) continue;
+        }
         if (crow < Math.max(crowAB * 1.15, t * 0.45)) continue; // a turn point that the way reaches and leaves along the same valley is just driving back
         pool.push({ v, sc: (Ra.dist[v] + Rb.dist[v]) / t + Math.abs(t - want) / want }); // cost per metre: low = dirt
       }
@@ -1610,7 +1614,7 @@ function planMultiVia(G, p, nodes, onProgress = () => {}) {
       for (const { v: best } of pool.slice(0, 12)) {
         const p1 = pathEdges(G, Ra, best), R2 = dijkstra(G, best, fac, null, Infinity, b), p2 = pathEdges(G, R2, b);
         if (!p1 || !p2) continue;
-        if (corridorOverlap(G, p1, p2, best) > 0.2) continue; // out on one track and back on the one beside it: the same ground twice
+        if (corridorOverlap(G, p1, p2, best) > 0.5) continue; // out on one track and back on the one beside it: the same ground twice
         if (roomy || asphOf([...p1, ...p2]) < asphOf(legs0[i]) - 0.1) { legs0[i] = [...p1, ...p2]; ins[i] = best; }
         break;
       }
@@ -1635,11 +1639,11 @@ function planMultiVia(G, p, nodes, onProgress = () => {}) {
     let idx = cum.findIndex(x => x >= target); if (idx < 0) idx = cum.length - 1;
     const [la, lo] = [G.lat[seq[idx]], G.lon[seq[idx]]];
     let best = null, bd = Infinity;
-    const win = total / N * 0.15; let i0 = idx, i1 = idx; while (i0 > 0 && cum[i0] > target - win) i0--; while (i1 < cum.length - 1 && cum[i1] < target + win) i1++;
+    const win = total / N * 0.1; let i0 = idx, i1 = idx; while (i0 > 0 && cum[i0] > target - win) i0--; while (i1 < cum.length - 1 && cum[i1] < target + win) i1++;
     for (const c of camps) {
       if (nights.some(n => n.camp.node === c.node || hav(n.camp.lat, n.camp.lon, c.lat, c.lon) < 8000)) continue; // not back to last night's area
       let dr = Infinity; for (let q = i0; q <= i1; q += 3) { const d = hav(G.lat[seq[q]], G.lon[seq[q]], c.lat, c.lon); if (d < dr) dr = d; } // off the way, not off one point
-      const d = dr * 1.6 + hav(la, lo, c.lat, c.lon) * 0.25;
+      const d = hav(la, lo, c.lat, c.lon) + dr * 0.3; // close to where the day should end, a little closer to the way
       if (dr < 15000 && d < bd) { bd = d; best = c; }
     }
     let pos = 0; while (pos < legEnd.length && legEnd[pos] < idx) pos++;
@@ -1999,16 +2003,16 @@ const HEALTH = [
   ]],
   ['נתוני שבילים (נבנים אצלנו מ-OpenStreetMap)', [
     ['שבילים בישראל', async () => tilesHealth(STATIC_TILES, 'tiles.yml', 10, 'שבועי')],
-    ['שבילים באירופה ובגאורגיה', async () => tilesHealth(STATIC_EU, 'tiles-eu.yml', 40, 'חודשי')],
+    ['שבילים בחו״ל (אירופה, טורקיה, ירדן, מרוקו ועוד)', async () => tilesHealth(STATIC_EU, 'tiles-eu.yml', 40, 'שבועי, כל מדינה פעם בחודש')],
     ['מטמון השבילים בדפדפן', async () => { const n = await new Promise(res => { try { const r = indexedDB.open('offroad', 1); r.onupgradeneeded = () => r.result.createObjectStore('tiles'); r.onsuccess = () => { try { const q = r.result.transaction('tiles').objectStore('tiles').count(); q.onsuccess = () => res(q.result); q.onerror = () => res(-1); } catch { res(-1); } }; r.onerror = () => res(-1); } catch { res(-1); } }); return n < 0 ? ['warn', 'לא זמין (מצב פרטי?). הכול יעבוד, רק לאט יותר'] : ['ok', `${n} אריחים שמורים`]; }],
   ]],
   ['שירותים חיצוניים', [
     ['חישוב דרכים (OSRM)', async () => { const t = Date.now(), r = await fetch('https://router.project-osrm.org/route/v1/driving/34.80,30.61;34.79,30.60?overview=false', { cache: 'no-store' }); const j = await r.json(); return [j.code === 'Ok' ? (Date.now() - t > 4000 ? 'warn' : 'ok') : 'bad', j.code === 'Ok' ? `עונה (${Date.now() - t} ms) · לטיולים ארוכים ומעבורות` : 'לא עונה. יש גיבוי דרך השרת']; }],
-    ['שבילים חיים (Overpass)', async () => { // only a fallback for places outside the prebuilt tiles: busy is a warning, not a failure
+    ['שבילים חיים (Overpass) · גיבוי בלבד', async () => { // only a fallback for places outside the prebuilt tiles: its state never counts against the system
       const one = async u => { const t = Date.now(), c = new AbortController(), to = setTimeout(() => c.abort(), 8000); try { const r = await fetch(u, { cache: 'no-store', signal: c.signal }); const txt = await r.text(); if (!r.ok) throw 0; return { ms: Date.now() - t, slots: /(\d+) slots available now/.exec(txt)?.[1] }; } finally { clearTimeout(to); } };
       const res = await Promise.allSettled([one('https://overpass-api.de/api/status'), one('https://overpass.private.coffee/api/status')]);
       const ok = res.find(x => x.status === 'fulfilled')?.value;
-      return ok ? ['ok', `עונה (${ok.ms} ms)${ok.slots ? ` · ${ok.slots} מקומות פנויים` : ''} · רק לאזורים מחוץ לאריחים`] : ['warn', 'עמוס או לא עונה. משפיע רק על אזורים שאין להם אריחים מוכנים; יש גם גיבוי דרך השרת']; }],
+      return ['info', ok ? `זמין (${ok.ms} ms). משמש רק לאזורים שאין להם אריחים מוכנים` : 'עמוס כרגע (קורה הרבה). משמש רק לאזורים שאין להם אריחים מוכנים, ויש לו גיבוי דרך השרת']; }],
     ['חיפוש מקומות (Nominatim)', async () => { const t = Date.now(), j = await (await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent('מצפה רמון'))).json(); return [j.length ? 'ok' : 'warn', j.length ? `עונה (${Date.now() - t} ms)` : 'עונה בלי תוצאות']; }],
     ['מזג אוויר (Open-Meteo)', async () => { const t = Date.now(), j = await (await fetch('https://api.open-meteo.com/v1/forecast?latitude=30.6&longitude=34.8&daily=sunset&forecast_days=1', { cache: 'no-store' })).json(); return [j.daily ? 'ok' : 'bad', j.daily ? `עונה (${Date.now() - t} ms)` : (j.reason || 'שגיאה')]; }],
     ['גבהים (Open-Meteo)', async () => { const j = await (await fetch('https://api.open-meteo.com/v1/elevation?latitude=30.6&longitude=34.8', { cache: 'no-store' })).json(); return [Array.isArray(j.elevation) ? 'ok' : 'bad', Array.isArray(j.elevation) ? `עונה · מצפה רמון ${Math.round(j.elevation[0])} מ׳` : (j.reason || 'שגיאה')]; }],
@@ -2023,7 +2027,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.70 · 11.11.2026 12:13']],
+    ['גרסת האפליקציה', async () => ['ok', '1.71 · 11.11.2026 13:10']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -2035,7 +2039,9 @@ async function tilesHealth(base, wf, maxDays, every) {
   try { const g = await (await fetch(`https://api.github.com/repos/chemik13/offroad/actions/workflows/${wf}/runs?per_page=1`)).json(); const x = g.workflow_runs?.[0];
     if (x) run = x.status !== 'completed' ? ' · בנייה חדשה רצה עכשיו' : x.conclusion === 'success' ? '' : ` · הבנייה האחרונה נכשלה (${new Date(x.created_at).toLocaleDateString('he-IL')})`; } catch {}
   const lvl = age > maxDays * 3 * 864e5 || /נכשלה/.test(run) ? 'bad' : age > maxDays * 864e5 ? 'warn' : 'ok';
-  return [lvl, `עודכנו ${ago(age)} (${built.toLocaleDateString('he-IL')}) · ${j.keys?.length || 0} אריחים · עדכון ${every}${run}`];
+  const cs = Object.entries(j.countries || {}); const stale = cs.filter(([, c]) => Date.now() - new Date(c.built) > 35 * 864e5).map(([n]) => n);
+  const marked = cs.reduce((t, [, c]) => t + (c.marked || 0), 0);
+  return [stale.length && lvl === 'ok' ? 'warn' : lvl, `עודכנו ${ago(age)} (${built.toLocaleDateString('he-IL')}) · ${j.keys?.length || 0} אריחים${cs.length > 1 ? ` · ${cs.length} מדינות` : ''}${marked ? ` · ${marked.toLocaleString('he-IL')} קטעי שבילים מסומנים` : ''} · עדכון ${every}${stale.length ? ` · ישנים: ${stale.join(', ')}` : ''}${run}`];
 }
 let healthTok = 0;
 async function runHealth() {
@@ -2047,7 +2053,7 @@ async function runHealth() {
       const row = document.createElement('div'); row.className = 'hrow'; row.innerHTML = '<i></i><b></b><small>בודק…</small>'; row.querySelector('b').textContent = name; box.append(row);
       jobs.push(Promise.race([Promise.resolve().then(fn), new Promise(r => setTimeout(() => r(['bad', 'לא ענה תוך 15 שניות']), 15000))])
         .catch(e => ['bad', e.status === 401 ? 'קוד הקבוצה לא נכון' : 'לא זמין' + (e.message ? ` (${String(e.message).slice(0, 60)})` : '')])
-        .then(([lvl, txt]) => { if (tok !== healthTok) return; row.className = 'hrow ' + lvl; row.querySelector('small').textContent = txt; if (lvl === 'ok') ok++; else if (lvl === 'warn') warn++; else bad++;
+        .then(([lvl, txt]) => { if (tok !== healthTok) return; row.className = 'hrow ' + lvl; row.querySelector('small').textContent = txt; if (lvl === 'ok' || lvl === 'info') ok++; else if (lvl === 'warn') warn++; else bad++;
           $('healthSum').textContent = bad ? `· ${bad} לא תקינים` : warn ? `· ${warn} אזהרות` : `· הכול תקין`; }));
     }
   }
@@ -2150,7 +2156,8 @@ const TOOL = {
       days: { type: 'integer', description: 'Number of trip days for multi-day trips (2-30; for long journeys = total km / max_km_per_day). סופ"ש / weekend = 2. Omit for a single day.' },
       hours_per_day: { type: 'number', description: 'Driving hours per day for multi-day trips, if stated' },
       max_km_per_day: { type: 'number', description: 'Maximum driving distance per day in km, if stated (use the upper bound of a range)' },
-      offroad_share: { type: 'number', description: 'Wanted off-road share of the driving, 0-1 ("30-40% שטח" = 0.35)' },
+      offroad_share: { type: 'number', description: 'Wanted off-road share of the driving, 0-1 ("30-40% שטח" = 0.35). Omit if not stated (the default is mostly off-road).' },
+      more_offroad_days: { type: 'array', items: { type: 'integer' }, description: 'Days (1-based) the user asks for MORE off-road on ("יותר שטח ביום 14" = [14]). Keep all other parameters of the current trip.' },
       wild_camping: { type: 'boolean', description: 'User is fine sleeping outside campsites (in nature, by a lake, in a forest)' },
       camp_every_days: { type: 'number', description: 'If wild nights are fine: an official campsite every N nights' },
       night_near_water: { type: 'boolean', description: 'User wants to sleep by lakes / water' },
@@ -2517,7 +2524,7 @@ function dictation(btn, field, onDone, grow = () => {}) {
   btn.onclick = () => {
     if (!SR) { status('הדפדפן הזה לא תומך בזיהוי דיבור. השתמשו במיקרופון שבמקלדת של הטלפון.', true); field.focus(); return; }
     if (active) { finish(true); return; } // tap again = done
-    base = field.value.trim(); said = ''; interim = ''; lastErr = null; started = Date.now(); active = true;
+    base = field.value.trim(); if (current && base && base === (current.prompt || '').trim()) base = ''; // a new request, not an addition to the last one said = ''; interim = ''; lastErr = null; started = Date.now(); active = true;
     ui(true); status('מקשיב… דברו בחופשיות. מסיים אחרי 3 שניות שקט, או בלחיצה על המיקרופון.');
     arm(FIRST_WORDS);
     try { startRec(); } catch { finish(false); status('לא הצלחתי להפעיל את המיקרופון.', true); }
@@ -2740,12 +2747,22 @@ async function osrmFerry(wps, fer) {
   }
   return { coords, ferry, legs };
 }
+// how much of a track runs within ~300 m of where it already was more than 2 km earlier (0..1)
+function selfRevisit(c) {
+  const first = new Map(); let cum = 0, side = 0;
+  for (let i = 1; i < c.length; i++) { const d = hav(c[i - 1][0], c[i - 1][1], c[i][0], c[i][1]); cum += d; const la = Math.round(c[i][0] / 0.0027), lo = Math.round(c[i][1] / 0.0038);
+    let hit = false; for (let dx = -1; dx <= 1 && !hit; dx++) for (let dy = -1; dy <= 1 && !hit; dy++) { const f = first.get((la + dx) + ',' + (lo + dy)); if (f != null && f < cum - 2000) hit = true; }
+    if (hit) side += d; const k = la + ',' + lo; if (!first.has(k)) first.set(k, cum); }
+  return cum ? side / cum : 0;
+}
 // camps, fuel and food near points, straight from the prebuilt tiles (no slow server queries); null = no tiles there
 async function poisFromTiles(points, radius) {
   const keysBy = points.map(q => tilesFor(bboxFor([q], radius)));
   const { tiles } = await ensureTiles([...new Set(keysBy.flat())], { bg: true, noOsm: true });
   const camps = [], supply = [], seen = new Set(), miss = [], lakes = new Map();
-  for (const t of Object.values(tiles)) for (const [id, nm, ring] of t.lk || []) lakes.set(id, { nm, ring });
+  const NOT_LAKE = /darsena|bacino|vasca|\bcava\b|laghett|stagno|\bpond\b|basin|dock|marina|porto|peschier|fishpond|klärteich|depurat/i;
+  const ringArea = ring => { let a = 0; const la0 = ring[0], kx = Math.cos(la0 * Math.PI / 180) * 111320, ky = 110540; for (let i = 0; i + 3 < ring.length; i += 2) a += (ring[i + 1] * kx) * (ring[i + 2] * ky) - (ring[i + 3] * kx) * (ring[i] * ky); return Math.abs(a) / 2; };
+  for (const t of Object.values(tiles)) for (const [id, nm, ring] of t.lk || []) { if ((nm && NOT_LAKE.test(nm)) || ringArea(ring) < 150000) continue; lakes.set(id, { nm, ring }); } // a lake to sleep by: 15 ha and up
   // within ~400 m of a lake shore (or on it)
   const byLake = (la, lo) => {
     const kx = Math.cos(la * Math.PI / 180) * 111320, ky = 110540;
@@ -2850,7 +2867,8 @@ async function planOverland(p, sLL, eLL, viaLL) {
   if (!end) throw new Error('לטיול ארוך צריך יעד או לפחות אזור אחד בדרך.');
   const vias = eLL || p.loop ? viaLL : viaLL.slice(0, -1);
   const maxH = p.hours_per_day || 7, maxKm = p.max_km_per_day || (p.distance_km && p.days ? p.distance_km / p.days : null);
-  const share = Math.min(0.8, Math.max(0.1, p.offroad_share || 0.35)); // wanted off-road part of the driving
+  const share = Math.min(0.9, Math.max(0.1, p.offroad_share || 0.6)); // wanted off-road part of the driving: by default most of it (a jeep trip, not a road trip)
+  const moreDays = new Set((p.more_offroad_days || []).map(Number));
   const places = [p.start, p.end, ...(p.via || [])].filter(x => x && x.country && x.lat);
   const countryAt = ll => { let b = null, bd = Infinity; for (const x of places) { const d = hav(ll[0], ll[1], x.lat, x.lon); if (d < bd) { bd = d; b = x.country; } } return b || p.country; };
   // where dirt roads are open to cars: spare days go there (Alpine countries close most forest roads)
@@ -2944,17 +2962,46 @@ async function planOverland(p, sLL, eLL, viaLL) {
     for (let d = 0; d < bounds.length - 1; d++) {
       const st = bounds[d], en = bounds[d + 1], spanKm = en.km - st.km;
       const pieceOff = vias.reduce((t, _, l) => t + (pieces[l] && legIdx0[l + 1] > st.i && legIdx0[l + 1] <= en.i ? (pieces[l].len - pieces[l].asph) / 1000 : 0), 0); // a highlight loop already on this day
-      if (spanKm < 25 || spanKm * share - pieceOff < 6) continue;
-      const want = Math.min(90, Math.max(10, spanKm * share * 1.7), spanKm * 0.8); // road km to swap for trails (a stretch is ~70% trail)
+      const more = moreDays.has(d + 1), sh = more ? Math.max(0.85, share + 0.25) : share;
+      if (spanKm < 25 || spanKm * sh - pieceOff < 6) continue;
+      const want = Math.min(spanKm * 0.96, Math.max(10, spanKm * sh * 1.7)); // road km to swap for trails (a stretch is ~70% trail)
+      const n = Math.max(1, Math.min(4, Math.ceil(want / 45))), seg = want / n; // most of the day: several stretches one after another, each ~45 km of road or less
       const tries = [];
-      for (const [at, w] of [[0.1, 1], [0.45, 1], [0.25, 0.7], [0.6, 0.6], [0.02, 0.5], [0.75, 0.4], [0.35, 0.4]]) { // several windows, shorter ones last
-        const A = timeline.find(t => t.km >= st.km + spanKm * at && !t.sea), B = A && timeline.find(t => t.km >= A.km + Math.max(8, want * w) && !t.sea);
-        if (A && B && B.i < en.i && !timeline.some(t => t.sea && t.i >= A.i && t.i <= B.i)) tries.push({ A, B });
-      }
+      const add = (from, len) => { const A = timeline.find(t => t.km >= st.km + from && !t.sea), B = A && timeline.find(t => t.km >= A.km + Math.max(8, len) && !t.sea);
+        if (A && B && B.i < en.i && !timeline.some(t => t.sea && t.i >= A.i && t.i <= B.i)) tries.push({ A, B }); };
+      const gap = (spanKm * 0.96 - want) / (n + 1);
+      for (let q = 0; q < n; q++) add(spanKm * 0.02 + gap * (q + 1) + seg * q, seg); // the chain
+      for (let q = 0; q < n; q++) add(spanKm * 0.02 + gap * (q + 1) + seg * q + seg * 0.25, seg * 0.5); // shorter ones in the same places, if a long one finds no trail
+      const w0 = Math.min(90, want, spanKm * 0.8); for (const [at, w] of [[0.1, 1], [0.45, 1], [0.25, 0.7], [0.6, 0.6], [0.02, 0.5], [0.75, 0.4], [0.35, 0.4]]) add(spanKm * at, w0 * w); // the classic windows too
       const M = timeline.find(t => t.km >= st.km + spanKm * 0.5 && !t.sea && t.i < en.i);
-      if (tries.length || M) jobs.push({ d, tries, M, target: spanKm * share - pieceOff, room: Math.max(10, (maxKm || spanKm * 1.3) - spanKm + 15), loopKm: Math.max(8, Math.min(40, want, (maxKm || want * 2) - spanKm + 10)) });
+      if (tries.length || M) jobs.push({ d, more, st, span: spanKm, tries, M, target: spanKm * sh - pieceOff, room: Math.max(10, (maxKm || spanKm * 1.3) - spanKm + 15) + (more ? 40 : 0), loopKm: Math.max(8, Math.min(40, want, (maxKm || want * 2) - spanKm + 10)) });
     }
-    let done = 0; const deadline = Date.now() + 100000; // prebuilt tiles load in seconds; never let this stall the plan
+    let done = 0; const deadline = Date.now() + 120000;
+    // a day whose road has no trail beside it: try a way through the nearby area with the most trails (left or right of the road), road ends kept
+    const seekTrails = async (j, have) => {
+      const A = timeline.find(t => t.km >= j.st.km + j.span * 0.05 && !t.sea), B = [...timeline].reverse().find(t => t.km <= j.st.km + j.span * 0.95 && !t.sea);
+      if (!A || !B || B.i <= A.i || timeline.some(t => t.sea && t.i >= A.i && t.i <= B.i)) return null;
+      const a = A.c, b = B.c, kx = Math.cos(a[0] * Math.PI / 180) * 111320, ky = 110540;
+      const vx = (b[1] - a[1]) * kx, vy = (b[0] - a[0]) * ky, vl = Math.hypot(vx, vy) || 1, nx = -vy / vl, ny = vx / vl; // across the road
+      const cands = []; for (const f of [0.3, 0.5, 0.7]) for (const off of [-36000, -24000, -13000, 13000, 24000, 36000]) cands.push([a[0] + ((b[0] - a[0]) * f) + ny * off / ky, a[1] + ((b[1] - a[1]) * f) + nx * off / kx]);
+      const G = await Promise.race([loadGraph(tilesFor(bboxFor([a, b, ...cands], 9000)), { quiet: true, noOsm: 'outside' }), new Promise(r => setTimeout(() => r(null), 40000))]).catch(() => null);
+      if (!G) return null;
+      // trail density: dirt km within 7 km of each candidate
+      const dens = cands.map(c => { let m = 0; for (let e = 0; e < G.eLen.length; e++) { if (G.eAsph[e]) continue; const n = G.eA[e]; if (Math.abs(G.lat[n] - c[0]) < 0.065 && Math.abs(G.lon[n] - c[1]) < 0.085) m += G.eLen[e]; } return { c, m }; }).sort((x, y) => y.m - x.m);
+      const fac = factors(G, { ...p, avoid_asphalt: true, avoid_military: true });
+      const s0 = nearestNode(G, a[0], a[1], fac, 3000), e0 = nearestNode(G, b[0], b[1], fac, 3000); if (s0 < 0 || e0 < 0) return null;
+      let best = null;
+      for (const { c, m } of dens.slice(0, 4)) {
+        if (m < 15000 || Date.now() > deadline - 5000) break;
+        const c0 = nearestNode(G, c[0], c[1], fac, 4000); if (c0 < 0) continue;
+        const p1 = pathEdges(G, dijkstra(G, s0, fac, null, Infinity, c0), c0), p2 = p1 && pathEdges(G, dijkstra(G, c0, fac, null, Infinity, e0), e0);
+        if (!p1 || !p2) continue;
+        const r = routeStats(G, [...p1, ...p2], s0), off = r.len - r.asph;
+        if (off / r.len < 0.4 || r.len > (B.km - A.km) * 1000 + (j.room + (j.more ? 25 : 0)) * 1000 || selfRevisit(r.coords) > 0.12) continue;
+        if (!best || off > best.off) best = { A, B, r, off };
+      }
+      return best && best.off > have ? best : null;
+    }; // prebuilt tiles load in seconds; never let this stall the plan
     const one = async j => {
       try {
         const found = [];
@@ -2970,19 +3017,24 @@ async function planOverland(p, sLL, eLL, viaLL) {
           if (!edges || !edges.length) continue;
           const r = routeStats(G, edges, s0);
           if ((r.len - r.asph) / r.len < 0.35 || r.len > (B.km - A.km) * 1000 + Math.max(12000, j.room * 1000)) continue; // mostly trail, and only as much extra as the day has room for
+          if (r.len > (B.km - A.km) * 1000 * 1.9 || selfRevisit(r.coords) > 0.1) continue; // a stretch goes somewhere: no zig-zag through the same fields
           found.push({ A, B, r, off: r.len - r.asph });
         }
-        // the best stretches that do not overlap, until the day reaches its off-road share (at most 2)
-        found.sort((x, y) => y.off - x.off);
-        const used = []; let offSum = 0;
-        for (const f of found) {
-          if (used.some(u => !(f.B.i < u.A.i || f.A.i > u.B.i))) continue;
-          used.push(f); offSum += f.off; if (offSum >= j.target * 1000 * 1.1 || used.length >= 3) break;
+        // the best stretches that do not overlap, until the day reaches its off-road share
+        const pick = list => { list.sort((x, y) => y.off - x.off); const u = []; let o = 0;
+          let extra = 0; const cap = (j.room + (j.more ? 25 : 0)) * 1000; // all stretches of the day together stay within the day's room
+          for (const f of list) { if (u.some(v => !(f.B.i < v.A.i || f.A.i > v.B.i))) continue; const x = Math.max(0, f.r.len - (f.B.km - f.A.km) * 1000); if (extra + x > cap) continue; u.push(f); o += f.off; extra += x; if (o >= j.target * 1000 * 1.1 || u.length >= 5) break; }
+          return [u, o]; };
+        let [used, offSum] = pick(found);
+        // the road runs through farmland (tracks there are short dead ends): move the day into the hills where the trails are
+        if (offSum < j.target * 1000 * 0.6 && Date.now() < deadline - 15000 && j.tries.length) {
+          const seek = await seekTrails(j, offSum).catch(e => { console.warn('seek', j.d, e?.message || e); return null; });
+          if (seek && seek.off > offSum + 10000) [used, offSum] = [[seek], seek.off];
         }
         for (const { r } of used) live.dirt(r.coords);
         for (const { A, B, r } of used) dayOff.push({ d: j.d, A, B, coords: r.coords, segs: r.segs, len: r.len, hrs: r.hrs, byD: r.byD, maxD: r.maxD, asph: r.asph, unk: r.unk, res: r.res || 0, pois: [] });
         if (used.length) gotDay.add(j.d);
-        if (offSum >= j.target * 1000 * 0.6) return; // enough; otherwise add a loop into the trails as well
+        if (offSum >= j.target * 1000 * 0.6) return; // enough; otherwise a loop into the trails, but only one worth driving (see below)
         if (j.M && used.some(u => j.M.i >= u.A.i && j.M.i <= u.B.i)) j.M = timeline.find(t => t.i > Math.max(...used.map(u => u.B.i)) && !t.sea) || null;
         j.loopKm = Math.max(12, Math.min(35, j.target - offSum / 1000 + 8));
         // no trail runs alongside the road here (mountain tracks are often dead ends): an off-road loop from the road instead
@@ -2994,6 +3046,8 @@ async function planOverland(p, sLL, eLL, viaLL) {
           const s0 = nearestNode(G, c[0], c[1], fac, 4000); if (s0 < 0) return;
           const r = plan(G, { ...p, avoid_asphalt: true, loop: true, days: 1, via: [], distance_km: j.loopKm, duration_hours: null }, { s: s0, e: -1, vias: [], viaPois: [] }, () => {}).results[0];
           if (!r || r.len < 5000 || (r.len - r.asph) / r.len < 0.3) return;
+          if (selfRevisit(r.coords) > 0.2) return; // in and out on the same tracks is not a loop
+          try { const el = (await elevations(sampleRoute(r.coords, 30))).filter(x => x != null); if (el.length > 10 && Math.max(...el) - Math.min(...el) < 120) return; } catch {} // flat fields: circling farm tracks adds nothing
           live.dirt(r.coords);
           gotDay.add(j.d); dayLoop[j.d] = { M: j.M, coords: r.coords, segs: r.segs, len: r.len, hrs: r.hrs, byD: r.byD, maxD: r.maxD, asph: r.asph, unk: r.unk, res: r.res || 0, pois: r.pois.filter(x => x.type !== 'nightcamp') };
         }
@@ -3126,6 +3180,15 @@ async function planOverland(p, sLL, eLL, viaLL) {
     }
   }
   days.push({ from: dayFrom, to: coords.length - 1, len: dKm, hrs: dH, ferH: dFer, off: dOff, camp: null });
+  { // say what came out: the days you asked about, days that stayed mostly road, and any day that drives over itself
+    const pct = d => d.len ? Math.round(d.off / d.len * 100) : 0;
+    for (const k of [...moreDays].sort((a, b) => a - b)) { const d = days[k - 1]; if (!d) continue; const now = pct(d), was = p._prevDayOff?.[k - 1];
+      notes.push(was != null && now <= was + 3 ? `יום ${k}: לא מצאתי עוד שטח פתוח לרכב ליד הדרך של היום הזה (${now}% שטח, כמו קודם). אפשר להוסיף תחנה באזור עם שבילים, או להזיז את הלינה.` : `יום ${k}: ${now}% שטח${was != null ? ` (היה ${was}%)` : ''}.`); }
+    const low = days.map((d, k) => (!d.ferH && d.len > 40000 && pct(d) < 40 && !moreDays.has(k + 1) ? k + 1 : 0)).filter(Boolean);
+    if (low.length) notes.push(`${low.length === 1 ? 'ביום' : 'בימים'} ${low.join(', ')} רוב הדרך בכביש: לא מצאתי שם שבילים פתוחים לרכב שממשיכים לכיוון הנכון. כתבו "יותר שטח ביום ${low[0]}" כדי שאחפש רחב יותר.`);
+    const circ = days.map((d, k) => (selfRevisit(coords.slice(d.from, d.to + 1)) > 0.15 ? k + 1 : 0)).filter(Boolean);
+    if (circ.length) notes.push(`${circ.length === 1 ? 'ביום' : 'בימים'} ${circ.join(', ')} חלק מהדרך עובר שוב ליד מקום שכבר עברתם באותו יום.`);
+  }
   // resupply: every N nights, nearest fuel + food to that camp
   const supEvery = Math.max(1, Math.round(p.resupply_every_days || 2));
   days.forEach((d, k) => {
@@ -3324,6 +3387,7 @@ async function run(fromPrompt, preset = null, changeText = null) {
       }
       { const mk = maxKmPerDay(text); if (mk && !p.max_km_per_day) p.max_km_per_day = mk; }
       { const sh = offroadShare(text); if (sh && !p.offroad_share) p.offroad_share = sh; }
+      { const m = [...text.matchAll(/(?:יותר|עוד|הרבה)\s+שטח[^\d]{0,12}(?:ב?ימים?|ב?יום)\s*([\d ,ו-]+)/g)].flatMap(x => x[1].match(/\d+/g) || []).map(Number); if (m.length && !p.more_offroad_days?.length) p.more_offroad_days = m; }
       if (p.wild_camping == null && /בלי קמפינג|לא חייב(ים)? (להיות )?קמפינג|לינת שטח|לינה בטבע|ביער|wild camp/i.test(text)) p.wild_camping = true;
       fillForm(p);
       const und = [p._smartErr ? '⚠️ ' + p._smartErr + ' תכננתי לפי פענוח בסיסי, שמבין רק מקום התחלה פשוט. נסו "בנה מסלול" שוב.' : null, p.summary_he ? 'הבנתי: ' + p.summary_he : null, p.story_he || null, p._searched ? '(חיפשתי ברשת כדי לתכנן)' : null].filter(Boolean).join('\n');
@@ -3331,8 +3395,8 @@ async function run(fromPrompt, preset = null, changeText = null) {
       stageSummary(p); if (!p._smartErr && !p.story_he) $('understood').hidden = true; // the card says it
     } else {
       p = readForm(current?.p || {});
-      p.story_he = current?.p?.story_he; p._startNote = current?.p?._startNote; p.nightPins = current?.p?.nightPins;
-      for (const k of ['offroad_share', 'wild_camping', 'camp_every_days', 'resupply_every_days', 'max_km_per_day', 'night_near_water', 'country']) if (current?.p?.[k] != null && p[k] == null) p[k] = current.p[k];
+      p.story_he = current?.p?.story_he; p._startNote = current?.p?._startNote; p.nightPins = current?.p?.nightPins; p._prevDayOff = current?.p?._prevDayOff;
+      for (const k of ['offroad_share', 'wild_camping', 'camp_every_days', 'resupply_every_days', 'max_km_per_day', 'night_near_water', 'country', 'more_offroad_days']) if (current?.p?.[k] != null && p[k] == null) p[k] = current.p[k];
     }
 
     status('מאתר מקומות…');
@@ -3351,6 +3415,12 @@ async function run(fromPrompt, preset = null, changeText = null) {
     const viaLL = [];
     const lost = [];
     for (const v of p.via || []) { const ll = await geocode(v); if (!ll) { lost.push(v.name); continue; } viaLL.push({ ll, name: v.name, note: v.note, ferry: !!v.ferry_to_next, ferryHours: v.ferry_hours || null }); }
+    for (const pl of [p.start, p.end, ...(p.via || [])]) { // a trip crosses borders: each place gets its own country (sets the rules for nights and the clock)
+      if (!pl?.countryGuess) continue;
+      const ll = pl === p.start ? sLL : pl === p.end ? eLL : viaLL.find(v => v.name === pl.name)?.ll;
+      if (!ll || inIsrael(ll[0], ll[1])) continue;
+      const cc = await countryOf(ll[0], ll[1]); if (cc) { pl.country = cc; delete pl.countryGuess; }
+    }
     viaLL.forEach((v, i) => { // Claude sometimes marks both ports of a pair; a ferry leg must start where the last one did not end, and cross real distance
       const next = viaLL[i + 1]?.ll || (p.loop ? sLL : eLL);
       if (v.ferry && (viaLL[i - 1]?.ferry || !next || hav(v.ll[0], v.ll[1], next[0], next[1]) < 20000)) v.ferry = false;
@@ -3596,11 +3666,20 @@ function sunUTC(lat, lon, iso) {
 const TZ = { IL: 'Asia/Jerusalem', PS: 'Asia/Jerusalem', JO: 'Asia/Amman', EG: 'Africa/Cairo', GE: 'Asia/Tbilisi', AM: 'Asia/Yerevan', AZ: 'Asia/Baku', TR: 'Europe/Istanbul', CY: 'Asia/Nicosia',
   GR: 'Europe/Athens', BG: 'Europe/Sofia', RO: 'Europe/Bucharest', MD: 'Europe/Chisinau', UA: 'Europe/Kyiv', FI: 'Europe/Helsinki', EE: 'Europe/Tallinn', LV: 'Europe/Riga', LT: 'Europe/Vilnius',
   PT: 'Europe/Lisbon', GB: 'Europe/London', IE: 'Europe/Dublin', IS: 'Atlantic/Reykjavik', MA: 'Africa/Casablanca' };
-function zoneAt(p, la, lo) { // the time zone of the nearest place of the trip that has a country
+function zoneGuess(la, lo) { // rough regions, for places without a known country
+  if (lo > 40 && la > 40) return 'Asia/Tbilisi';
+  if (lo >= 29.7 && la > 36 && la < 42.2) return 'Europe/Istanbul';
+  if (lo < -6.2 && la < 42.2 && la > 36.8) return 'Europe/Lisbon';
+  if (lo < 1.8 && la > 49.9) return 'Europe/London';
+  if (la < 41.75 && la > 34.7 && lo > 19.3 && lo < 29.7 && !(lo < 21.0 && la > 40.3)) return 'Europe/Athens'; // Greece (not Albania)
+  if (lo >= 22.9 && la >= 41.2 && la < 48.4) return 'Europe/Bucharest'; // Bulgaria, Romania
+  return 'Europe/Rome';
+}
+function zoneAt(p, la, lo) { // the time zone of the nearest place of the trip with a known country, or of the region
   if (inIsrael(la, lo)) return 'Asia/Jerusalem';
   let best = null, bd = Infinity;
-  for (const x of [p.start, p.end, ...(p.via || [])]) { if (!x?.country) continue; const ll = x.latlng || (x.lat ? [x.lat, x.lon] : null); if (!ll) continue; const d = hav(la, lo, ll[0], ll[1]); if (d < bd) { bd = d; best = x.country.toUpperCase(); } }
-  return TZ[best] || (best ? 'Europe/Rome' : (lo > 40 ? 'Asia/Tbilisi' : lo > 22 ? 'Europe/Athens' : lo < -6 ? 'Europe/Lisbon' : 'Europe/Rome'));
+  for (const x of [p.start, p.end, ...(p.via || [])]) { if (!x?.country || x.countryGuess) continue; const ll = x.latlng || (x.lat ? [x.lat, x.lon] : null); if (!ll) continue; const d = hav(la, lo, ll[0], ll[1]); if (d < bd) { bd = d; best = x.country.toUpperCase(); } }
+  return bd < 120000 ? (TZ[best] || 'Europe/Rome') : zoneGuess(la, lo);
 }
 const localH = (ms, tz) => { const [h, m] = new Date(ms).toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).split(':').map(Number); return (h % 24) + m / 60; };
 function daySchedule(r, p, d, k, single = false) {
@@ -4097,7 +4176,9 @@ $('refineBtn').onclick = async () => {
     for (const k of ['start', 'end']) if (np[k] && current.p[k] && np[k].name === current.p[k].name && current.p[k].latlng) np[k].latlng = current.p[k].latlng;
     np.via = (np.via || []).map(v => ({ ...((current.p.via || []).find(o => o.name === v.name) || {}), ...v }));
     if (!np.date && current.p.date) np.date = current.p.date;
-    current.p = { ...np, story_he: np.story_he || current.p.story_he };
+    { const m = [...ask.matchAll(/(?:יותר|עוד|הרבה)\s+שטח[^\d]{0,12}(?:ב?ימים?|ב?יום)\s*([\d ,ו-]+)/g)].flatMap(x => x[1].match(/\d+/g) || []).map(Number); if (m.length) np.more_offroad_days = [...new Set([...(np.more_offroad_days || []), ...m])]; }
+    const rr = current.res.results[current.sel];
+    current.p = { ...np, story_he: np.story_he || current.p.story_he, _prevDayOff: (rr.days || []).map(d => d.len ? Math.round((d.off || 0) / d.len * 100) : 0) };
     fillForm(current.p); $('refineIn').value = '';
     pendingChange = ask.slice(0, 200); await run(false);
   } catch (e) { status('העדכון נכשל: ' + (e.detail || e.message), true); }

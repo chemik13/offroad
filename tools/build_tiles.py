@@ -61,10 +61,37 @@ def is_reserve(t):  # mirrors isReserve / RESERVE_Q in src/engine.js
             or (t.get("boundary") == "protected_area" and t.get("protect_class") in ("1a", "1b", "1", "2")))
 
 
-class Builder(osmium.SimpleHandler):
+COLOURS = {"blue", "red", "green", "black", "orange", "purple", "yellow", "brown", "white"}
+
+
+def mark_of(t):
+    """the colour of a marked trail (Israel: the trail-marking colour; a 4wd route counts too)"""
+    c = (t.get("colour") or "").lower()
+    if c not in COLOURS: c = (t.get("osmc:symbol") or "").split(":")[0].lower()
+    if c in COLOURS: return c
+    return "4wd" if t.get("route") == "4wd" else None
+
+
+class RouteMarks(osmium.SimpleHandler):
+    """first pass: ways that belong to a marked trail (route relations with a colour, or 4wd routes)"""
     def __init__(self):
         super().__init__()
+        self.marks = {}
+
+    def relation(self, r):
+        t = {tg.k: tg.v for tg in r.tags}
+        if t.get("type") != "route" or t.get("route") not in ("hiking", "foot", "4wd", "mtb", "bicycle"): return
+        m = mark_of(t)
+        if not m: return
+        for mb in r.members:
+            if mb.type == "w" and mb.ref not in self.marks: self.marks[mb.ref] = m
+
+
+class Builder(osmium.SimpleHandler):
+    def __init__(self, marks=None):
+        super().__init__()
         self.tiles = {}
+        self.marks = marks or {}
 
     def T(self, i, j):
         k = key(i, j)
@@ -96,7 +123,11 @@ class Builder(osmium.SimpleHandler):
         lats, lons = flat[0::2], flat[1::2]
         s, n, wv, e = min(lats), max(lats), min(lons), max(lons)
         if not self.in_bbox(s, wv, n, e): return
-        rec = [w.id, ids, flat, pick(t, WAY_TAGS)]
+        kept = pick(t, WAY_TAGS)
+        if t.get("highway") in ("track", "unclassified", "path", "service"):  # a marked trail drivable by jeep
+            m = self.marks.get(w.id) or (mark_of(t) if t.get("highway") == "track" else None)
+            if m: kept["mark"] = m
+        rec = [w.id, ids, flat, kept]
         for i, j in self.tiles_for_box(s, wv, n, e): self.T(i, j)["w"].append(rec)
 
     def area(self, a):
@@ -132,17 +163,19 @@ class Builder(osmium.SimpleHandler):
 def merge_into(old, new):
     for part, idf in (("w", lambda r: r[0]), ("p", lambda r: (r[0], r[1])), ("m", lambda r: r[0]), ("lk", lambda r: r[0])):
         old.setdefault(part, []); new.setdefault(part, [])
-        seen = {idf(r) for r in old[part]}
-        old[part] += [r for r in new[part] if idf(r) not in seen]
+        fresh = {idf(r) for r in new[part]}  # this build wins: OSM edits (and new tags) replace what was published
+        old[part] = new[part] + [r for r in old[part] if idf(r) not in fresh]
     return old
 
 
-def main(src, out, world=False, merge=False):
+def main(src, out, world=False, merge=False, name=None):
     global BBOX
     if world: BBOX = (-90, -180, 90, 180)
     os.makedirs(out, exist_ok=True)
     t0 = time.time()
-    b = Builder()
+    rm = RouteMarks(); rm.apply_file(src)  # marked trails first (relations come last in the file)
+    print(f"{len(rm.marks)} ways on marked trails")
+    b = Builder(rm.marks)
     b.apply_file(src, locations=True, idx="flex_mem")
     at = int(time.time() * 1000)
     keys, total = [], 0
@@ -156,10 +189,19 @@ def main(src, out, world=False, merge=False):
         keys.append(k); total += len(data)
     if merge:  # index covers every tile in the folder
         keys = sorted(fn[:-8] for fn in os.listdir(out) if fn.endswith(".json.gz"))
-    with open(os.path.join(out, "index.json"), "w") as f:
-        json.dump({"version": VER, "at": at, "built": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "source": os.path.basename(src), "keys": keys}, f)
+    built = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    countries = {}
+    ip = os.path.join(out, "index.json")
+    if merge and os.path.exists(ip):
+        try:
+            with open(ip) as f: countries = json.load(f).get("countries", {})
+        except Exception: pass
+    if name: countries[name] = {"built": built, "tiles": len(b.tiles), "marked": len(rm.marks)}
+    with open(ip, "w") as f:
+        json.dump({"version": VER, "at": at, "built": built, "source": os.path.basename(src), "countries": countries, "keys": keys}, f)
     print(f"{len(keys)} tiles, {total / 1e6:.1f} MB, {time.time() - t0:.0f}s")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2], world="--world" in sys.argv, merge="--merge" in sys.argv)
+    nm = sys.argv[sys.argv.index("--name") + 1] if "--name" in sys.argv else None
+    main(sys.argv[1], sys.argv[2], world="--world" in sys.argv, merge="--merge" in sys.argv, name=nm)

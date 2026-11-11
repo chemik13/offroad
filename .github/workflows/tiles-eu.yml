@@ -1,20 +1,24 @@
-# Monthly: trail tiles for the countries in tools/eu_extracts.txt, published on the orphan branch "tiles-eu".
-# Same format as the Israel tiles; border tiles shared by two countries are merged.
+# Weekly: trail tiles for the countries in tools/eu_extracts.txt, published on the orphan branch "tiles-eu".
+# Incremental: a country is rebuilt when its tiles are older than 25 days (index.json "countries"), so adding a
+# country builds only that one, and a long list is spread over several runs instead of hitting the job time limit.
+# Same format as the Israel tiles; border tiles shared by two countries are merged (the newer build wins).
 name: Build trail tiles (Europe)
 on:
   schedule:
-    - cron: "41 3 2 * *"   # 2nd of every month, 03:41 UTC
+    - cron: "41 3 * * 2"   # Tuesdays 03:41 UTC
   workflow_dispatch:
+    inputs:
+      force: { description: "Rebuild every country now", type: boolean, default: false }
   push:
     branches: [main]
     paths: ["tools/eu_extracts.txt", ".github/workflows/tiles-eu.yml"]
 permissions:
   contents: write
-concurrency: { group: tiles-eu, cancel-in-progress: true }
+concurrency: { group: tiles-eu, cancel-in-progress: false }
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 340
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -23,22 +27,36 @@ jobs:
       - name: Build and publish country by country (each one is usable as soon as it is pushed)
         env:
           REMOTE: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+          FORCE: ${{ inputs.force && '1' || '' }}
         run: |
+          set +e
+          start=$(date +%s); built=0
           # start from what is published, so countries stay available while they are rebuilt
           git clone -q --depth 1 -b tiles-eu "$REMOTE" out || (mkdir -p out && cd out && git init -q -b tiles-eu)
           cd out
           git config user.name "tiles-bot"; git config user.email "tiles-bot@users.noreply.github.com"
           git config http.postBuffer 1048576000
-          first=1
-          grep -v '^#' ../tools/eu_extracts.txt | grep . | while read path; do
-            echo "::group::$path"
-            curl -fsSL --retry 3 -o ../x.osm.pbf "https://download.geofabrik.de/$path" && ls -lh ../x.osm.pbf
-            python ../tools/build_tiles.py ../x.osm.pbf . --world --merge
+          for path in $(grep -v '^#' ../tools/eu_extracts.txt | grep .); do
+            name=$(basename "$path" -latest.osm.pbf)
+            # fresh enough? (built in the last 25 days)
+            age=$(python3 -c "import json,sys,datetime as d
+          try: c=json.load(open('index.json')).get('countries',{}).get('$name')
+          except Exception: c=None
+          print(9999 if not c else (d.datetime.utcnow()-d.datetime.strptime(c['built'],'%Y-%m-%dT%H:%M:%SZ')).days)")
+            if [ -z "$FORCE" ] && [ "$age" -lt 25 ]; then echo "skip $name (built $age days ago)"; continue; fi
+            if [ $(( $(date +%s) - start )) -gt 17400 ]; then echo "time is up; $name and the rest next run"; break; fi
+            echo "::group::$name"
+            if curl -fsSL --retry 3 -o ../x.osm.pbf "https://download.geofabrik.de/$path"; then
+              ls -lh ../x.osm.pbf
+              if python ../tools/build_tiles.py ../x.osm.pbf . --world --merge --name "$name"; then
+                git add -A; git commit -qm "$name $(date -u +%Y-%m-%d)"
+                git push -q "$REMOTE" HEAD:tiles-eu && built=$((built+1))
+                echo "published $name: $(ls *.json.gz | wc -l) tiles, $(du -sh . --exclude=.git | cut -f1)"
+              else echo "::warning::build failed for $name"; git checkout -q -- . ; git clean -qfd; fi
+            else echo "::warning::download failed for $path"; fi
             rm -f ../x.osm.pbf
-            git add -A; git commit -qm "$(basename $path .osm.pbf) $(date -u +%Y-%m-%d)"
-            git push -q "$REMOTE" HEAD:tiles-eu
-            echo "published $(basename $path -latest.osm.pbf): $(ls *.json.gz | wc -l) tiles, $(du -sh . --exclude=.git | cut -f1)"
             echo "::endgroup::"
           done
-          # squash the month into one commit so the branch history does not grow
-          git checkout -q --orphan squashed && git commit -qm "tiles $(date -u +%Y-%m-%d)" && git push -qf "$REMOTE" squashed:tiles-eu
+          # squash into one commit so the branch history does not grow
+          if [ $built -gt 0 ]; then git checkout -q --orphan squashed && git commit -qm "tiles $(date -u +%Y-%m-%d)" && git push -qf "$REMOTE" squashed:tiles-eu; fi
+          exit 0

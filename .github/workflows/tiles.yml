@@ -24,7 +24,7 @@ jobs:
       - name: Download OSM extract (Israel and Palestine)
         run: curl -fsSL --retry 3 -o extract.osm.pbf https://download.geofabrik.de/asia/israel-and-palestine-latest.osm.pbf && ls -lh extract.osm.pbf
       - name: Build tiles
-        run: python tools/build_tiles.py extract.osm.pbf out
+        run: python tools/build_tiles.py extract.osm.pbf out --name israel
       - name: Publish to branch "tiles" (history not kept)
         run: |
           cd out
