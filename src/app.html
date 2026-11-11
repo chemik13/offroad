@@ -834,7 +834,11 @@ const HEALTH = [
   ]],
   ['שירותים חיצוניים', [
     ['חישוב דרכים (OSRM)', async () => { const t = Date.now(), r = await fetch('https://router.project-osrm.org/route/v1/driving/34.80,30.61;34.79,30.60?overview=false', { cache: 'no-store' }); const j = await r.json(); return [j.code === 'Ok' ? (Date.now() - t > 4000 ? 'warn' : 'ok') : 'bad', j.code === 'Ok' ? `עונה (${Date.now() - t} ms) · לטיולים ארוכים ומעבורות` : 'לא עונה. יש גיבוי דרך השרת']; }],
-    ['שבילים חיים (Overpass)', async () => { const t = Date.now(), r = await fetch('https://overpass-api.de/api/status', { cache: 'no-store' }); const txt = await r.text(); const slots = /(\d+) slots available now/.exec(txt)?.[1]; return [r.ok ? 'ok' : 'warn', r.ok ? `עונה (${Date.now() - t} ms)${slots ? ` · ${slots} מקומות פנויים` : ''} · רק לאזורים מחוץ לאריחים` : 'עמוס. יש גיבוי דרך השרת']; }],
+    ['שבילים חיים (Overpass)', async () => { // only a fallback for places outside the prebuilt tiles: busy is a warning, not a failure
+      const one = async u => { const t = Date.now(), c = new AbortController(), to = setTimeout(() => c.abort(), 8000); try { const r = await fetch(u, { cache: 'no-store', signal: c.signal }); const txt = await r.text(); if (!r.ok) throw 0; return { ms: Date.now() - t, slots: /(\d+) slots available now/.exec(txt)?.[1] }; } finally { clearTimeout(to); } };
+      const res = await Promise.allSettled([one('https://overpass-api.de/api/status'), one('https://overpass.private.coffee/api/status')]);
+      const ok = res.find(x => x.status === 'fulfilled')?.value;
+      return ok ? ['ok', `עונה (${ok.ms} ms)${ok.slots ? ` · ${ok.slots} מקומות פנויים` : ''} · רק לאזורים מחוץ לאריחים`] : ['warn', 'עמוס או לא עונה. משפיע רק על אזורים שאין להם אריחים מוכנים; יש גם גיבוי דרך השרת']; }],
     ['חיפוש מקומות (Nominatim)', async () => { const t = Date.now(), j = await (await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent('מצפה רמון'))).json(); return [j.length ? 'ok' : 'warn', j.length ? `עונה (${Date.now() - t} ms)` : 'עונה בלי תוצאות']; }],
     ['מזג אוויר (Open-Meteo)', async () => { const t = Date.now(), j = await (await fetch('https://api.open-meteo.com/v1/forecast?latitude=30.6&longitude=34.8&daily=sunset&forecast_days=1', { cache: 'no-store' })).json(); return [j.daily ? 'ok' : 'bad', j.daily ? `עונה (${Date.now() - t} ms)` : (j.reason || 'שגיאה')]; }],
     ['גבהים (Open-Meteo)', async () => { const j = await (await fetch('https://api.open-meteo.com/v1/elevation?latitude=30.6&longitude=34.8', { cache: 'no-store' })).json(); return [Array.isArray(j.elevation) ? 'ok' : 'bad', Array.isArray(j.elevation) ? `עונה · מצפה רמון ${Math.round(j.elevation[0])} מ׳` : (j.reason || 'שגיאה')]; }],
@@ -853,7 +857,7 @@ const HEALTH = [
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
-const ago = ms => { const d = Math.floor(ms / 864e5); return d < 1 ? 'היום' : d === 1 ? 'אתמול' : `לפני ${d} ימים`; };
+const ago = ms => { const day = x => Math.floor((x - new Date().getTimezoneOffset() * 6e4) / 864e5); const d = day(Date.now()) - day(Date.now() - ms); return d < 1 ? 'היום' : d === 1 ? 'אתמול' : `לפני ${d} ימים`; };
 async function tilesHealth(base, wf, maxDays, every) {
   const j = await (await fetch(base + 'index.json', { cache: 'no-store' })).json();
   const built = new Date(j.built || j.at), age = Date.now() - built;
