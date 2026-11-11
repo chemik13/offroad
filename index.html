@@ -118,6 +118,17 @@ header button{pointer-events:auto;margin-inline-start:auto}
 #tripHead .th{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 #tripHead b{font-family:var(--display);font-size:17px;font-weight:600;line-height:1.3}
 #tripHead small{font-size:13px;color:var(--muted);line-height:1.4}
+.health{margin-top:12px;border:1px solid var(--line);border-radius:12px;padding:8px 12px}
+.health summary{cursor:pointer;font-weight:600;font-size:14px}
+.health summary span{font-weight:400;color:var(--muted);margin-inline-start:6px}
+.hlist{display:flex;flex-direction:column;margin:8px 0}
+.hrow{display:grid;grid-template-columns:12px 1fr;column-gap:8px;padding:6px 0;border-top:1px solid var(--line);font-size:13px}
+.hrow:first-child{border-top:0}
+.hrow i{width:10px;height:10px;border-radius:50%;margin-top:4px;background:#c9c1b4}
+.hrow.ok i{background:#2e8b57}.hrow.warn i{background:#e0a100}.hrow.bad i{background:#c0392b}
+.hrow b{font-weight:600}
+.hrow small{grid-column:2;color:var(--muted);font-size:12px}
+.hgroup{font-size:12px;color:var(--muted);margin:10px 0 2px}
 .verbtn{flex:none;background:var(--stone);border:1px solid var(--line);border-radius:999px;padding:5px 11px;font:600 13px var(--body);color:var(--ink);cursor:pointer}
 .verbtn::after{content:'';display:inline-block;margin-inline-start:6px;border:4px solid transparent;border-top-color:currentColor;vertical-align:-2px}
 .verlist{display:flex;flex-direction:column;margin-top:8px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel)}
@@ -138,7 +149,8 @@ header button{pointer-events:auto;margin-inline-start:auto}
 @keyframes bl{0%{transform:translateX(0)}50%{transform:translateX(-230%)}100%{transform:translateX(0)}}
 #composer{display:flex;gap:8px;padding-top:10px;margin-top:6px;border-top:1px solid var(--line);flex:none}
 #composer[hidden]{display:none}
-#composer input{flex:1;min-width:0;font:inherit;font-size:16px;color:var(--ink);background:var(--stone);border:1px solid transparent;border-radius:10px;padding:10px 12px}
+.refwrap{position:relative;flex:1;min-width:0;display:flex}
+#composer input{flex:1;min-width:0;padding-inline-start:46px!important;font:inherit;font-size:16px;color:var(--ink);background:var(--stone);border:1px solid transparent;border-radius:10px;padding:10px 12px}
 #composer input:focus{background:#fff;border-color:var(--accent)}
 details.params{margin-top:10px}
 .grip{position:relative}
@@ -547,7 +559,8 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
   </div>
   <div id="busyLine" class="busyline" hidden></div>
   <div id="composer" hidden>
-    <input type="text" id="refineIn" enterkeyhint="send" aria-label="מה לשנות במסלול" placeholder="מה לשנות? למשל: יותר שטח">
+    <div class="refwrap"><input type="text" id="refineIn" enterkeyhint="send" aria-label="מה לשנות במסלול" placeholder="מה לשנות? אפשר גם לדבר">
+      <button class="mic" id="micBtn2" type="button" aria-label="דברו במקום להקליד" title="דברו במקום להקליד"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg></button></div>
     <button class="go" id="refineBtn" type="button">שנה</button>
   </div>
 </section>
@@ -582,7 +595,11 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
   </div>
   <button class="ghost" id="inviteBtn" type="button" style="margin-top:10px">קישור הזמנה לחבר (עם הקוד)</button>
   <div id="connState" style="font-size:13px;margin-top:10px;color:var(--muted)"></div>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.66 · 10.11.2026 19:34</div>
+  <details id="healthBox" class="health"><summary>מצב המערכת <span id="healthSum"></span></summary>
+    <div id="healthList" class="hlist"></div>
+    <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
+  </details>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.68 · 11.11.2026 12:10</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -1966,6 +1983,70 @@ async function checkConn() {
 }
 $('settingsBtn').onclick = () => { $('apiKey').value = store.get('apiKey') || ''; $('groupCode').value = store.get('groupCode') || ''; $('nick').value = store.get('nick') || ''; $('settings').showModal(); checkConn(); };
 $('closeSettings').onclick = () => $('settings').close();
+// ---------- system health: everything the app depends on, including data downloaded from outside ----------
+const HEALTH = [
+  ['שרת וקבוצה', [
+    ['שרת האפליקציה', async () => { const t = Date.now(), h = await (await fetch(API + '/health', { cache: 'no-store' })).json(); const ms = Date.now() - t; return [h.ok ? (ms > 3000 ? 'warn' : 'ok') : 'bad', `עונה (${ms} ms)${h.group ? '' : ' · חסר קוד קבוצה בשרת'}`]; }],
+    ['קוד קבוצה וספרייה משותפת', async () => { if (!hasGroup()) return ['bad', 'לא הוזן קוד קבוצה']; const j = await api('/routes'); return ['ok', `${(j.routes || []).length} טיולים בספרייה`]; }],
+    ['פענוח חכם (Claude)', async () => { const h = await (await fetch(API + '/health', { cache: 'no-store' })).json(); if (!h.claude) return ['bad', 'מפתח Claude לא מוגדר בשרת']; if (!hasGroup()) return ['warn', 'מוגדר בשרת, אבל אין קוד קבוצה בדפדפן']; const u = await api('/usage'); const f = u.claude.used / u.claude.cap; return [f > 0.9 ? 'bad' : f > 0.7 ? 'warn' : 'ok', `היום ${u.claude.used} מתוך ${u.claude.cap} פענוחים`]; }],
+    ['מכסת הורדות דרך השרת', async () => { if (!hasGroup()) return ['warn', 'צריך קוד קבוצה']; const u = await api('/usage'); const f = u.overpass.used / u.overpass.cap; return [f > 0.9 ? 'bad' : f > 0.7 ? 'warn' : 'ok', `היום ${u.overpass.used} מתוך ${u.overpass.cap} (שבילים ודרכים)`]; }],
+  ]],
+  ['נתוני שבילים (נבנים אצלנו מ-OpenStreetMap)', [
+    ['שבילים בישראל', async () => tilesHealth(STATIC_TILES, 'tiles.yml', 10, 'שבועי')],
+    ['שבילים באירופה ובגאורגיה', async () => tilesHealth(STATIC_EU, 'tiles-eu.yml', 40, 'חודשי')],
+    ['מטמון השבילים בדפדפן', async () => { const n = await new Promise(res => { try { const r = indexedDB.open('offroad', 1); r.onupgradeneeded = () => r.result.createObjectStore('tiles'); r.onsuccess = () => { try { const q = r.result.transaction('tiles').objectStore('tiles').count(); q.onsuccess = () => res(q.result); q.onerror = () => res(-1); } catch { res(-1); } }; r.onerror = () => res(-1); } catch { res(-1); } }); return n < 0 ? ['warn', 'לא זמין (מצב פרטי?). הכול יעבוד, רק לאט יותר'] : ['ok', `${n} אריחים שמורים`]; }],
+  ]],
+  ['שירותים חיצוניים', [
+    ['חישוב דרכים (OSRM)', async () => { const t = Date.now(), r = await fetch('https://router.project-osrm.org/route/v1/driving/34.80,30.61;34.79,30.60?overview=false', { cache: 'no-store' }); const j = await r.json(); return [j.code === 'Ok' ? (Date.now() - t > 4000 ? 'warn' : 'ok') : 'bad', j.code === 'Ok' ? `עונה (${Date.now() - t} ms) · לטיולים ארוכים ומעבורות` : 'לא עונה. יש גיבוי דרך השרת']; }],
+    ['שבילים חיים (Overpass)', async () => { const t = Date.now(), r = await fetch('https://overpass-api.de/api/status', { cache: 'no-store' }); const txt = await r.text(); const slots = /(\d+) slots available now/.exec(txt)?.[1]; return [r.ok ? 'ok' : 'warn', r.ok ? `עונה (${Date.now() - t} ms)${slots ? ` · ${slots} מקומות פנויים` : ''} · רק לאזורים מחוץ לאריחים` : 'עמוס. יש גיבוי דרך השרת']; }],
+    ['חיפוש מקומות (Nominatim)', async () => { const t = Date.now(), j = await (await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent('מצפה רמון'))).json(); return [j.length ? 'ok' : 'warn', j.length ? `עונה (${Date.now() - t} ms)` : 'עונה בלי תוצאות']; }],
+    ['מזג אוויר (Open-Meteo)', async () => { const t = Date.now(), j = await (await fetch('https://api.open-meteo.com/v1/forecast?latitude=30.6&longitude=34.8&daily=sunset&forecast_days=1', { cache: 'no-store' })).json(); return [j.daily ? 'ok' : 'bad', j.daily ? `עונה (${Date.now() - t} ms)` : (j.reason || 'שגיאה')]; }],
+    ['גבהים (Open-Meteo)', async () => { const j = await (await fetch('https://api.open-meteo.com/v1/elevation?latitude=30.6&longitude=34.8', { cache: 'no-store' })).json(); return [Array.isArray(j.elevation) ? 'ok' : 'bad', Array.isArray(j.elevation) ? `עונה · מצפה רמון ${Math.round(j.elevation[0])} מ׳` : (j.reason || 'שגיאה')]; }],
+  ]],
+  ['מפות ותלת-ממד', [
+    ['מפת שבילים (OpenTopoMap)', () => imgHealth('https://a.tile.opentopomap.org/9/305/210.png')],
+    ['מפת רחובות (OpenStreetMap)', () => imgHealth('https://tile.openstreetmap.org/9/305/210.png')],
+    ['תצלום אוויר (Esri)', () => imgHealth('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/9/210/305')],
+    ['תבליט לתלת-ממד', () => imgHealth('https://s3.amazonaws.com/elevation-tiles-prod/terrarium/9/305/210.png')],
+    ['ספריית התלת-ממד (MapLibre)', async () => { const r = await fetch('https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.js', { method: 'HEAD' }); return [r.ok ? 'ok' : 'bad', r.ok ? 'זמינה' : 'לא נטענת']; }],
+  ]],
+  ['הדפדפן הזה', [
+    ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
+    ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
+    ['גרסת האפליקציה', async () => ['ok', '1.68 · 11.11.2026 12:10']],
+  ]],
+];
+const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
+const ago = ms => { const d = Math.floor(ms / 864e5); return d < 1 ? 'היום' : d === 1 ? 'אתמול' : `לפני ${d} ימים`; };
+async function tilesHealth(base, wf, maxDays, every) {
+  const j = await (await fetch(base + 'index.json', { cache: 'no-store' })).json();
+  const built = new Date(j.built || j.at), age = Date.now() - built;
+  let run = '';
+  try { const g = await (await fetch(`https://api.github.com/repos/chemik13/offroad/actions/workflows/${wf}/runs?per_page=1`)).json(); const x = g.workflow_runs?.[0];
+    if (x) run = x.status !== 'completed' ? ' · בנייה חדשה רצה עכשיו' : x.conclusion === 'success' ? '' : ` · הבנייה האחרונה נכשלה (${new Date(x.created_at).toLocaleDateString('he-IL')})`; } catch {}
+  const lvl = age > maxDays * 3 * 864e5 || /נכשלה/.test(run) ? 'bad' : age > maxDays * 864e5 ? 'warn' : 'ok';
+  return [lvl, `עודכנו ${ago(age)} (${built.toLocaleDateString('he-IL')}) · ${j.keys?.length || 0} אריחים · עדכון ${every}${run}`];
+}
+let healthTok = 0;
+async function runHealth() {
+  const tok = ++healthTok, box = $('healthList'); box.innerHTML = ''; let ok = 0, warn = 0, bad = 0;
+  const jobs = [];
+  for (const [g, items] of HEALTH) {
+    const h = document.createElement('div'); h.className = 'hgroup'; h.textContent = g; box.append(h);
+    for (const [name, fn] of items) {
+      const row = document.createElement('div'); row.className = 'hrow'; row.innerHTML = '<i></i><b></b><small>בודק…</small>'; row.querySelector('b').textContent = name; box.append(row);
+      jobs.push(Promise.race([Promise.resolve().then(fn), new Promise(r => setTimeout(() => r(['bad', 'לא ענה תוך 15 שניות']), 15000))])
+        .catch(e => ['bad', e.status === 401 ? 'קוד הקבוצה לא נכון' : 'לא זמין' + (e.message ? ` (${String(e.message).slice(0, 60)})` : '')])
+        .then(([lvl, txt]) => { if (tok !== healthTok) return; row.className = 'hrow ' + lvl; row.querySelector('small').textContent = txt; if (lvl === 'ok') ok++; else if (lvl === 'warn') warn++; else bad++;
+          $('healthSum').textContent = bad ? `· ${bad} לא תקינים` : warn ? `· ${warn} אזהרות` : `· הכול תקין`; }));
+    }
+  }
+  $('healthSum').textContent = '· בודק…';
+  await Promise.all(jobs);
+}
+$('healthBox').addEventListener('toggle', () => { if ($('healthBox').open) runHealth(); });
+$('healthRun').onclick = runHealth;
+
 $('inviteBtn').onclick = async () => { const c = store.get('groupCode'); if (!c) return; const url = location.origin + location.pathname + '#code=' + encodeURIComponent(c); try { if (navigator.share) await navigator.share({ title: 'מתכנן מסלולי שטח', text: 'הצטרפו למתכנן המסלולים שלנו', url }); else { await navigator.clipboard.writeText(url); $('connState').textContent = 'הקישור הועתק. שלחו אותו בוואטסאפ.'; } } catch {} };
 $('saveKey').onclick = () => { store.set('apiKey', $('apiKey').value.trim()); store.set('groupCode', $('groupCode').value.trim()); store.set('nick', $('nick').value.trim()); checkConn(); status('נשמר.'); };
 store.get('lastPrompt') && ($('prompt').value = store.get('lastPrompt'));
@@ -2389,12 +2470,11 @@ async function loadGraph(bboxOrKeys, { quiet = false, noOsm = false } = {}) {
 // ---------- voice input (Web Speech API, Hebrew) ----------
 // Keeps listening through pauses: ends after SILENCE ms without new words, or when the mic is tapped.
 // Browsers (iOS especially) sometimes end recognition on their own; we restart and keep what was said.
-(() => {
+function dictation(btn, field, onDone, grow = () => {}) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const btn = $('micBtn');
   const SILENCE = 3000, FIRST_WORDS = 8000, MAX = 90000;
   let rec = null, active = false, base = '', said = '', interim = '', timer = null, started = 0, lastErr = null;
-  const show = () => { $('prompt').value = [base, (said + ' ' + interim).trim()].filter(Boolean).join(' '); growPrompt(); };
+  const show = () => { field.value = [base, (said + ' ' + interim).trim()].filter(Boolean).join(' '); grow(); };
   const arm = ms => { clearTimeout(timer); timer = setTimeout(() => finish(true), ms); };
   const ui = on => { btn.classList.toggle('on', on); btn.setAttribute('aria-label', on ? 'סיום הקלטה' : 'דברו במקום להקליד'); };
   function startRec() {
@@ -2421,20 +2501,21 @@ async function loadGraph(bboxOrKeys, { quiet = false, noOsm = false } = {}) {
     if (interim) { said = (said + ' ' + interim).trim(); interim = ''; show(); }
     const err = { 'not-allowed': 'אין הרשאה למיקרופון. אשרו גישה למיקרופון בהגדרות הדפדפן.', 'service-not-allowed': 'אין הרשאה למיקרופון. אשרו גישה למיקרופון בהגדרות הדפדפן.', 'audio-capture': 'לא נמצא מיקרופון.', 'network': 'זיהוי הדיבור צריך חיבור לאינטרנט.' }[lastErr];
     if (err && !said) { status(err, true); return; }
-    if (build && said && $('prompt').value.trim()) {
-      $('prompt').dispatchEvent(new Event('input')); // starts background trail download
-      status('הבנתי. בונה מסלול…'); run(true);
-    } else if (!said) status('לא שמעתי כלום. נסו שוב.');
+    if (build && said && field.value.trim()) onDone();
+    else if (!said) status('לא שמעתי כלום. נסו שוב.');
   }
   btn.onclick = () => {
-    if (!SR) { status('הדפדפן הזה לא תומך בזיהוי דיבור. השתמשו במיקרופון שבמקלדת של הטלפון.', true); $('prompt').focus(); return; }
+    if (!SR) { status('הדפדפן הזה לא תומך בזיהוי דיבור. השתמשו במיקרופון שבמקלדת של הטלפון.', true); field.focus(); return; }
     if (active) { finish(true); return; } // tap again = done
-    base = $('prompt').value.trim(); said = ''; interim = ''; lastErr = null; started = Date.now(); active = true;
+    base = field.value.trim(); said = ''; interim = ''; lastErr = null; started = Date.now(); active = true;
     ui(true); status('מקשיב… דברו בחופשיות. מסיים אחרי 3 שניות שקט, או בלחיצה על המיקרופון.');
     arm(FIRST_WORDS);
     try { startRec(); } catch { finish(false); status('לא הצלחתי להפעיל את המיקרופון.', true); }
   };
-})();
+}
+dictation($('micBtn'), $('prompt'), () => { $('prompt').dispatchEvent(new Event('input')); /* starts background trail download */ status('הבנתי. בונה מסלול…'); run(true); }, () => growPrompt());
+// the change box takes voice too: say the change, it is applied when you stop talking
+dictation($('micBtn2'), $('refineIn'), () => { status('הבנתי. משנה…'); $('refineBtn').click(); });
 
 // ---------- conversation mode (talk, it answers out loud, refine by voice) ----------
 const talk = (() => {
