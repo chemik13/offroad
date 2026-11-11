@@ -89,6 +89,7 @@ header button{pointer-events:auto;margin-inline-start:auto}
 .fly3d{border:0;background:#1b2a22;color:#ffd23f;border-radius:999px;padding:4px 11px;font:600 12px var(--body);cursor:pointer;display:inline-flex;align-items:center;margin-top:6px}
 .plinks .fly3d{margin-top:0}
 a.fly3d{text-decoration:none}
+.daytop{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
 .gate{position:fixed;inset:0;z-index:50;background:linear-gradient(160deg,#eef3ee,#fff 60%);display:grid;place-items:center;padding:20px}
 .gate[hidden]{display:none}
 .gatebox{width:min(380px,100%);display:flex;flex-direction:column;gap:14px;text-align:center}
@@ -625,7 +626,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.81 · 11.11.2026 19:20</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.82 · 11.11.2026 20:33</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2109,7 +2110,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.81 · 11.11.2026 19:20']],
+    ['גרסת האפליקציה', async () => ['ok', '1.82 · 11.11.2026 20:33']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -2299,9 +2300,9 @@ async function claudeCall(body) {
 }
 // Claude may search the web first (themes, unknown places), then must call route_request.
 // This model does not accept a forced tool_choice, so we ask (auto) and nudge up to twice.
-async function parseSmart(text) {
+async function parseSmart(text, { search = true } = {}) {
   const messages = [{ role: 'user', content: text }];
-  let tools = [WEB_SEARCH, TOOL];
+  let tools = search ? [WEB_SEARCH, TOOL] : [TOOL];
   const call = () => claudeCall({ system: SYSTEM(), messages, tools, tool_choice: { type: 'auto' }, max_tokens: 6000 });
   let r;
   try { r = await call(); }
@@ -4268,7 +4269,12 @@ $('refineBtn').onclick = async () => {
   const slim = JSON.parse(JSON.stringify(current.p, (k, v) => k.startsWith('_') || k === 'researched' ? undefined : v));
   $('refineBtn').disabled = true; status('מעדכן את הטיול לפי הבקשה…'); $('refineIn').blur();
   try {
-    const np = await parseSmart(`הפרמטרים הנוכחיים של הטיול (JSON):\n${JSON.stringify(slim)}\n\nבקשת שינוי: ${ask}\n\nהחזר את כל הפרמטרים המעודכנים ב-route_request.`);
+    // fast path: "more off-road on day N" needs no AI at all, the planner handles it directly
+    const MORE = /(?:תן|תנו|תעשה|אפשר|רוצה|בבקשה|גם|\s|,|ו)*(?:יותר|עוד|הרבה)\s+שטח[^\d]{0,12}(?:ב?ימים?|ב?יום)\s*[\d ,ו-]+/g;
+    const local = MORE.test(ask) && !ask.replace(MORE, '').replace(/[\s,.!ו]|בבקשה|תודה|גם/g, '');
+    // edits only search the web when they ask for something new to find; otherwise Claude just edits the parameters (much faster)
+    const search = /מעניין|הכי|מומלץ|המלצ|תמצא|חפש|אטרקצי|נקודות עניין|מקומות|היסטור|יפה|שווה|מפורסם|נוף|אתר/.test(ask);
+    const np = local ? JSON.parse(JSON.stringify(current.p)) : await parseSmart(`הפרמטרים הנוכחיים של הטיול (JSON):\n${JSON.stringify(slim)}\n\nבקשת שינוי: ${ask}\n\nהחזר את כל הפרמטרים המעודכנים ב-route_request.`, { search });
     for (const k of ['start', 'end']) if (np[k] && current.p[k] && np[k].name === current.p[k].name && current.p[k].latlng) np[k].latlng = current.p[k].latlng;
     np.via = (np.via || []).map(v => ({ ...((current.p.via || []).find(o => o.name === v.name) || {}), ...v }));
     if (!np.date && current.p.date) np.date = current.p.date;
@@ -4478,7 +4484,15 @@ function render(i, day = null) {
       flyOver(r.coords, routeTitle(r, p), D.map((d, k) => ({ d: cum[Math.min(d.from, cum.length - 1)], name: `יום ${k + 1}`, day: true, of: D.length, to: d.camp?.name || (k === D.length - 1 ? 'סיום הטיול' : '') }))); };
     const ab = document.createElement('button'); ab.type = 'button'; ab.className = 'fly3d'; ab.innerHTML = ico('download') + `GPX כל הטיול (${D.length} ימים)`; ab.onclick = () => $('gpxBtn').click();
     const gw = gmapsBtn('Google Maps כל הטיול (דרך מקומות הלינה)', gmapsUrl(r.coords, D.slice(0, -1).map(d => r.coords[d.to])));
-    $('dayPlan').prepend(fb, ab, gw); }
+    $('dayPlan').prepend(fb, ab, gw);
+    if (dv) { // a day is selected: its own 3D, GPX and Google Maps first
+      const k = day, df = document.createElement('button'); df.type = 'button'; df.className = 'fly3d'; df.innerHTML = ico('mountain') + `מעוף תלת-ממד · יום ${k + 1}`;
+      df.onclick = () => flyOver(r.coords.slice(dv.from, dv.to + 1), `יום ${k + 1}`, r.pois.filter(x => !POI_TYPES[x.type]?.safety && x.type !== 'nightcamp').map(x => ({ lat: x.lat, lon: x.lon, name: x.name })));
+      const dg = document.createElement('button'); dg.type = 'button'; dg.className = 'fly3d'; dg.innerHTML = ico('download') + `GPX יום ${k + 1}`; dg.onclick = () => { downloadFile(dayGpxFile(k)); status(`ה-GPX של יום ${k + 1} ירד.`); };
+      const dm = gmapsBtn(`Google Maps יום ${k + 1}`, gmapsUrl(r.coords.slice(dv.from, dv.to + 1)));
+      const top = document.createElement('div'); top.className = 'plinks daytop'; top.append(df, dg, dm); $('dayPlan').prepend(top);
+      $('gmapsMain').href = dm.href;
+    } }
   if (D) {
     const box = document.createElement('div'); box.className = 'dayplan cards';
     const offUnknown = !r.overland && D.every(x => !x.off) && (r.asph == null || r.asph < r.len * 0.95);

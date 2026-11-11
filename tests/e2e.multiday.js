@@ -14,7 +14,7 @@ await p.route(/wikimedia|wikidata/,r=>r.fulfill({status:200,contentType:'applica
 await p.route(/functions\/v1\/api/,async r=>{const u=new URL(r.request().url());const path=u.pathname.replace(/^.*\/api/,'');const m=r.request().method();const body=r.request().postData();const J=(o,s=200)=>r.fulfill({status:s,contentType:'application/json',body:JSON.stringify(o)});
  if(path==='/health')return J({ok:true,claude:false,group:true});
  if(r.request().headers()['x-group-code']!=='abc')return J({error:'קוד קבוצה שגוי'},401);
- if(path==='/parse')return J({error:'no key'},503);
+ if(path==='/parse'||path==='/claude'){global.CL=(global.CL||0)+1;return J({error:'no key'},503);}
  if(path==='/routes'&&m==='GET')return J({routes:DB.map(({coords,waypoints,params,prompt,...x})=>x)});
  if(path==='/routes'&&m==='POST'){const b=JSON.parse(body);const row={...b,id:'00000000-0000-0000-0000-00000000000'+(++n),created_at:new Date().toISOString(),driven:false,tags:[]};DB.unshift(row);const {coords,waypoints,params,prompt,...x}=row;return J({route:x},201);}
  const mm=path.match(/^\/routes\/(.+)$/);
@@ -29,11 +29,12 @@ const st=async t=>console.log(t,JSON.stringify(await p.evaluate(()=>({status:$('
 await p.fill('#prompt','יומיים ממצפה רמון עם תצפית');await p.click('#goBtn');await p.waitForTimeout(4000);await st('multi');
 console.log('chips',await p.$$eval('#dayChips button',x=>x.map(e=>e.textContent)));
 console.log('dayplan',await p.$$eval('.dayrow',x=>x.map(e=>e.textContent)));
-const ch=await p.$$('#dayChips button'); if(ch[2]){await ch[2].click();await p.waitForTimeout(300);console.log('day2 stats',await p.$eval('#stats',e=>e.textContent.replace(/\s+/g,' ')));}
+const ch=await p.$$('#dayChips button'); if(ch[2]){await ch[2].click();await p.waitForTimeout(300);console.log('daymode fly',await p.$$eval('.fly3d',x=>x.filter(e=>e.offsetParent).map(e=>e.textContent)));console.log('day2 stats',await p.$eval('#stats',e=>e.textContent.replace(/\s+/g,' ')));}
 for(const lab of ['GPX יום 1','GPX כל הטיול']){const btn=p.locator('button.fly3d',{hasText:lab}).first();const [dl]=await Promise.all([p.waitForEvent('download'),btn.click()]);const f=await dl.path();const x=require('fs').readFileSync(f,'utf8');console.log('dl',await p.evaluate(()=>dayGpxFile(0).name),'trk',(x.match(/<trk>/g)||[]).length,'pts',(x.match(/<trkpt/g)||[]).length,'wpt',(x.match(/<wpt/g)||[]).length);}
 console.log('main',await p.getAttribute('#gmapsMain','href'),await p.isVisible('#gmapsMain'));console.log('gmaps',await p.$$eval('a.fly3d',x=>x.map(e=>e.textContent+' | '+decodeURIComponent(e.href).slice(0,140))));
 const before=DB.length;await p.fill('#routeName','הנגב של חמי');await p.press('#routeName','Enter');await p.waitForTimeout(800);
 console.log('rename', DB.length===before?'PASS no duplicate':'FAIL duplicate '+DB.length, DB.filter(x=>x.name==='הנגב של חמי').length?'PASS name saved':'FAIL name', await p.inputValue('#routeName'), await p.textContent('.namefield span'));
+{const c0=global.CL||0;await p.fill('#refineIn','תן יותר שטח ביום 2');await p.click('#refineBtn');await p.waitForTimeout(4000);console.log('refine-local', (global.CL||0)===c0?'PASS no AI call':'FAIL AI called', JSON.stringify(await p.evaluate(()=>current.p.more_offroad_days)), await p.textContent('#status'));}
 await p.click('#saveBtn');await p.waitForTimeout(400);console.log('saved days',JSON.stringify(DB[0]&&DB[0].stats.days&&DB[0].stats.days.map(d=>[d.from,d.to,d.len,d.camp&&d.camp.name])));
 await p.click('#libBtn');await p.waitForTimeout(300);await p.click('.litem');await p.waitForTimeout(500);
 console.log('loaded chips',await p.$$eval('#dayChips button',x=>x.map(e=>e.textContent)));
