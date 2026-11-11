@@ -540,7 +540,7 @@ function plan(G, p, nodes, onProgress = () => {}) {
     for (const o of options.slice(0, 24)) {
       const r = mk(o.stops, o.pois);
       if (!r) continue;
-      r.interest = interest(G, r); r.score = 3 * Math.abs(r.len - L) / L + (r.reuse / r.len) * 1.2 - o.w + (p.avoid_asphalt ? 1.2 : 0.6) * (r.asph / r.len) - 0.6 * r.interest;
+      r.interest = interest(G, r); r.score = 3 * Math.abs(r.len - L) / L + (r.reuse / r.len) * 2.5 - o.w + (p.avoid_asphalt ? 1.2 : 0.6) * (r.asph / r.len) - 0.6 * r.interest;
       built.push(r);
     }
     built.sort((x, y) => x.score - y.score);
@@ -579,7 +579,7 @@ function plan(G, p, nodes, onProgress = () => {}) {
       const poiList = [A, B].filter((x, k) => x.type && (k === 0 || c.i !== c.j));
       const r = mk(stops, poiList);
       if (!r) continue;
-      r.interest = interest(G, r); r.score = 2 * Math.abs(r.len - L) / L + (r.reuse / r.len) * 1.2 - 0.35 * poiList.length + (p.avoid_asphalt ? 1.2 : 0.6) * (r.asph / r.len) - 0.6 * r.interest;
+      r.interest = interest(G, r); r.score = 2 * Math.abs(r.len - L) / L + (r.reuse / r.len) * 2.5 - 0.35 * poiList.length + (p.avoid_asphalt ? 1.2 : 0.6) * (r.asph / r.len) - 0.6 * r.interest;
       built.push(r);
     }
     built.sort((x, y) => x.score - y.score);
@@ -631,7 +631,7 @@ function plan(G, p, nodes, onProgress = () => {}) {
       const kinds = new Set(o.pois.map(x => x.picnic ? 'camp' : x.type));
       let midPen = 0; // a stop is a break: best around the middle of the drive, not just before the end
       for (const x of o.pois) { let acc = 0, at = null; for (const ed of r.edges) { acc += G.eLen[ed]; if (G.eA[ed] === x.node || G.eB[ed] === x.node) { at = acc; break; } } if (at != null) midPen += Math.max(0, Math.abs(at / r.len - 0.5) - 0.15) * 2; }
-      r.score = (p.duration_hours || p.distance_km ? 2 : 1) * Math.abs(r.len - tgt) / tgt + (r.reuse / r.len) * 1.2 + midPen - 0.45 * kinds.size - 0.1 * (o.pois.length - kinds.size) + (want.length && !o.pois.length ? 0.35 : 0) + (r.len > budget * 1.2 ? 1 : 0) + (r.asph / r.len) * 0.8 + ((r.js || 0) / r.len) * 0.6 - 0.6 * (r.interest = interest(G, r));
+      r.score = (p.duration_hours || p.distance_km ? 2 : 1) * Math.abs(r.len - tgt) / tgt + (r.reuse / r.len) * 2.5 + midPen - 0.45 * kinds.size - 0.1 * (o.pois.length - kinds.size) + (want.length && !o.pois.length ? 0.35 : 0) + (r.len > budget * 1.2 ? 1 : 0) + (r.asph / r.len) * 0.8 + ((r.js || 0) / r.len) * 0.6 - 0.6 * (r.interest = interest(G, r));
       built.push(r);
     }
     built.sort((x, y) => x.score - y.score);

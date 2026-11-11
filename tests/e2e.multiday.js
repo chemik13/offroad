@@ -5,7 +5,7 @@ function fakeOSM(){const els=[];let id=1;const la0=30.25,lo0=34.45,st=0.008,n=90
  for(let k=0;k<12;k++)els.push({type:'node',id:id++,lat:la0+r()*n*st,lon:lo0+r()*n*st,tags:{tourism:'viewpoint',name:'תצפית '+k}});for(let k=0;k<12;k++)els.push({type:'node',id:id++,lat:la0+r()*n*st,lon:lo0+r()*n*st,tags:{tourism:'camp_site',name:'חניון לילה '+k,operator:'רשות הטבע והגנים',drinking_water:'yes'}});
  return {elements:els};}
 (async()=>{
-const b=await chromium.launch();const p=await b.newPage({viewport:{width:400,height:860}});
+const b=await chromium.launch();const p=await b.newPage({acceptDownloads:true,viewport:{width:400,height:860}});
 const errs=[];p.on('pageerror',e=>errs.push('PAGEERR '+e.message));
 const data=JSON.stringify(fakeOSM());const DB=[];let n=0;
 await p.route(/overpass/,r=>r.fulfill({status:200,contentType:'application/json',body:data}));
@@ -30,6 +30,7 @@ await p.fill('#prompt','יומיים ממצפה רמון עם תצפית');await
 console.log('chips',await p.$$eval('#dayChips button',x=>x.map(e=>e.textContent)));
 console.log('dayplan',await p.$$eval('.dayrow',x=>x.map(e=>e.textContent)));
 const ch=await p.$$('#dayChips button'); if(ch[2]){await ch[2].click();await p.waitForTimeout(300);console.log('day2 stats',await p.$eval('#stats',e=>e.textContent.replace(/\s+/g,' ')));}
+for(const lab of ['GPX יום 1','GPX כל הטיול']){const btn=p.locator('button.fly3d',{hasText:lab}).first();const [dl]=await Promise.all([p.waitForEvent('download'),btn.click()]);const f=await dl.path();const x=require('fs').readFileSync(f,'utf8');console.log('dl',await p.evaluate(()=>dayGpxFile(0).name),'trk',(x.match(/<trk>/g)||[]).length,'pts',(x.match(/<trkpt/g)||[]).length,'wpt',(x.match(/<wpt/g)||[]).length);}
 await p.click('#saveBtn');await p.waitForTimeout(400);console.log('saved days',JSON.stringify(DB[0]&&DB[0].stats.days&&DB[0].stats.days.map(d=>[d.from,d.to,d.len,d.camp&&d.camp.name])));
 await p.click('#libBtn');await p.waitForTimeout(300);await p.click('.litem');await p.waitForTimeout(500);
 console.log('loaded chips',await p.$$eval('#dayChips button',x=>x.map(e=>e.textContent)));

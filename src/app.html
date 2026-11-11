@@ -37,6 +37,15 @@ html,body{height:100%;margin:0}
 body{font-family:var(--body);background:var(--bg);color:var(--ink);font-size:15px;overflow:hidden;-webkit-font-smoothing:antialiased}
 #map{position:fixed;inset:0;z-index:0;background:#eef0ec}
 .leaflet-control-attribution{font-size:10px}
+.nightpin,.supplypin{position:relative;display:inline-flex;align-items:center;gap:4px;padding:3px 8px 3px 6px;border-radius:999px;background:var(--c,#1b5e8c);color:#fff;font:600 12px var(--body);white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.35);border:2px solid #fff}
+.nightpin::after,.supplypin::after{content:'';position:absolute;bottom:-8px;inset-inline-start:10px;border:6px solid transparent;border-top-color:#fff}
+.nightpin span{font-weight:400;opacity:.92}
+.nightpin span:empty{display:none}
+.nightpin .ico,.supplypin .ico{width:15px;height:15px;stroke:#fff}
+.supplypin{background:#2e7d32}
+.rotctl a{font-size:18px;line-height:30px;font-weight:600}
+.rotctl .needle{display:inline-block;color:#c0392b;font-size:13px;transition:transform .15s}
+.rotctl a.tilted{background:#fff6e0}
 .leaflet-top{top:calc(env(safe-area-inset-top,0px) + 58px)}
 .leaflet-bar a,.leaflet-control-layers{border-radius:10px!important}
 .leaflet-touch .leaflet-bar,.leaflet-touch .leaflet-control-layers{border:1px solid var(--line);box-shadow:0 1px 6px rgba(20,30,25,.12)}
@@ -650,6 +659,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
   <div class="cap"><button class="nav" id="lbPrev" aria-label="הקודמת">›</button><span id="lbCap"></span><button class="nav" id="lbNext" aria-label="הבאה">‹</button><button class="nav" id="lbClose" aria-label="סגירה">✕</button></div>
 </dialog>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet-rotate@0.2.8/dist/leaflet-rotate.js"></script>
 <script>
 /*ENGINE*/
 </script>
@@ -661,12 +671,39 @@ const DEFAULT_CENTER = [31.45, 35.0]; // כל הארץ
 const store = { get(k){try{return localStorage.getItem(k)}catch{return null}}, set(k,v){try{localStorage.setItem(k,v)}catch{}} };
 
 // ---------- map ----------
-const map = L.map('map', { zoomControl: false, attributionControl: true, zoomSnap: 0.5 }).setView(DEFAULT_CENTER, 7);
+const map = L.map('map', { zoomControl: false, attributionControl: true, zoomSnap: 0.5, rotate: true, touchRotate: true, shiftKeyRotate: true, bearing: 0, rotateControl: false }).setView(DEFAULT_CENTER, 7);
 if (!location.hash) { map.fitBounds([[29.5, 34.25], [33.3, 35.9]]); setTimeout(() => map.fitBounds([[29.5, 34.25], [33.3, 35.9]], mapPad()), 50); } // Israel first, in the part of the map the panel leaves free
 const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17, attribution: '© OpenStreetMap, SRTM · OpenTopoMap' }).addTo(map);
 const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' });
 const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18, attribution: 'Esri World Imagery' });
-L.control.layers({ 'טופוגרפית': topo, 'רגילה': osm, 'לוויין': sat }, null, { position: 'topleft' }).addTo(map);
+const ihm = L.tileLayer('https://israelhiking.osm.org.il/Hebrew/Tiles/{z}/{x}/{y}.png', { maxZoom: 18, maxNativeZoom: 16, attribution: '<a href="https://israelhiking.osm.org.il" target="_blank" rel="noopener">Israel Hiking Map</a> · © OpenStreetMap' });
+// abroad the OSM maps show local scripts (Greek, Georgian, Cyrillic): there the default is a topo map with English names
+const topoEn = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Esri, HERE, Garmin, © OpenStreetMap' });
+L.control.layers({ 'מפת טיולים (ישראל): שבילים מסומנים ומספרי כבישים': ihm, 'טופוגרפית': topo, 'טופוגרפית, שמות באנגלית': topoEn, 'רגילה': osm, 'לוויין': sat }, null, { position: 'topleft' }).addTo(map);
+{ // which map: the one you picked, else by where the map is (Israel: Hebrew topo; abroad: English names)
+  const LAYERS = { ihm, topo, topoEn, osm, sat }; let auto = true, switching = false;
+  try { const k = localStorage.getItem('baseLayer'); if (k && LAYERS[k]) { auto = false; if (k !== 'topo') { map.removeLayer(topo); LAYERS[k].addTo(map); } } } catch {}
+  map.on('baselayerchange', e => { if (switching) return; const k = Object.keys(LAYERS).find(n => LAYERS[n] === e.layer); auto = false; try { localStorage.setItem('baseLayer', k); } catch {} });
+  const pickByPlace = () => { if (!auto) return; const c = map.getCenter(), want = map.getZoom() < 6 ? topo : inIsrael(c.lat, c.lng) ? ihm : topoEn;
+    if (map.hasLayer(want)) return; switching = true; for (const l of [topo, topoEn, ihm]) if (l !== want && map.hasLayer(l)) map.removeLayer(l); want.addTo(map); switching = false; };
+  pickByPlace();
+  map.on('moveend', pickByPlace);
+}
+// turn the map: two fingers on a phone, Shift+drag or the arrow buttons / Shift+arrow keys on a computer; the compass puts north up
+{
+  const RotCtl = L.Control.extend({ options: { position: 'topleft' }, onAdd() {
+    const box = L.DomUtil.create('div', 'leaflet-bar rotctl'); L.DomEvent.disableClickPropagation(box);
+    const btn = (html, title, fn) => { const a = L.DomUtil.create('a', '', box); a.href = '#'; a.role = 'button'; a.title = title; a.setAttribute('aria-label', title); a.innerHTML = html; L.DomEvent.on(a, 'click', e => { L.DomEvent.preventDefault(e); fn(); }); return a; };
+    btn('⟲', 'סיבוב שמאלה', () => map.setBearing((map.getBearing() - 20 + 360) % 360));
+    this.north = btn('<span class="needle">▲</span>', 'צפון למעלה', () => map.setBearing(0));
+    btn('⟳', 'סיבוב ימינה', () => map.setBearing((map.getBearing() + 20) % 360));
+    map.on('rotate', () => { this.north.firstChild.style.transform = `rotate(${-map.getBearing()}deg)`; this.north.classList.toggle('tilted', Math.round(map.getBearing()) % 360 !== 0); });
+    return box; } });
+  if (map.setBearing) new RotCtl().addTo(map);
+  document.addEventListener('keydown', e => { if (!map.setBearing || !e.shiftKey || /input|textarea|select/i.test(document.activeElement?.tagName || '')) return;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); map.setBearing((map.getBearing() + (e.key === 'ArrowRight' ? 15 : -15) + 360) % 360); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); map.setBearing(0); } });
+}
 L.control.zoom({ position: 'topleft' }).addTo(map);
 const aaLayer = L.layerGroup();
 for (const [la, lo, r, n] of AREA_A) L.circle([la, lo], { radius: r * 1000, color: '#c0392b', weight: 1, fillColor: '#c0392b', fillOpacity: .12, dashArray: '3 4' }).bindTooltip('שטח A · ' + n).addTo(aaLayer);
@@ -2042,7 +2079,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
     for (const kind of ['fuel', 'food']) {
       let best = null, bd = 8000;
       for (const sp of supply) if (sp.kind === kind) { const dd = hav(d.camp.lat, d.camp.lon, sp.lat, sp.lon); if (dd < bd) { bd = dd; best = sp; } }
-      if (best) pois.push({ type: kind === 'fuel' ? 'fuel' : 'via', name: best.name, note: `${kind === 'fuel' ? 'תדלוק' : 'הצטיידות באוכל'} לפני לילה ${k + 1} (${(bd / 1000).toFixed(1)} ק"מ מהחניון)`, lat: best.lat, lon: best.lon });
+      if (best) pois.push({ type: kind === 'fuel' ? 'fuel' : 'via', supply: kind, night: k + 1, name: best.name, note: `${kind === 'fuel' ? 'תדלוק' : 'הצטיידות באוכל'} לפני לילה ${k + 1} (${(bd / 1000).toFixed(1)} ק"מ מהחניון)`, lat: best.lat, lon: best.lon });
       else notes.push(`ליד חניון לילה ${k + 1} לא מצאתי ${kind === 'fuel' ? 'תחנת דלק' : 'סופרמרקט'}; תדלקו/הצטיידו מוקדם יותר באותו יום.`);
     }
   });
@@ -2451,6 +2488,8 @@ function campSub(c) {
 const ICON = {
   tent: '<path d="M3 20h18M12 4 3.5 20M12 4l8.5 16M12 4v16m-3.5 0L12 13l3.5 7"/>',
   tree: '<path d="M12 3 6 11h3l-4 6h14l-4-6h3z"/><path d="M12 17v4"/>',
+  download: '<path d="M12 4v11M7 10l5 5 5-5M5 19h14"/>',
+  cart: '<path d="M3 4h2.5l2.2 10.5h10.6L20.5 7H7"/><circle cx="9.5" cy="19" r="1.6"/><circle cx="17" cy="19" r="1.6"/>',
   ferry: '<path d="M3 15l1.6 4.2h14.8L21 15H3z"/><path d="M6 15V10h12v5M9 10V6h6v4M12 6V3.5"/><path d="M2.5 21.5c1.5 0 1.5-.8 3-.8s1.5.8 3 .8 1.5-.8 3-.8 1.5.8 3 .8 1.5-.8 3-.8 1.5.8 3 .8" opacity=".6"/>',
   moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
   flag: '<path d="M5 21V4m0 0h11l-2 4 2 4H5"/>',
@@ -3109,7 +3148,21 @@ function render(i, day = null) {
   drawReports(L.latLngBounds(r.coords).pad(0.15));
   const dayBox = dv ? L.latLngBounds(r.coords.slice(dv.from, dv.to + 1)).pad(0.05) : null;
   const crowded = D && r.pois.length > 10;
+  // where we sleep and where we stock up: always labelled, whatever else is on the map
+  if (D) D.forEach((d, k) => {
+    const c = d.camp; if (!c || c.ferry) return;
+    const pp = placePopup(c, c.name, campSub(c));
+    const html = `<div class="nightpin" style="--c:${DAYC[k % DAYC.length]}">${ico(c.wild ? 'moon' : 'tent')}<b>לילה ${k + 1}</b><span></span></div>`;
+    const m = L.marker([c.lat, c.lon], { icon: L.divIcon({ className: '', html, iconSize: null, iconAnchor: [14, 30] }), zIndexOffset: 1200 }).addTo(markLayer).bindPopup(pp.div, { maxWidth: 320, minWidth: 220 }).on('popupopen', pp.load);
+    const sp = m.getElement()?.querySelector('.nightpin span'); if (sp) sp.textContent = (c.name || '').replace(/^🌲\s*/, '').replace(/^לינת שטח:\s*/, '').slice(0, 26);
+  });
+  for (const pt of r.pois.filter(x => x.supply)) {
+    const html = `<div class="supplypin">${ico(pt.supply === 'fuel' ? 'fuel' : 'cart')}<b>${pt.supply === 'fuel' ? 'דלק' : 'הצטיידות'}</b></div>`;
+    const pp = placePopup(pt, pt.name, pt.note || '');
+    L.marker([pt.lat, pt.lon], { icon: L.divIcon({ className: '', html, iconSize: null, iconAnchor: [12, 26] }), zIndexOffset: 1100, title: pt.name }).addTo(markLayer).bindPopup(pp.div, { maxWidth: 320, minWidth: 220 }).on('popupopen', pp.load);
+  }
   r.pois.forEach(pt => {
+    if (pt.supply || (D && pt.type === 'nightcamp')) return; // drawn above
     const label = !crowded || (dayBox && dayBox.contains([pt.lat, pt.lon]));
     const ic = L.divIcon({ className: '', html: label ? `<div class="poi-ic"></div>` : `<div class="poi-dot"></div>`, iconSize: null, iconAnchor: [0, 0] });
     const m = L.marker([pt.lat, pt.lon], { icon: ic, title: pt.name }).addTo(markLayer);
@@ -3211,7 +3264,8 @@ function render(i, day = null) {
   else { const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.innerHTML = ico('mountain') + 'מעוף על כל הטיול';
     fb.onclick = () => { let c = 0; const cum = [0]; for (let q = 1; q < r.coords.length; q++) { c += hav(r.coords[q - 1][0], r.coords[q - 1][1], r.coords[q][0], r.coords[q][1]); cum.push(c); }
       flyOver(r.coords, routeTitle(r, p), D.map((d, k) => ({ d: cum[Math.min(d.from, cum.length - 1)], name: `יום ${k + 1}`, day: true, of: D.length, to: d.camp?.name || (k === D.length - 1 ? 'סיום הטיול' : '') }))); };
-    $('dayPlan').prepend(fb); }
+    const ab = document.createElement('button'); ab.type = 'button'; ab.className = 'fly3d'; ab.innerHTML = ico('download') + `GPX כל הטיול (${D.length} ימים)`; ab.onclick = () => $('gpxBtn').click();
+    $('dayPlan').prepend(fb, ab); }
   if (D) {
     const box = document.createElement('div'); box.className = 'dayplan cards';
     const offUnknown = !r.overland && D.every(x => !x.off) && (r.asph == null || r.asph < r.len * 0.95);
@@ -3250,7 +3304,8 @@ function render(i, day = null) {
         }
         night.append(sw);
       }
-      { const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.innerHTML = ico('mountain') + 'מעוף תלת-ממד'; fb.onclick = () => flyOver(r.coords.slice(d.from, d.to + 1), `יום ${k + 1}`, r.pois.filter(x => !POI_TYPES[x.type]?.safety && x.type !== 'nightcamp').map(x => ({ lat: x.lat, lon: x.lon, name: x.name }))); const row = night.querySelector('.plinks'); if (row) row.prepend(fb); else night.append(fb); }
+      { const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.innerHTML = ico('mountain') + 'מעוף תלת-ממד'; fb.onclick = () => flyOver(r.coords.slice(d.from, d.to + 1), `יום ${k + 1}`, r.pois.filter(x => !POI_TYPES[x.type]?.safety && x.type !== 'nightcamp').map(x => ({ lat: x.lat, lon: x.lon, name: x.name }))); const gb = document.createElement('button'); gb.type = 'button'; gb.className = 'fly3d'; gb.innerHTML = ico('download') + `GPX יום ${k + 1}`; gb.title = 'הורדת היום הזה בלבד'; gb.onclick = () => { downloadFile(dayGpxFile(k)); status(`ה-GPX של יום ${k + 1} ירד.`); };
+        const row = night.querySelector('.plinks'); if (row) { row.prepend(gb); row.prepend(fb); } else night.append(fb, gb); }
       card.append(night);
       box.append(card);
     });
@@ -3468,7 +3523,10 @@ const verCount = r => r.versions > 1 ? `${r.versions} גרסאות` : null;
 async function loadRecent() {
   if (!hasGroup()) return;
   try {
-    const j = await api('/routes'); const rows = (j.routes || []).slice(0, 5); if (!rows.length) return;
+    const j = await api('/routes'), all = j.routes || [], me = store.get('nick') || null;
+    const rows = all.slice(0, 5); // the latest, and what the others saved lately even if yours fill the top
+    for (const r of all.filter(r => r.created_by && r.created_by !== me && !rows.includes(r)).slice(0, 2)) rows.push(r);
+    if (!rows.length) return;
     const list = document.querySelector('#recent .rlist'); list.innerHTML = '';
     for (const r of rows) {
       const b = document.createElement('button'); b.type = 'button'; b.innerHTML = '<b></b><small></small>';
@@ -3480,6 +3538,7 @@ async function loadRecent() {
   } catch {}
 }
 setTimeout(loadRecent, 400);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !current) loadRecent(); });
 async function checkSharedLink() { const m = location.hash.match(/#r=([0-9a-f-]{36})/); if (!m || !hasGroup()) return;
   try { status('פותח את הטיול ששותף…'); const j = await api('/routes/' + m[1]); showSaved(j.route); status(''); } catch { status('לא הצלחתי לפתוח את הטיול ששותף. בדקו את קוד הקבוצה ב-⚙.', true); } }
 checkSharedLink();
@@ -3501,10 +3560,8 @@ let libCache = null;
 async function openLibrary() {
   $('library').showModal();
   if (!hasGroup()) { $('libList').innerHTML = '<div class="empty">כדי לראות את הספרייה המשותפת, הכניסו קוד קבוצה בהגדרות (⚙).<br>ייבוא קובץ עובד גם בלי.</div>'; return; }
-  if (!libCache) {
-    $('libList').innerHTML = '<div class="empty">טוען…</div>';
-    try { libCache = (await api('/routes')).routes; } catch (e) { $('libList').innerHTML = `<div class="empty">${e.status === 401 ? 'קוד הקבוצה לא נכון.' : 'אין חיבור לשרת.'}</div>`; return; }
-  }
+  if (libCache) drawLib(); else $('libList').innerHTML = '<div class="empty">טוען…</div>'; // the last list at once, then the fresh one (with the trips others saved since)
+  try { libCache = (await api('/routes')).routes; } catch (e) { if (!libCache) { $('libList').innerHTML = `<div class="empty">${e.status === 401 ? 'קוד הקבוצה לא נכון.' : 'אין חיבור לשרת.'}</div>`; return; } }
   drawLib();
 }
 function drawLib() {
@@ -3663,8 +3720,20 @@ function gpxFile() {
   const safe = title.replace(/ק"מ/g, 'קמ').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'מסלול';
   return { file: new File([toGPX(r, title)], `${safe}.gpx`, { type: 'application/gpx+xml' }), title };
 }
+// one day of a multi-day trip as its own GPX: that day's track + the stops along it
+function dayGpxFile(k) {
+  const { res, sel, p } = current; const r = res.results[sel]; const d = r.days[k];
+  const coords = r.coords.slice(d.from, d.to + 1);
+  const step = Math.max(1, Math.floor(coords.length / 400)), smp = coords.filter((_, i) => i % step === 0);
+  const near = x => smp.some(([a, o]) => hav(a, o, x.lat, x.lon) < 1500);
+  const pois = r.pois.filter(x => (x.night ? x.night === k + 1 : near(x)));
+  const base = $('routeName').value.trim() || routeTitle(r, p);
+  const title = `${base} · יום ${k + 1}`;
+  const safe = title.replace(/ק"מ/g, 'קמ').replace(/[\\/:*?"<>|·]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 70);
+  return new File([toGPX({ ...r, coords, pois, days: null }, title)], `${safe}.gpx`, { type: 'application/gpx+xml' });
+}
 function downloadFile(file) {
-  const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = `offroad-${new Date().toISOString().slice(0, 10)}.gpx`; document.body.append(a); a.click(); a.remove();
+  const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name || `offroad-${new Date().toISOString().slice(0, 10)}.gpx`; document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }
 const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
