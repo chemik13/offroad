@@ -296,9 +296,9 @@ function factors(G, p) {
     // paved public roads stay open through firing zones and military land (OSM base polygons often cover public roads)
     if (G.eMil[e] === 2 && !G.eAsph[e]) { f[e] = Infinity; continue; }
     if (G.eMil[e] === 1 && p.avoid_military && !G.eAsph[e]) { f[e] = Infinity; continue; }
-    if (G.eAsph[e]) { f[e] = p.avoid_asphalt ? 7 : 1.6; continue; }
+    if (G.eAsph[e]) { f[e] = p.avoid_asphalt ? (G.eTet && G.eTet[e] ? 3.5 : 7) : 1.6; continue; } // a TET connector on asphalt is part of a known dirt route
     if (d > maxD) { f[e] = Infinity; continue; }
-    f[e] = (1 + 0.45 * Math.abs(d - tD) + (G.eUnk[e] ? 0.15 : 0) + (G.eRes && G.eRes[e] ? 0.35 : 0)) * (G.eMark && G.eMark[e] ? 0.8 : 1); // reserves: prefer going around; marked jeep trails: preferred (maintained, legal)
+    f[e] = (1 + 0.45 * Math.abs(d - tD) + (G.eUnk[e] ? 0.15 : 0) + (G.eRes && G.eRes[e] ? 0.35 : 0)) * (G.eMark && G.eMark[e] ? 0.8 : 1) * (G.eTet && G.eTet[e] ? 0.6 : 1); // reserves: prefer going around; marked jeep trails: preferred (maintained, legal)
   }
   return f;
 }
@@ -410,7 +410,7 @@ function buildRoute(G, fac, stops, maxCost, used = new Uint8Array(G.E)) {
 }
 
 function routeStats(G, edges, startNode) {
-  let len = 0, hrs = 0, asph = 0, mil = 0, unk = 0, maxD = 0, reuse = 0, aa = 0, js = 0, res = 0, marked = 0;
+  let len = 0, hrs = 0, asph = 0, mil = 0, unk = 0, maxD = 0, reuse = 0, aa = 0, js = 0, res = 0, marked = 0, tet = 0;
   const byD = [0, 0, 0, 0, 0, 0];
   const seen = new Uint8Array(G.E);
   const coords = [];
@@ -421,7 +421,7 @@ function routeStats(G, edges, startNode) {
     const L = G.eLen[e], d = G.eD[e];
     len += L; hrs += L / 1000 / DIFF[d].speed; byD[d] += L;
     if (G.eAsph[e]) asph += L; else maxD = Math.max(maxD, d);
-    if (G.eMark && G.eMark[e]) marked += L;
+    if (G.eMark && G.eMark[e]) marked += L; if (G.eTet && G.eTet[e]) tet += L;
     if (G.eMil[e]) mil += L; if (G.eUnk[e]) unk += L; if (G.eAA[e]) aa += L; if (G.eJS[e]) js += L; if (G.eRes && G.eRes[e]) res += L;
     if (seen[e]) reuse += L; seen[e] = 1;
     const v = G.eA[e] === u ? G.eB[e] : G.eA[e];
@@ -431,7 +431,7 @@ function routeStats(G, edges, startNode) {
     else segs.push({ d, pts: [[G.lat[u], G.lon[u]], [G.lat[v], G.lon[v]]] });
     u = v;
   }
-  return { len, hrs, asph, mil, unk, aa, js, res, marked, maxD, reuse, byD, coords, segs };
+  return { len, hrs, asph, mil, unk, aa, js, res, marked, tet, maxD, reuse, byD, coords, segs };
 }
 
 function snapPois(G, fac, types, R0, minL, maxL, authOnly = true, snapM = 500) {

@@ -1,0 +1,24 @@
+// TET import (on this device only) makes the planner prefer trails on the imported tracks. Real tiles (Israel).
+const {chromium}=require('playwright');const fs=require('fs');(async()=>{const b=await chromium.launch();const pg=await b.newPage();
+const errs=[];pg.on('pageerror',e=>errs.push(e.message));
+await pg.route(/fonts\.g|opentopomap|arcgis|tile\.openstreetmap/,r=>r.abort());
+await pg.goto('file://'+process.argv[2]);
+let fails=0;const ok=(c,t)=>{console.log((c?'PASS ':'FAIL ')+t);if(!c)fails++;};
+const P={country:'IL',start:{name:'מצפה רמון',lat:30.6097,lon:34.8013,researched:true,country:'IL'},loop:true,duration_hours:3,difficulty:'medium',military_mode:'auto',via:[]};
+const first=await pg.evaluate(async P=>{await run(true,P);const rs=current.res.results;return rs.map(r=>({len:r.len,tet:r.tet||0,coords:r.coords}));},P);
+const alt=first[first.length-1];
+const gpx='<?xml version="1.0"?><gpx version="1.1"><trk><name>t</name><trkseg>'+alt.coords.map(c=>`<trkpt lat="${c[0]}" lon="${c[1]}"></trkpt>`).join('')+'</trkseg></trk></gpx>';
+fs.writeFileSync(process.argv[3]+'/tet-test.gpx',gpx);
+await pg.evaluate(()=>{$('settingsBtn').click();$('tetBox').open=true;});
+await pg.setInputFiles('#tetFile',process.argv[3]+'/tet-test.gpx');
+await pg.waitForFunction(()=>/במכשיר הזה/.test($('tetState').textContent),null,{timeout:20000});
+console.log(await pg.evaluate(()=>$('tetState').textContent));
+await pg.evaluate(()=>$('closeSettings').click());
+const second=await pg.evaluate(async P=>{await run(true,P);const r=current.res.results[0];return {tet:r.tet||0,len:r.len,info:[...document.querySelectorAll('#warns *')].map(x=>x.textContent).filter(t=>/TET/.test(t)).slice(0,1)};},P);
+console.log(JSON.stringify({firstTet:first.map(x=>x.tet), second}));
+ok(first.every(x=>!x.tet),'no TET before import');
+ok(second.tet>alt.len*0.2,'after import the chosen route runs on the TET track ('+Math.round(second.tet/1000)+' km)');
+await pg.evaluate(async()=>{$('settingsBtn').click();$('tetBox').open=true;await tetShow();$('tetClear').click();});
+await pg.waitForTimeout(800);
+ok(/עוד לא יובאו/.test(await pg.evaluate(()=>$('tetState').textContent)),'clear removes the tracks');
+console.log(errs.join('\n')||'no page errors');console.log(fails?'FAILED '+fails:'ALL PASS');await b.close();})();
