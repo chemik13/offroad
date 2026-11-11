@@ -61,7 +61,7 @@ const CASES_IL = [
   const rows = [];
   for (const c of (process.env.SUITE === 'il' ? CASES_IL : CASES).filter(c => !only || only.split(',').includes(c.id))) {
     const pg = await b.newPage({ viewport: { width: 1400, height: 900 }, ignoreHTTPSErrors: true });
-    const errs = []; pg.on('pageerror', e => errs.push(e.message)); if (process.env.DBG) pg.on('console', m => { if (/dbg|piece/.test(m.text())) console.log('C', m.text().slice(0, 200)); });
+    const errs = []; pg.on('pageerror', e => errs.push(e.message)); if (process.env.DBG) pg.on('console', m => { if (/dbg|piece|stretch|seek/.test(m.text())) console.log('C', m.text().slice(0, 200)); });
     await pg.route(/tile\.|arcgis|fonts|opentopomap/, r => r.abort());
     await pg.route(/overpass|kumi|coffee|mail\.ru/, r => r.abort());
     await pg.route(/project-osrm/, async r => { try { const resp = await r.fetch({ timeout: 60000 }); await r.fulfill({ response: resp, headers: { ...resp.headers(), 'access-control-allow-origin': '*' } }); } catch { r.abort(); } });

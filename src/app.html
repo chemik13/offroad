@@ -1843,7 +1843,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
         if (!p1 || !p2) continue;
         const r = routeStats(G, [...p1, ...p2], s0), off = r.len - r.asph;
         if (off / r.len < 0.4 || r.len > (B.km - A.km) * 1000 + (j.room + (j.more ? 25 : 0)) * 1000 || selfRevisit(r.coords) > 0.12) continue;
-        if (!best || off > best.off) best = { A, B, r, off };
+        const int = interest(G, r); if (!best || off * (0.6 + int) > best.off * (0.6 + best.int)) best = { A, B, r, off, int };
       }
       return best && best.off > have ? best : null;
     }; // prebuilt tiles load in seconds; never let this stall the plan
@@ -1863,10 +1863,11 @@ async function planOverland(p, sLL, eLL, viaLL) {
           const r = routeStats(G, edges, s0);
           if ((r.len - r.asph) / r.len < 0.35 || r.len > (B.km - A.km) * 1000 + Math.max(12000, j.room * 1000)) continue; // mostly trail, and only as much extra as the day has room for
           if (r.len > (B.km - A.km) * 1000 * 1.9 || selfRevisit(r.coords) > 0.1) continue; // a stretch goes somewhere: no zig-zag through the same fields
-          found.push({ A, B, r, off: r.len - r.asph });
+          found.push({ A, B, r, off: r.len - r.asph, int: interest(G, r) });
         }
         // the best stretches that do not overlap, until the day reaches its off-road share
-        const pick = list => { list.sort((x, y) => y.off - x.off); const u = []; let o = 0;
+        // dirt that is worth driving first: winding, sights, curated trails
+        const pick = list => { list.sort((x, y) => y.off * (0.6 + (y.int || 0)) - x.off * (0.6 + (x.int || 0))); const u = []; let o = 0;
           let extra = 0; const cap = (j.room + (j.more ? 25 : 0)) * 1000; // all stretches of the day together stay within the day's room
           for (const f of list) { if (u.some(v => !(f.B.i < v.A.i || f.A.i > v.B.i))) continue; const x = Math.max(0, f.r.len - (f.B.km - f.A.km) * 1000); if (extra + x > cap) continue; u.push(f); o += f.off; extra += x; if (o >= j.target * 1000 * 1.1 || u.length >= 5) break; }
           return [u, o]; };

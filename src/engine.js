@@ -296,9 +296,9 @@ function factors(G, p) {
     // paved public roads stay open through firing zones and military land (OSM base polygons often cover public roads)
     if (G.eMil[e] === 2 && !G.eAsph[e]) { f[e] = Infinity; continue; }
     if (G.eMil[e] === 1 && p.avoid_military && !G.eAsph[e]) { f[e] = Infinity; continue; }
-    if (G.eAsph[e]) { f[e] = p.avoid_asphalt ? (G.eTet && G.eTet[e] ? 3.5 : 7) : 1.6; continue; } // a TET connector on asphalt is part of a known dirt route
+    if (G.eAsph[e]) { f[e] = p.avoid_asphalt ? (G.eTet && G.eTet[e] ? 5 : 7) : 1.6; continue; } // a TET connector on asphalt is part of a known dirt route
     if (d > maxD) { f[e] = Infinity; continue; }
-    f[e] = (1 + 0.45 * Math.abs(d - tD) + (G.eUnk[e] ? 0.15 : 0) + (G.eRes && G.eRes[e] ? 0.35 : 0)) * (G.eMark && G.eMark[e] ? 0.8 : 1) * (G.eTet && G.eTet[e] ? 0.6 : 1); // reserves: prefer going around; marked jeep trails: preferred (maintained, legal)
+    f[e] = (1 + 0.45 * Math.abs(d - tD) + (G.eUnk[e] ? 0.15 : 0) + (G.eRes && G.eRes[e] ? 0.35 : 0)) * (G.eMark && G.eMark[e] ? 0.8 : 1) * (G.eTet && G.eTet[e] ? 0.8 : 1); // reserves: prefer going around; marked jeep trails: preferred (maintained, legal)
   }
   return f;
 }
@@ -434,6 +434,18 @@ function routeStats(G, edges, startNode) {
   return { len, hrs, asph, mil, unk, aa, js, res, marked, tet, maxD, reuse, byD, coords, segs };
 }
 
+// how interesting a drive is, 0..1: winding tracks (not straight farm roads), sights near the way, curated trails
+const SIGHTS = new Set(['viewpoint', 'spring', 'peak', 'historic', 'camp', 'water']);
+function interest(G, r) {
+  const c = r.coords; if (!c || c.length < 3 || !r.len) return 0;
+  let wind = 0, wl = 0, i0 = 0, acc = 0;
+  for (let i = 1; i < c.length; i++) { acc += hav(c[i - 1][0], c[i - 1][1], c[i][0], c[i][1]);
+    if (acc >= 2000 || i === c.length - 1) { const ch = hav(c[i0][0], c[i0][1], c[i][0], c[i][1]); if (acc > 500) { wind += Math.min(0.6, acc / Math.max(1, ch) - 1) * acc; wl += acc; } i0 = i; acc = 0; } }
+  const sinu = wl ? wind / wl : 0; // 0 straight .. 0.6 very winding
+  let sights = 0; if (G.pois) { const seen = new Set(); for (const p of G.pois) { if (!SIGHTS.has(p.type) || !p.name) continue; for (let i = 0; i < c.length; i += 6) if (Math.abs(c[i][0] - p.lat) < 0.005 && Math.abs(c[i][1] - p.lon) < 0.006 && hav(c[i][0], c[i][1], p.lat, p.lon) < 400) { seen.add(p.name); break; } } sights = seen.size; }
+  const curated = ((r.tet || 0) + (r.marked || 0) * 0.6) / r.len;
+  return Math.min(1, sinu / 0.35) * 0.45 + Math.min(1, sights / (2 + r.len / 25000)) * 0.35 + Math.min(1, curated * 1.5) * 0.2;
+}
 function snapPois(G, fac, types, R0, minL, maxL, authOnly = true, snapM = 500) {
   const out = [];
   for (const p of G.pois) {
@@ -528,7 +540,7 @@ function plan(G, p, nodes, onProgress = () => {}) {
     for (const o of options.slice(0, 24)) {
       const r = mk(o.stops, o.pois);
       if (!r) continue;
-      r.score = 3 * Math.abs(r.len - L) / L + (r.reuse / r.len) * 1.2 - o.w + (p.avoid_asphalt ? 1.2 : 0.6) * (r.asph / r.len);
+      r.interest = interest(G, r); r.score = 3 * Math.abs(r.len - L) / L + (r.reuse / r.len) * 1.2 - o.w + (p.avoid_asphalt ? 1.2 : 0.6) * (r.asph / r.len) - 0.6 * r.interest;
       built.push(r);
     }
     built.sort((x, y) => x.score - y.score);
@@ -567,7 +579,7 @@ function plan(G, p, nodes, onProgress = () => {}) {
       const poiList = [A, B].filter((x, k) => x.type && (k === 0 || c.i !== c.j));
       const r = mk(stops, poiList);
       if (!r) continue;
-      r.score = 2 * Math.abs(r.len - L) / L + (r.reuse / r.len) * 1.2 - 0.35 * poiList.length + (p.avoid_asphalt ? 1.2 : 0.6) * (r.asph / r.len);
+      r.interest = interest(G, r); r.score = 2 * Math.abs(r.len - L) / L + (r.reuse / r.len) * 1.2 - 0.35 * poiList.length + (p.avoid_asphalt ? 1.2 : 0.6) * (r.asph / r.len) - 0.6 * r.interest;
       built.push(r);
     }
     built.sort((x, y) => x.score - y.score);
@@ -619,7 +631,7 @@ function plan(G, p, nodes, onProgress = () => {}) {
       const kinds = new Set(o.pois.map(x => x.picnic ? 'camp' : x.type));
       let midPen = 0; // a stop is a break: best around the middle of the drive, not just before the end
       for (const x of o.pois) { let acc = 0, at = null; for (const ed of r.edges) { acc += G.eLen[ed]; if (G.eA[ed] === x.node || G.eB[ed] === x.node) { at = acc; break; } } if (at != null) midPen += Math.max(0, Math.abs(at / r.len - 0.5) - 0.15) * 2; }
-      r.score = (p.duration_hours || p.distance_km ? 2 : 1) * Math.abs(r.len - tgt) / tgt + (r.reuse / r.len) * 1.2 + midPen - 0.45 * kinds.size - 0.1 * (o.pois.length - kinds.size) + (want.length && !o.pois.length ? 0.35 : 0) + (r.len > budget * 1.2 ? 1 : 0) + (r.asph / r.len) * 0.8 + ((r.js || 0) / r.len) * 0.6;
+      r.score = (p.duration_hours || p.distance_km ? 2 : 1) * Math.abs(r.len - tgt) / tgt + (r.reuse / r.len) * 1.2 + midPen - 0.45 * kinds.size - 0.1 * (o.pois.length - kinds.size) + (want.length && !o.pois.length ? 0.35 : 0) + (r.len > budget * 1.2 ? 1 : 0) + (r.asph / r.len) * 0.8 + ((r.js || 0) / r.len) * 0.6 - 0.6 * (r.interest = interest(G, r));
       built.push(r);
     }
     built.sort((x, y) => x.score - y.score);
