@@ -72,6 +72,11 @@ header button{pointer-events:auto;margin-inline-start:auto}
 .flykm{color:#fff;font:600 13px var(--body);font-variant-numeric:tabular-nums;min-width:62px;text-align:center}
 .flymsg{position:absolute;inset:0;display:grid;place-items:center;color:#fff;font:500 15px var(--body);pointer-events:none}
 .flymsg:empty{display:none}
+.flyday{margin-inline-start:auto;background:rgba(0,0,0,.55);color:#fff;font:600 14px var(--body);padding:6px 12px;border-radius:999px;backdrop-filter:blur(4px)}
+.flyday[hidden]{display:none}
+.flybanner{position:absolute;top:22%;inset-inline:0;text-align:center;color:#fff;font:400 44px/1.1 var(--display);text-shadow:0 2px 12px rgba(0,0,0,.7);pointer-events:none;opacity:0;transition:opacity .5s}
+.flybanner small{display:block;font:500 17px var(--body);margin-top:6px}
+.flybanner.show{opacity:1}
 .fly3d{border:0;background:#1b2a22;color:#ffd23f;border-radius:999px;padding:4px 11px;font:600 12px var(--body);cursor:pointer;display:inline-flex;align-items:center;margin-top:6px}
 .plinks .fly3d{margin-top:0}
 .gate{position:fixed;inset:0;z-index:50;background:linear-gradient(160deg,#eef3ee,#fff 60%);display:grid;place-items:center;padding:20px}
@@ -567,7 +572,8 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
 
 <div id="fly" class="fly" hidden>
   <div id="flyMap"></div>
-  <div class="flytop"><button class="flybtn" id="flyClose" type="button" aria-label="סגירה"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button><div class="flytitle" id="flyTitle"></div></div>
+  <div class="flytop"><button class="flybtn" id="flyClose" type="button" aria-label="סגירה"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button><div class="flytitle" id="flyTitle"></div><div class="flyday" id="flyDay" hidden></div></div>
+  <div class="flybanner" id="flyBanner" aria-live="polite"></div>
   <div class="flybar"><button class="flybtn play" id="flyPlay" type="button" aria-label="עצירה">❚❚</button><div class="flyprog" id="flyBar" role="slider" tabindex="0" aria-label="מיקום במעוף" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="flyProg"></i><b id="flyKnob"></b></div><div class="flykm" id="flyKm"></div><button class="flybtn" id="flySpeed" type="button">1×</button></div>
   <div class="flymsg" id="flyMsg"></div>
 </div>
@@ -599,7 +605,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.68 · 11.11.2026 12:10</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.69 · 11.11.2026 12:11</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2013,7 +2019,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.68 · 11.11.2026 12:10']],
+    ['גרסת האפליקציה', async () => ['ok', '1.69 · 11.11.2026 12:11']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -3721,6 +3727,13 @@ async function flyOver(coords, title, marks = []) {
   const at = dist => { let lo = 0, hi = pts.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (pts[m][2] < dist) lo = m; else hi = m; } return pts[hi]; };
   // ticks on the bar: stops and day starts, tap one to jump there
   const bar = $('flyBar'); bar.querySelectorAll('.tick').forEach(x => x.remove());
+  // the whole trip: which day you are flying over, and a title card when a new day starts
+  const dayMarks = marks.filter(m => m.day && m.d != null).sort((a, b) => a.d - b.d); let curDay = -1, bannerT = null;
+  $('flyDay').hidden = !dayMarks.length; $('flyBanner').classList.remove('show');
+  const showDay = t => { if (!dayMarks.length) return; let k = 0; while (k + 1 < dayMarks.length && dayMarks[k + 1].d <= t) k++; if (k === curDay) return; curDay = k; const m = dayMarks[k];
+    $('flyDay').textContent = `${m.name} מתוך ${m.of || dayMarks.length}${m.to ? ' · אל ' + m.to : ''}`;
+    $('flyBanner').innerHTML = ''; const b = document.createElement('div'); b.textContent = m.name; const sm = document.createElement('small'); sm.textContent = m.to ? (/סיום/.test(m.to) ? m.to : 'לינה: ' + m.to) : ''; $('flyBanner').append(b.firstChild, sm);
+    $('flyBanner').classList.add('show'); clearTimeout(bannerT); bannerT = setTimeout(() => $('flyBanner').classList.remove('show'), 2600); };
   const near = (la, lo) => { let bi = 0, bd = Infinity; for (let i = 0; i < pts.length; i += 4) { const d = hav(la, lo, pts[i][1], pts[i][0]); if (d < bd) { bd = d; bi = i; } } return bd < 3000 ? pts[bi][2] : null; };
   for (const m of marks) { const d = m.d != null ? m.d : near(m.lat, m.lon); if (d == null || d < 200 || d > total - 200) continue;
     const t = document.createElement('span'); t.className = 'tick' + (m.day ? ' day' : ''); t.dataset.n = m.name; t.title = m.name; t.style.insetInlineStart = (d / total * 100).toFixed(2) + '%'; t.dataset.d = d; bar.append(t); }
@@ -3770,7 +3783,7 @@ async function flyOver(coords, title, marks = []) {
       const near = at(Math.min(total, flyState.t + 40)), back = at(Math.max(0, flyState.t - 40)); // the car turns with the track itself
       const hd = near === back ? (heading ?? want) : Math.atan2((near[0] - back[0]) * Math.cos(here[1] * Math.PI / 180), near[1] - back[1]) * 180 / Math.PI;
       if (heading == null) heading = hd; heading += (((hd - heading + 540) % 360) - 180) * Math.min(1, dt * 6);
-      car.setLngLat([here[0], here[1]]).setRotation(heading);
+      car.setLngLat([here[0], here[1]]).setRotation(heading); showDay(flyState.t);
       const look = at(Math.min(total, flyState.t + 220)); // the camera looks a little ahead, so the car sits low in the view
       map3.jumpTo({ center: [look[0], look[1]], bearing, pitch: 66, zoom: 14.7 });
       const pc = (flyState.t / total * 100).toFixed(2); $('flyProg').style.width = pc + '%'; $('flyKnob').style.insetInlineStart = pc + '%'; bar.setAttribute('aria-valuenow', Math.round(pc));
@@ -4264,7 +4277,7 @@ function render(i, day = null) {
   if (!D) { const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.innerHTML = ico('mountain') + 'מעוף תלת-ממד על המסלול'; fb.onclick = () => flyOver(r.coords, routeTitle(r, p), r.pois.filter(x => !POI_TYPES[x.type]?.safety).map(x => ({ lat: x.lat, lon: x.lon, name: x.name }))); $('dayPlan').append(fb); }
   else { const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.innerHTML = ico('mountain') + 'מעוף על כל הטיול';
     fb.onclick = () => { let c = 0; const cum = [0]; for (let q = 1; q < r.coords.length; q++) { c += hav(r.coords[q - 1][0], r.coords[q - 1][1], r.coords[q][0], r.coords[q][1]); cum.push(c); }
-      flyOver(r.coords, routeTitle(r, p), D.slice(1).map((d, k) => ({ d: cum[d.from], name: `יום ${k + 2}`, day: true }))); };
+      flyOver(r.coords, routeTitle(r, p), D.map((d, k) => ({ d: cum[Math.min(d.from, cum.length - 1)], name: `יום ${k + 1}`, day: true, of: D.length, to: d.camp?.name || (k === D.length - 1 ? 'סיום הטיול' : '') }))); };
     $('dayPlan').prepend(fb); }
   if (D) {
     const box = document.createElement('div'); box.className = 'dayplan cards';
