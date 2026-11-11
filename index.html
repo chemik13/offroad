@@ -631,7 +631,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.84 · 11.11.2026 20:41</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.85 · 11.11.2026 20:52</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2115,7 +2115,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.84 · 11.11.2026 20:41']],
+    ['גרסת האפליקציה', async () => ['ok', '1.85 · 11.11.2026 20:52']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -3930,9 +3930,9 @@ async function flyOver(coords, title, marks = []) {
       layers: [{ id: 'sat', type: 'raster', source: 'sat' }], sky: { 'sky-color': '#9cc8f0', 'horizon-color': '#e8f0f7', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.7, 'fog-color': '#e8f0f7' } } });
   flyState = { map: map3, t: 0, speed: 1, playing: true, last: 0, total }; flyBtn('pause');
   // ~35 s for a typical day; long days go faster, short ones slower
-  // the whole trip: about 40 s per day, so it reads like the single-day flight (the seek bar jumps ahead)
+  // the whole trip: about 80 s per day, so it reads like the single-day flight (the seek bar jumps ahead)
   const nDays = marks.filter(m => m.day).length;
-  const durS = nDays > 1 ? Math.max(40 * nDays, Math.min(55, total / 1000 * 0.45)) : Math.max(22, Math.min(55, total / 1000 * 0.45)), mps = total / durS;
+  const durS = nDays > 1 ? Math.max(80 * nDays, Math.min(55, total / 1000 * 0.45)) : Math.max(22, Math.min(55, total / 1000 * 0.45)), mps = total / durS;
   let zoomNow = 14.7;
   map3.on('load', () => {
     map3.setTerrain({ source: 'dem', exaggeration: 1.35 });
