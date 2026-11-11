@@ -31,7 +31,7 @@ console.log('chips',await p.$$eval('#dayChips button',x=>x.map(e=>e.textContent)
 console.log('dayplan',await p.$$eval('.dayrow',x=>x.map(e=>e.textContent)));
 const ch=await p.$$('#dayChips button'); if(ch[2]){await ch[2].click();await p.waitForTimeout(300);console.log('day2 stats',await p.$eval('#stats',e=>e.textContent.replace(/\s+/g,' ')));}
 for(const lab of ['GPX יום 1','GPX כל הטיול']){const btn=p.locator('button.fly3d',{hasText:lab}).first();const [dl]=await Promise.all([p.waitForEvent('download'),btn.click()]);const f=await dl.path();const x=require('fs').readFileSync(f,'utf8');console.log('dl',await p.evaluate(()=>dayGpxFile(0).name),'trk',(x.match(/<trk>/g)||[]).length,'pts',(x.match(/<trkpt/g)||[]).length,'wpt',(x.match(/<wpt/g)||[]).length);}
-console.log('gmaps',await p.$$eval('a.fly3d',x=>x.map(e=>e.textContent+' | '+decodeURIComponent(e.href).slice(0,140))));
+console.log('main',await p.getAttribute('#gmapsMain','href'),await p.isVisible('#gmapsMain'));console.log('gmaps',await p.$$eval('a.fly3d',x=>x.map(e=>e.textContent+' | '+decodeURIComponent(e.href).slice(0,140))));
 const before=DB.length;await p.fill('#routeName','הנגב של חמי');await p.press('#routeName','Enter');await p.waitForTimeout(800);
 console.log('rename', DB.length===before?'PASS no duplicate':'FAIL duplicate '+DB.length, DB.filter(x=>x.name==='הנגב של חמי').length?'PASS name saved':'FAIL name', await p.inputValue('#routeName'), await p.textContent('.namefield span'));
 await p.click('#saveBtn');await p.waitForTimeout(400);console.log('saved days',JSON.stringify(DB[0]&&DB[0].stats.days&&DB[0].stats.days.map(d=>[d.from,d.to,d.len,d.camp&&d.camp.name])));

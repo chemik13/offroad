@@ -225,7 +225,7 @@ details.params summary{cursor:pointer;font-weight:500;font-size:14px}
 ul.pois{margin:0;padding-inline-start:18px;font-size:14px}
 .actions{display:flex;gap:8px}
 .actions .go{flex:1}
-.ghost{background:#fff;border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:9px 14px;font:500 14px var(--body);cursor:pointer}
+.ghost{text-decoration:none;display:inline-flex;align-items:center;background:#fff;border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:9px 14px;font:500 14px var(--body);cursor:pointer}
 .ghost:hover{border-color:var(--accent);color:var(--accent)}
 dialog{border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink);padding:18px;width:min(420px,calc(100vw - 32px))}
 dialog::backdrop{background:rgba(20,30,25,.35)}
@@ -535,6 +535,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
       <div class="actions" style="margin-top:10px">
         <button class="go offroad" id="offroadBtn"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 15.5h16l-1.6-4.6a2 2 0 0 0-1.9-1.4H7.5a2 2 0 0 0-1.9 1.4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M3.5 15.5h17v2.5h-17z" fill="currentColor"/><circle cx="7.5" cy="18.5" r="2.2" fill="currentColor" stroke="var(--accent)" stroke-width="1.2"/><circle cx="16.5" cy="18.5" r="2.2" fill="currentColor" stroke="var(--accent)" stroke-width="1.2"/><path d="M9 9.5V7h6v2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>פתיחה ב-Off-Road</button>
         <button class="ghost" id="gpxBtn" title="הורדת קובץ GPX">GPX</button>
+        <a class="ghost" id="gmapsMain" target="_blank" rel="noopener" title="גוגל מנווט בכבישים שלו, לא בשבילי השטח">Google Maps</a>
       </div>
       <div class="orhint" id="orHint" hidden></div>
       <div class="saverow" id="orLinkRow" style="margin-top:8px" hidden>
@@ -3263,6 +3264,7 @@ function render(i, day = null) {
   renderSafety(r, dv, w);
   renderElevation(dv ? { ...r, coords: r.coords.slice(dv.from, dv.to + 1) } : r);
   $('dayPlan').innerHTML = '';
+  $('gmapsMain').href = D ? gmapsUrl(r.coords, D.slice(0, -1).map(d => r.coords[d.to])) : gmapsUrl(r.coords);
   if (!D) { const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.innerHTML = ico('mountain') + 'מעוף תלת-ממד על המסלול'; fb.onclick = () => flyOver(r.coords, routeTitle(r, p), r.pois.filter(x => !POI_TYPES[x.type]?.safety).map(x => ({ lat: x.lat, lon: x.lon, name: x.name }))); $('dayPlan').append(fb, gmapsBtn('פתיחה ב-Google Maps', gmapsUrl(r.coords))); }
   else { const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.innerHTML = ico('mountain') + 'מעוף על כל הטיול';
     fb.onclick = () => { let c = 0; const cum = [0]; for (let q = 1; q < r.coords.length; q++) { c += hav(r.coords[q - 1][0], r.coords[q - 1][1], r.coords[q][0], r.coords[q][1]); cum.push(c); }
