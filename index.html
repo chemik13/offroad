@@ -134,6 +134,11 @@ a.fly3d{text-decoration:none}
 #tripHead .th{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 #tripHead b{font-family:var(--display);font-size:17px;font-weight:600;line-height:1.3}
 #tripHead small{font-size:13px;color:var(--muted);line-height:1.4}
+.throw{display:flex;align-items:center;gap:4px;min-width:0}
+.thedit{flex:none;border:0;background:var(--stone);color:var(--ink);border-radius:8px;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.thedit svg{width:16px;height:16px}
+.throw[hidden],.thedit[hidden]{display:none}
+.thinput{font:600 17px var(--display);color:var(--ink);background:var(--stone);border:1px solid var(--line);border-radius:8px;padding:6px 8px;width:100%}
 .health{margin-top:12px;border:1px solid var(--line);border-radius:12px;padding:8px 12px}
 .health summary{cursor:pointer;font-weight:600;font-size:14px}
 .health summary span{font-weight:400;color:var(--muted);margin-inline-start:6px}
@@ -501,7 +506,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
       <div id="recent" class="recent" hidden><div class="rtitle">הטיולים האחרונים של החבורה</div><div class="rlist"></div></div>
     </div>
     <div id="tripHead" hidden>
-      <div class="th"><b id="thTitle"></b><small id="thSub"></small></div>
+      <div class="th"><div class="throw"><b id="thTitle"></b><button type="button" class="thedit" id="thEdit" title="שינוי שם הטיול" aria-label="שינוי שם הטיול"></button></div><input type="text" id="thInput" class="thinput" hidden enterkeyhint="done" aria-label="שם הטיול"><small id="thSub"></small></div>
       <button class="verbtn" id="verBtn" type="button" hidden aria-label="גרסאות הטיול"></button>
       <button class="linkbtn" id="newTripBtn" type="button">טיול חדש</button>
     </div>
@@ -626,7 +631,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.83 · 11.11.2026 20:38</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.84 · 11.11.2026 20:41</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2110,7 +2115,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.83 · 11.11.2026 20:38']],
+    ['גרסת האפליקציה', async () => ['ok', '1.84 · 11.11.2026 20:41']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -4609,7 +4614,9 @@ function tripHead(r, p) {
   const nm = x => x?.name ? '\u2068' + x.name.replace(/^📍\s*/, '').split(/[,،]/)[0].trim() + '\u2069' : null;
   const a = nm(p.start) || 'מסלול', b = p.loop ? null : nm(p.end);
   const D = r.days && r.days.length > 1 ? r.days.length : 0;
-  $('thTitle').textContent = p.loop ? `לופ מ${/[A-Za-z]/.test(a) ? '-' : ''}${a}` : b ? `${a} ← ${b}` : a;
+  const own = tripRow()?.name; // a name someone gave the trip (auto names always carry the km)
+  $('thTitle').textContent = own && !/ק"מ/.test(own) ? own : p.loop ? `לופ מ${/[A-Za-z]/.test(a) ? '-' : ''}${a}` : b ? `${a} ← ${b}` : a;
+  $('thEdit').hidden = !hasGroup();
   $('thSub').textContent = [current.saved ? null : p.summary_he, D ? `${D} ימים` : null].filter(Boolean).join(' · ');
   $('tripHead').hidden = false;
   $('composer').hidden = !!current.saved && !current.saved.params;
@@ -4734,7 +4741,7 @@ $('saveBtn').onclick = async () => {
     if (sv && sv.name === name) { status('השם נשמר.'); return; }
     if (sv) { // already saved: the name is the trip's name, on every version
       const j = await api('/routes/' + sv.id, { method: 'PATCH', body: JSON.stringify({ name }) }); Object.assign(sv, j.route);
-      libCache = null; drawTripMeta(); status('השם עודכן.'); return;
+      libCache = null; drawTripMeta(); tripHead(current.res.results[current.sel], current.p); status('השם עודכן.'); return;
     }
     const body = current.importRow ? { ...current.importRow, name } : { ...tripBody(current, r), name };
     const j = await api('/routes', { method: 'POST', body: JSON.stringify(body) });
@@ -4746,6 +4753,21 @@ $('saveBtn').onclick = async () => {
   } catch (e) { status('השמירה נכשלה: ' + e.message, true); }
   finally { $('saveBtn').disabled = false; }
 };
+// ✎ next to the title: rename in place
+$('thEdit').innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>';
+$('thEdit').onclick = () => {
+  const own = tripRow()?.name; $('thInput').value = own && !/ק"מ/.test(own) ? own : $('thTitle').textContent.replace(/[\u2068\u2069]/g, '');
+  $('thEdit').parentElement.hidden = true; $('thInput').hidden = false; $('thInput').focus(); $('thInput').select();
+};
+async function thCommit(save) {
+  if ($('thInput').hidden) return;
+  const v = $('thInput').value.trim(); $('thInput').hidden = true; $('thEdit').parentElement.hidden = false;
+  if (!save || !v || !current) return;
+  $('thTitle').textContent = v; $('routeName').value = v; await $('saveBtn').onclick();
+  if (current) tripHead(current.res.results[current.sel], current.p);
+}
+$('thInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); thCommit(true); } else if (e.key === 'Escape') thCommit(false); });
+$('thInput').addEventListener('blur', () => thCommit(true));
 // naming: type a name and press Enter (or just leave the field); it is saved for every version of the trip
 $('routeName').addEventListener('focus', e => setTimeout(() => e.target.select(), 0));
 $('routeName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
