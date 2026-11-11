@@ -170,7 +170,7 @@ Deno.serve(async (req) => {
       }
       if (req.method === "POST" && !id) {
         const b = await req.json();
-        if (!b.name || !Array.isArray(b.coords) || b.coords.length < 2 || b.coords.length > 50000) return json({ error: "מסלול לא תקין" }, 400);
+        if (!b.name || !Array.isArray(b.coords) || b.coords.length < 2 || b.coords.length > 400000) return json({ error: "מסלול לא תקין" }, 400);
         const row = {
           name: String(b.name).slice(0, 200), created_by: b.created_by ? String(b.created_by).slice(0, 60) : null,
           source: b.source === "imported" ? "imported" : "planned", source_url: b.source_url || null,
@@ -194,7 +194,7 @@ Deno.serve(async (req) => {
         const b = await req.json();
         const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
         for (const k of EDITABLE) if (k in b) patch[k] = b[k];
-        if (Array.isArray(b.coords) && b.coords.length >= 2 && b.coords.length <= 50000) for (const k of CONTENT) if (k in b) patch[k] = b[k];
+        if (Array.isArray(b.coords) && b.coords.length >= 2 && b.coords.length <= 400000) for (const k of CONTENT) if (k in b) patch[k] = b[k];
         const wide: Record<string, unknown> = {}; for (const k of TRIP_WIDE) if (k in b) wide[k] = b[k];
         if (Object.keys(wide).length) { const { data: one } = await db.from("routes").select("trip_id").eq("id", id).single(); if (one) await db.from("routes").update(wide).eq("trip_id", one.trip_id); }
         if ("offroad_url" in patch && patch.offroad_url !== null && !/^https:\/\/off-road\.io\/track\/\d{6,24}$/.test(String(patch.offroad_url))) return json({ error: "קישור Off-Road לא תקין" }, 400);
