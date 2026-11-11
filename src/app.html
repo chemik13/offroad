@@ -81,7 +81,9 @@ header button{pointer-events:auto;margin-inline-start:auto}
 .flykm{color:#fff;font:600 13px var(--body);font-variant-numeric:tabular-nums;min-width:62px;text-align:center}
 .flymsg{position:absolute;inset:0;display:grid;place-items:center;color:#fff;font:500 15px var(--body);pointer-events:none}
 .flymsg:empty{display:none}
-.flyday{margin-inline-start:auto;background:rgba(0,0,0,.55);color:#fff;font:600 14px var(--body);padding:6px 12px;border-radius:999px;backdrop-filter:blur(4px)}
+.flyday{margin-inline-start:auto;background:rgba(0,0,0,.62);color:#fff;font:600 15px var(--body);padding:8px 14px;border-radius:14px;backdrop-filter:blur(4px);border-inline-start:4px solid #ffd23f;max-width:60vw}
+.flyday b{font:700 22px var(--display);color:#ffd23f}
+.flyday small{display:block;font-weight:400;font-size:13px;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .flyday[hidden]{display:none}
 .flybanner{position:absolute;top:22%;inset-inline:0;text-align:center;color:#fff;font:400 44px/1.1 var(--display);text-shadow:0 2px 12px rgba(0,0,0,.7);pointer-events:none;opacity:0;transition:opacity .5s}
 .flybanner small{display:block;font:500 17px var(--body);margin-top:6px}
@@ -2708,8 +2710,14 @@ async function flyOver(coords, title, marks = []) {
   // the whole trip: which day you are flying over, and a title card when a new day starts
   const dayMarks = marks.filter(m => m.day && m.d != null).sort((a, b) => a.d - b.d); let curDay = -1, bannerT = null;
   $('flyDay').hidden = !dayMarks.length; $('flyBanner').classList.remove('show');
-  const showDay = t => { if (!dayMarks.length) return; let k = 0; while (k + 1 < dayMarks.length && dayMarks[k + 1].d <= t) k++; if (k === curDay) return; curDay = k; const m = dayMarks[k];
-    $('flyDay').textContent = `${m.name} מתוך ${m.of || dayMarks.length}${m.to ? ' · אל ' + m.to : ''}`;
+  let lastKm = -1;
+  const showDay = t => { if (!dayMarks.length) return; let k = 0; while (k + 1 < dayMarks.length && dayMarks[k + 1].d <= t) k++;
+    const m0 = dayMarks[k], end = k + 1 < dayMarks.length ? dayMarks[k + 1].d : total, km = Math.floor((t - m0.d) / 1000);
+    if (k === curDay && km === lastKm) return; lastKm = km;
+    $('flyDay').innerHTML = ''; const big = document.createElement('b'); big.textContent = m0.name; const of = document.createElement('span'); of.textContent = ` מתוך ${m0.of || dayMarks.length}`;
+    const sub = document.createElement('small'); sub.textContent = `${km} / ${Math.round((end - m0.d) / 1000)} ק"מ היום${m0.to ? ' · אל ' + m0.to : ''}`;
+    $('flyDay').append(big, of, sub);
+    if (k === curDay) return; curDay = k; const m = m0;
     $('flyBanner').innerHTML = ''; const b = document.createElement('div'); b.textContent = m.name; const sm = document.createElement('small'); sm.textContent = m.to ? (/סיום/.test(m.to) ? m.to : 'לינה: ' + m.to) : ''; $('flyBanner').append(b.firstChild, sm);
     $('flyBanner').classList.add('show'); clearTimeout(bannerT); bannerT = setTimeout(() => $('flyBanner').classList.remove('show'), 2600); };
   const near = (la, lo) => { let bi = 0, bd = Infinity; for (let i = 0; i < pts.length; i += 4) { const d = hav(la, lo, pts[i][1], pts[i][0]); if (d < bd) { bd = d; bi = i; } } return bd < 3000 ? pts[bi][2] : null; };
@@ -3291,7 +3299,7 @@ function render(i, day = null) {
     $('dayPlan').prepend(fb, ab, gw);
     if (dv) { // a day is selected: its own 3D, GPX and Google Maps first
       const k = day, df = document.createElement('button'); df.type = 'button'; df.className = 'fly3d'; df.innerHTML = ico('mountain') + `מעוף תלת-ממד · יום ${k + 1}`;
-      df.onclick = () => flyOver(r.coords.slice(dv.from, dv.to + 1), `יום ${k + 1}`, r.pois.filter(x => !POI_TYPES[x.type]?.safety && x.type !== 'nightcamp').map(x => ({ lat: x.lat, lon: x.lon, name: x.name })));
+      df.onclick = () => flyOver(r.coords.slice(dv.from, dv.to + 1), `יום ${k + 1}`, [{ d: 0, name: `יום ${k + 1}`, day: true, of: D.length, to: dv.camp?.name || (k === D.length - 1 ? 'סיום הטיול' : '') }, ...r.pois.filter(x => !POI_TYPES[x.type]?.safety && x.type !== 'nightcamp').map(x => ({ lat: x.lat, lon: x.lon, name: x.name }))]);
       const dg = document.createElement('button'); dg.type = 'button'; dg.className = 'fly3d'; dg.innerHTML = ico('download') + `GPX יום ${k + 1}`; dg.onclick = () => { downloadFile(dayGpxFile(k)); status(`ה-GPX של יום ${k + 1} ירד.`); };
       const dm = gmapsBtn(`Google Maps יום ${k + 1}`, gmapsUrl(r.coords.slice(dv.from, dv.to + 1)));
       const top = document.createElement('div'); top.className = 'plinks daytop'; top.append(df, dg, dm); $('dayPlan').prepend(top);
@@ -3335,7 +3343,7 @@ function render(i, day = null) {
         }
         night.append(sw);
       }
-      { const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.innerHTML = ico('mountain') + 'מעוף תלת-ממד'; fb.onclick = () => flyOver(r.coords.slice(d.from, d.to + 1), `יום ${k + 1}`, r.pois.filter(x => !POI_TYPES[x.type]?.safety && x.type !== 'nightcamp').map(x => ({ lat: x.lat, lon: x.lon, name: x.name }))); const gb = document.createElement('button'); gb.type = 'button'; gb.className = 'fly3d'; gb.innerHTML = ico('download') + `GPX יום ${k + 1}`; gb.title = 'הורדת היום הזה בלבד'; gb.onclick = () => { downloadFile(dayGpxFile(k)); status(`ה-GPX של יום ${k + 1} ירד.`); };
+      { const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.innerHTML = ico('mountain') + 'מעוף תלת-ממד'; fb.onclick = () => flyOver(r.coords.slice(d.from, d.to + 1), `יום ${k + 1}`, [{ d: 0, name: `יום ${k + 1}`, day: true, of: D.length, to: d.camp?.name || (k === D.length - 1 ? 'סיום הטיול' : '') }, ...r.pois.filter(x => !POI_TYPES[x.type]?.safety && x.type !== 'nightcamp').map(x => ({ lat: x.lat, lon: x.lon, name: x.name }))]); const gb = document.createElement('button'); gb.type = 'button'; gb.className = 'fly3d'; gb.innerHTML = ico('download') + `GPX יום ${k + 1}`; gb.title = 'הורדת היום הזה בלבד'; gb.onclick = () => { downloadFile(dayGpxFile(k)); status(`ה-GPX של יום ${k + 1} ירד.`); };
         const gm = gmapsBtn(`Google Maps יום ${k + 1}`, gmapsUrl(r.coords.slice(d.from, d.to + 1)));
         const row = night.querySelector('.plinks'); if (row) { row.prepend(gm); row.prepend(gb); row.prepend(fb); } else night.append(fb, gb, gm); }
       card.append(night);
