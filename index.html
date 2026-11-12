@@ -634,7 +634,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.95 · 12.11.2026 10:31</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.96 · 12.11.2026 10:36</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2143,7 +2143,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.95 · 12.11.2026 10:31']],
+    ['גרסת האפליקציה', async () => ['ok', '1.96 · 12.11.2026 10:36']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -4453,15 +4453,17 @@ function render(i, day = null) {
   clearTimeout(window.__refit); window.__refit = setTimeout(() => { map.invalidateSize(); map.fitBounds(fitB, mapPad()); }, 320); // after the panel settles
 
   const stopH = r.pois.filter(x => x.type !== 'nightcamp').length * 0.25;
+  const seaOf = (from, to) => (from == null ? r.segs : segsInRange(r, from, to)).filter(sg => sg.ferry).reduce((t, sg) => t + pathLen(sg.pts), 0); // sailing: in the total, not in the off-road share
+  const seaAll = seaOf(), seaDay = dv ? seaOf(dv.from, dv.to) : 0;
   if (dv) {
     $('stats').innerHTML = `
-    <div class="stat"><b>${(dv.len / 1000).toFixed(1)}</b><span>ק"מ ביום ${day + 1}</span></div>
+    <div class="stat"><b>${((dv.len + seaDay) / 1000).toFixed(1)}</b><span>ק"מ ביום ${day + 1}${seaDay > 500 ? ` (כולל ${Math.round(seaDay / 1000)} בשייט)` : ''}</span></div>
     <div class="stat"><b>${fmtH(dv.hrs + (dv.mid ? 0.25 : 0))}</b><span>שעות נסיעה</span></div>
     <div class="stat"><b>${dv.camp ? 'לילה' : 'סיום'}</b><span>${dv.camp ? dv.camp.name : 'נקודת הסיום'}</span></div>`;
     if (r.overland) $('stats').insertAdjacentHTML('beforeend', `<div class="stat" style="grid-column:1/-1"><b>${((dv.off || 0) / 1000).toFixed(0)} ק"מ שטח · ${((dv.len - (dv.off || 0)) / 1000).toFixed(0)} ק"מ כביש</b><span>חלוקת היום</span></div>`);
   }
   if (!dv) $('stats').innerHTML = `
-    <div class="stat"><b>${(r.len / 1000).toFixed(1)}</b><span>ק"מ${D ? ' בסה״כ' : ''}</span></div>
+    <div class="stat"><b>${((r.len + seaAll) / 1000).toFixed(1)}</b><span>ק"מ${D ? ' בסה״כ' : ''}${seaAll > 500 ? ` (כולל ${Math.round(seaAll / 1000)} בשייט)` : ''}</span></div>
     <div class="stat"><b>${fmtH(r.hrs + stopH)}</b><span>${D ? 'שעות נסיעה בסה״כ' : 'שעות (כולל עצירות)'}</span></div>
     <div class="stat${r.unrated ? '' : ' hard'}" id="hardStat"><b>${r.unrated ? 'לא מדורג' : (DIFF[r.maxD]?.he || '—').replace(/ \(.*\)/, '')}</b><span>הקטע הקשה ביותר</span></div>`;
   $('hardLinks')?.remove(); if (!dv) { const hl = hardestLinks(r, p); if (hl) { hl.id = 'hardLinks'; $('stats').after(hl); } }
@@ -4471,7 +4473,7 @@ function render(i, day = null) {
     const ln = L.polyline(longest.pts, { color: '#ff2d55', weight: 9, opacity: 0.9 }).addTo(routeLayer);
     map.fitBounds(L.latLngBounds(longest.pts).pad(0.6), { ...mapPad(), maxZoom: 15 }); setTimeout(() => ln.remove(), 4000);
   };
-  if (!dv && r.overland) $('stats').insertAdjacentHTML('beforeend', `<div class="stat" style="grid-column:1/-1"><b>${((r.len - r.asph) / 1000).toFixed(0)} ק"מ שטח · ${(r.asph / 1000).toFixed(0)} ק"מ כביש</b><span>${r.len - r.asph < 1000 ? 'לא נמצאו קטעי שטח: הוסיפו אזורי שטח בדרך (בתיבת השינוי למעלה)' : `${Math.round((r.len - r.asph) / r.len * 100)}% שטח · לכל יום רואים את החלוקה בכפתורי הימים`}</span></div>`);
+  if (!dv && r.overland) $('stats').insertAdjacentHTML('beforeend', `<div class="stat" style="grid-column:1/-1"><b>${((r.len - r.asph) / 1000).toFixed(0)} ק"מ שטח · ${(r.asph / 1000).toFixed(0)} ק"מ כביש${seaAll > 500 ? ` · ${Math.round(seaAll / 1000)} ק"מ שייט` : ''}</b><span>${r.len - r.asph < 1000 ? 'לא נמצאו קטעי שטח: הוסיפו אזורי שטח בדרך (בתיבת השינוי למעלה)' : `${Math.round((r.len - r.asph) / r.len * 100)}% שטח · לכל יום רואים את החלוקה בכפתורי הימים`}</span></div>`);
   $('bar').innerHTML = ''; $('legend').innerHTML = '';
   r.byD.forEach((m, d) => {
     if (!m) return;
@@ -4485,11 +4487,11 @@ function render(i, day = null) {
     const dvv = current.day != null ? r.days[current.day] : null;
     const km = { dirt: 0, road: 0, sea: 0 };
     for (const sg of dvv ? segsInRange(r, dvv.from, dvv.to) : r.segs) km[sg.ferry ? 'sea' : sg.d === 0 || sg.road ? 'road' : 'dirt'] += pathLen(sg.pts);
-    const tot = km.dirt + km.road + km.sea || 1, HE = { dirt: 'שטח', road: 'כביש', sea: 'שייט' };
+    const tot = km.dirt + km.road + km.sea || 1, drive = km.dirt + km.road || 1, HE = { dirt: 'שטח', road: 'כביש', sea: 'שייט' };
     $('bar').innerHTML = ''; $('legend').innerHTML = '';
     for (const k of ['dirt', 'road', 'sea']) if (km[k] > 0) {
       $('bar').insertAdjacentHTML('beforeend', `<div style="width:${km[k] / tot * 100}%;background:${SURF_C[k]}"></div>`);
-      $('legend').insertAdjacentHTML('beforeend', `<span><i style="--c:${SURF_C[k]}"></i>${HE[k]} ${Math.round(km[k] / 1000)} ק"מ (${Math.round(km[k] / tot * 100)}%)</span>`);
+      $('legend').insertAdjacentHTML('beforeend', `<span><i style="--c:${SURF_C[k]}"></i>${HE[k]} ${Math.round(km[k] / 1000)} ק"מ${k === 'sea' ? '' : ` (${Math.round(km[k] / drive * 100)}% מהנסיעה)`}</span>`);
     }
     $('legend').hidden = false;
   }
