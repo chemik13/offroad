@@ -3116,7 +3116,7 @@ function mapPad() {
   return { paddingTopLeft: [20, 70], paddingBottomRight: [20, Math.max(40, target + 16)] };
 }
 const DAYC = ['#3d2a1a']; // days are told apart by their "יום N" labels, not by colour
-const SURF_C = { dirt: '#5a3a1e', road: '#111111', sea: '#1f6fd6' };
+const SURF_C = { dirt: '#12b347', road: '#111111', sea: '#1f6fd6' };
 const SURF = sg => sg.ferry ? SURF_C.sea : sg.d === 0 || sg.road ? SURF_C.road : SURF_C.dirt;
 function segsInRange(r, from, to) {
   const out = []; let idx = 0;

@@ -634,7 +634,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.91 · 12.11.2026 09:50</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.92 · 12.11.2026 10:00</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2143,7 +2143,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.91 · 12.11.2026 09:50']],
+    ['גרסת האפליקציה', async () => ['ok', '1.92 · 12.11.2026 10:00']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -4348,7 +4348,7 @@ function mapPad() {
   return { paddingTopLeft: [20, 70], paddingBottomRight: [20, Math.max(40, target + 16)] };
 }
 const DAYC = ['#3d2a1a']; // days are told apart by their "יום N" labels, not by colour
-const SURF_C = { dirt: '#5a3a1e', road: '#111111', sea: '#1f6fd6' };
+const SURF_C = { dirt: '#12b347', road: '#111111', sea: '#1f6fd6' };
 const SURF = sg => sg.ferry ? SURF_C.sea : sg.d === 0 || sg.road ? SURF_C.road : SURF_C.dirt;
 function segsInRange(r, from, to) {
   const out = []; let idx = 0;
