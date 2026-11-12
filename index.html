@@ -634,7 +634,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.92 · 12.11.2026 10:00</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.93 · 12.11.2026 10:03</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2143,7 +2143,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.92 · 12.11.2026 10:00']],
+    ['גרסת האפליקציה', async () => ['ok', '1.93 · 12.11.2026 10:03']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -3966,7 +3966,7 @@ async function flyOver(coords, title, marks = []) {
   flyState = { map: map3, t: 0, speed: 1, playing: true, last: 0, total }; flyBtn('pause');
   // ~35 s for a typical day; long days go faster, short ones slower
     const nDays = marks.filter(m => m.day).length;
-  const durS = nDays > 1 ? total / 700 : Math.max(22, Math.min(55, total / 1000 * 0.45)), mps = total / durS; // whole trip: ~700 m a second (a 250 km day ≈ 6 min), the speed button goes up to ×16
+  const durS = nDays > 1 ? total / 230 : 3 * Math.max(22, Math.min(55, total / 1000 * 0.45)), mps = total / durS; // whole trip: ~230 m a second (a 250 km day ≈ 18 min); one day: 1–3 min; the speed button goes up to ×16
   let zoomNow = 14.7;
   map3.on('load', () => {
     map3.setTerrain({ source: 'dem', exaggeration: 1.35 });
@@ -3974,11 +3974,12 @@ async function flyOver(coords, title, marks = []) {
     const feats = [];
     const rr = current?.res?.results?.[current.sel], off = rr ? rr.coords.indexOf(coords[0]) : -1;
     if (rr && off >= 0 && rr.coords[off + coords.length - 1] === coords[coords.length - 1])
-      for (const sg of segsInRange(rr, off, off + coords.length - 1)) feats.push({ type: 'Feature', properties: { c: SURF(sg) }, geometry: { type: 'LineString', coordinates: sg.pts.map(([a, o]) => [o, a]) } });
+      for (const sg of segsInRange(rr, off, off + coords.length - 1)) feats.push({ type: 'Feature', properties: { c: SURF(sg), sea: !!sg.ferry }, geometry: { type: 'LineString', coordinates: sg.pts.map(([a, o]) => [o, a]) } });
     if (!feats.length) feats.push({ type: 'Feature', properties: { c: SURF_C.dirt }, geometry: { type: 'LineString', coordinates: pts.map(p => [p[0], p[1]]) } });
     map3.addSource('trk', { type: 'geojson', data: { type: 'FeatureCollection', features: feats } });
     map3.addLayer({ id: 'trk-c', type: 'line', source: 'trk', paint: { 'line-color': '#fff', 'line-width': 9, 'line-opacity': 0.85 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
-    map3.addLayer({ id: 'trk', type: 'line', source: 'trk', paint: { 'line-color': ['get', 'c'], 'line-width': 5 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
+    map3.addLayer({ id: 'trk', type: 'line', source: 'trk', filter: ['!=', ['get', 'sea'], true], paint: { 'line-color': ['get', 'c'], 'line-width': 5 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
+    map3.addLayer({ id: 'trk-sea', type: 'line', source: 'trk', filter: ['==', ['get', 'sea'], true], paint: { 'line-color': SURF_C.sea, 'line-width': 5, 'line-dasharray': [2, 1.5] }, layout: { 'line-join': 'round', 'line-cap': 'butt' } });
     $('flyMsg').textContent = '';
     // a small 3D black 4x4 drives the track: boxes for wheels, body, glass, roof and rails (scaled up so it reads from the air)
     map3.addSource('car', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
