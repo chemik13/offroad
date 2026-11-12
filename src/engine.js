@@ -84,8 +84,36 @@ function pointInRing(lat, lon, ring) {
   return inside;
 }
 
+// the same test for a big polygon (a nature park has thousands of corners) asked thousands of times:
+// its sides are bucketed by longitude once, so each question looks only at the sides that can cross it
+function ringHas(m, lat, lon) {
+  const r = m.r, n = r.length;
+  if (n < 48) return pointInRing(lat, lon, r);
+  let ix = m._ix;
+  if (!ix) {
+    const B = Math.max(8, Math.min(512, n >> 3)), w = (m.e - m.w) / B || 1e-9, b = Array.from({ length: B }, () => []);
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const lo = Math.min(r[i][1], r[j][1]), hi = Math.max(r[i][1], r[j][1]);
+      const k0 = Math.max(0, Math.min(B - 1, Math.floor((lo - m.w) / w))), k1 = Math.max(0, Math.min(B - 1, Math.floor((hi - m.w) / w)));
+      for (let k = k0; k <= k1; k++) b[k].push(i, j);
+    }
+    ix = m._ix = { B, w, b };
+  }
+  const list = ix.b[Math.max(0, Math.min(ix.B - 1, Math.floor((lon - m.w) / ix.w)))];
+  let inside = false;
+  for (let q = 0; q < list.length; q += 2) {
+    const pi = r[list[q]], pj = r[list[q + 1]], ai = pi[0], oi = pi[1], aj = pj[0], oj = pj[1];
+    if ((oi > lon) !== (oj > lon) && lat < ((aj - ai) * (lon - oi)) / (oj - oi) + ai) inside = !inside;
+  }
+  return inside;
+}
+
 // Build graph from Overpass elements
-function buildGraph(elements) {
+// the work is cut into steps so the page can stay alive while a big area is processed:
+// buildGraph() runs them all at once (tests, small areas); the app runs them in short slices
+function buildGraph(elements) { const g = buildGraphSteps(elements); let r; do r = g.next(); while (!r.done); return r.value; }
+function* buildGraphSteps(elements) {
+  let tick = 0;
   const idx = new Map();
   const lat = [], lon = [];
   const eA = [], eB = [], eLen = [], eD = [], eAsph = [], eMil = [], eAA = [], eJS = [], eUnk = [], eOne = [], eName = [], eMark = [];
@@ -93,6 +121,7 @@ function buildGraph(elements) {
   const pois = [];
   const ways = [];
   for (const el of elements) {
+    if ((++tick & 2047) === 0) yield;
     if (el.tags && (el.type === 'node' || el.center) && !el.tags.highway) {
       const plat = el.type === 'node' ? el.lat : el.center.lat, plon = el.type === 'node' ? el.lon : el.center.lon;
       for (const [k, def] of Object.entries(POI_TYPES)) {
@@ -136,14 +165,15 @@ function buildGraph(elements) {
       else pois.push({ type: 'nightcamp', lat: la, lon: lo, name: nm, auth: op });
     }
   }
-  const inRes = (a, o) => { for (const m of res) if (a >= m.s && a <= m.n && o >= m.w && o <= m.e && pointInRing(a, o, m.r)) return 1; return 0; };
-  const inMil = (a, o) => { let k = 0; for (const m of mil) if (a >= m.s && a <= m.n && o >= m.w && o <= m.e && pointInRing(a, o, m.r)) k = Math.max(k, m.kind); return k; };
+  const inRes = (a, o) => { for (const m of res) if (a >= m.s && a <= m.n && o >= m.w && o <= m.e && ringHas(m, a, o)) return 1; return 0; };
+  const inMil = (a, o) => { let k = 0; for (const m of mil) if (a >= m.s && a <= m.n && o >= m.w && o <= m.e && ringHas(m, a, o)) k = Math.max(k, m.kind); return k; };
   const nid = (id, g) => {
     let i = idx.get(id);
     if (i === undefined) { i = lat.length; idx.set(id, i); lat.push(g.lat); lon.push(g.lon); }
     return i;
   };
   for (const w of ways) {
+    if ((++tick & 511) === 0) yield;
     const info = wayInfo(w.tags);
     if (!info || !w.geometry || !w.nodes) continue;
     const one = !info.asph ? false : (w.tags.oneway === 'yes');
@@ -181,7 +211,7 @@ function bailDist(G) { // metres from every node to the nearest paved road, over
   const d = new Float64Array(G.N).fill(Infinity), h = new Heap();
   for (let e = 0; e < G.E; e++) if (G.eAsph[e]) { for (const n of [G.eA[e], G.eB[e]]) if (d[n]) { d[n] = 0; h.push(0, n); } }
   while (h.size) {
-    const [k, u] = h.pop(); if (k > d[u]) continue;
+    const u = h.pop(), k = h.key; if (k > d[u]) continue;
     for (let j = G.start[u]; j < G.start[u + 1]; j++) {
       const e = G.adj[j]; if (G.eClosed && G.eClosed[e]) continue;
       const v = G.eA[e] === u ? G.eB[e] : G.eA[e], nd = k + G.eLen[e];
@@ -303,28 +333,28 @@ function factors(G, p) {
   return f;
 }
 
-class Heap {
-  constructor() { this.k = []; this.v = []; }
+class Heap { // binary min-heap; pop() returns the value and leaves its key in .key (no array per pop: this is the planner's inner loop)
+  constructor() { this.k = []; this.v = []; this.key = 0; }
   get size() { return this.k.length; }
   push(key, val) {
-    const k = this.k, v = this.v; k.push(key); v.push(val);
-    let i = k.length - 1;
-    while (i > 0) { const p = (i - 1) >> 1; if (k[p] <= k[i]) break; [k[p], k[i]] = [k[i], k[p]]; [v[p], v[i]] = [v[i], v[p]]; i = p; }
+    const k = this.k, v = this.v; let i = k.length; k.push(key); v.push(val);
+    while (i > 0) { const p = (i - 1) >> 1; if (k[p] <= key) break; k[i] = k[p]; v[i] = v[p]; i = p; }
+    k[i] = key; v[i] = val;
   }
   pop() {
-    const k = this.k, v = this.v; const tk = k[0], tv = v[0];
-    const lk = k.pop(), lv = v.pop();
-    if (k.length) {
-      k[0] = lk; v[0] = lv; let i = 0;
+    const k = this.k, v = this.v, tv = v[0]; this.key = k[0];
+    const lk = k.pop(), lv = v.pop(), n = k.length;
+    if (n) {
+      let i = 0;
       for (;;) {
-        const l = 2 * i + 1, r = l + 1; let m = i;
-        if (l < k.length && k[l] < k[m]) m = l;
-        if (r < k.length && k[r] < k[m]) m = r;
-        if (m === i) break;
-        [k[m], k[i]] = [k[i], k[m]]; [v[m], v[i]] = [v[i], v[m]]; i = m;
+        let c = 2 * i + 1; if (c >= n) break;
+        if (c + 1 < n && k[c + 1] < k[c]) c++;
+        if (k[c] >= lk) break;
+        k[i] = k[c]; v[i] = v[c]; i = c;
       }
+      k[i] = lk; v[i] = lv;
     }
-    return [tk, tv];
+    return tv;
   }
 }
 
@@ -333,11 +363,40 @@ function dijkstra(G, src, fac, used, maxCost, target = -1) {
   const len = new Float64Array(G.N).fill(Infinity);
   const prev = new Int32Array(G.N).fill(-1);
   dist[src] = 0; len[src] = 0;
-  const h = new Heap(); h.push(0, src);
+  const h = new Heap();
+  if (target >= 0) {
+    // one destination: A*. The search is pulled toward the target by the least any way there can still cost
+    // (straight-line distance x the cheapest weight in use), so it explores a narrow ellipse, not a full circle.
+    let fmin = fac._min;
+    if (fmin === undefined) { fmin = Infinity; for (let e = 0; e < G.E; e++) if (fac[e] < fmin) fmin = fac[e]; fac._min = fmin = isFinite(fmin) ? fmin : 1; }
+    if (G._cosMin === undefined) { let m = 0; for (let i = 0; i < G.N; i++) { const x = Math.abs(G.lat[i]); if (x > m) m = x; } G._cosMin = Math.cos(Math.min(89, m) * Math.PI / 180); }
+    const tla = G.lat[target], tlo = G.lon[target], ky = 111000 * fmin, kx = 111100 * fmin * G._cosMin; // never more than the real distance
+    const hOf = v => { const dy = (G.lat[v] - tla) * ky, dx = (G.lon[v] - tlo) * kx; return Math.sqrt(dx * dx + dy * dy); };
+    const done = new Uint8Array(G.N);
+    h.push(hOf(src), src);
+    while (h.size) {
+      const u = h.pop();
+      if (done[u]) continue; done[u] = 1;
+      const d = dist[u];
+      if (u === target || h.key > maxCost) break;
+      for (let j = G.start[u]; j < G.start[u + 1]; j++) {
+        const e = G.adj[j];
+        const fwd = G.eA[e] === u;
+        if (!fwd && G.eOne[e]) continue;
+        let c = G.eLen[e] * fac[e];
+        if (c === Infinity) continue;
+        if (used && used[e]) c *= 4;
+        const v = fwd ? G.eB[e] : G.eA[e], nd = d + c;
+        if (nd < dist[v]) { dist[v] = nd; len[v] = len[u] + G.eLen[e]; prev[v] = e; h.push(nd + hOf(v), v); }
+      }
+    }
+    return { dist, len, prev, src, fac };
+  }
+  h.push(0, src);
   while (h.size) {
-    const [d, u] = h.pop();
+    const u = h.pop(), d = h.key;
     if (d > dist[u]) continue;
-    if (u === target || d > maxCost) break;
+    if (d > maxCost) break;
     for (let j = G.start[u]; j < G.start[u + 1]; j++) {
       const e = G.adj[j];
       const fwd = G.eA[e] === u;
@@ -369,7 +428,7 @@ function pathEdges(G, R, t) {
 function roadNear(G, fac, s, t, maxLen) {
   const dist = new Map([[s, 0]]), prev = new Map(), h = new Heap(); h.push(0, s);
   while (h.size) {
-    const [d, u] = h.pop();
+    const u = h.pop(), d = h.key;
     if (d > (dist.get(u) ?? Infinity)) continue;
     if (u === t) break;
     if (d > maxLen) return null;
@@ -1273,5 +1332,5 @@ function parseLocal(text) {
   return p;
 }
 
-if (typeof module !== 'undefined') module.exports = { safetyInfo, bailDist, inIsrael, isReserve, SAFETY_TYPES, sampleRoute, analyzeElevation, applyReports, dijkstra, multiMilitary, corridorTiles, planMultiVia, pathEdges, TILE, tileKey, tilesFor, tileBBox, splitToTiles, tilesToElements, planMulti, addDays, campAuth, KNOWN_CAMPS, AREA_A, inAreaA, lookupPlace, dayInfo, resolveMilitary, nextSaturday, buildGraph, plan, nearestNode, factors, toGPX, parseLocal, targetLengthM, wayInfo, POI_TYPES };
+if (typeof module !== 'undefined') module.exports = { buildGraphSteps, safetyInfo, bailDist, inIsrael, isReserve, SAFETY_TYPES, sampleRoute, analyzeElevation, applyReports, dijkstra, multiMilitary, corridorTiles, planMultiVia, pathEdges, TILE, tileKey, tilesFor, tileBBox, splitToTiles, tilesToElements, planMulti, addDays, campAuth, KNOWN_CAMPS, AREA_A, inAreaA, lookupPlace, dayInfo, resolveMilitary, nextSaturday, buildGraph, plan, nearestNode, factors, toGPX, parseLocal, targetLengthM, wayInfo, POI_TYPES };
 // ===== END ENGINE =====

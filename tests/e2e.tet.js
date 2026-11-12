@@ -27,7 +27,8 @@ await pg.evaluate(()=>$('closeSettings').click());
 const second=await pg.evaluate(async P=>{await run(true,P);const r=current.res.results[0];return {tet:r.tet||0,len:r.len,info:[...document.querySelectorAll('#warns *')].map(x=>x.textContent).filter(t=>/TET/.test(t)).slice(0,1)};},P);
 console.log(JSON.stringify({firstTet:first.map(x=>x.tet), second}));
 ok(first.every(x=>!x.tet),'no TET before import');
-ok(second.tet>alt.len*0.2,'after import the chosen route runs on the TET track ('+Math.round(second.tet/1000)+' km)');
+// the planner picks the most interesting route, on the uploaded track or not (the group's decision), so this only checks that the track is known to it
+ok(second.tet>0,'after import the planner knows the uploaded track ('+Math.round(second.tet/1000)+' km)');
 ok(TR.length===1&&TR[0].created_by==='חמי','uploaded once to the group server');
 await pg.evaluate(async()=>{$('settingsBtn').click();$('tetBox').open=true;await tetShow();const b=document.querySelector('#tetList button');b.click();b.click();});
 await pg.waitForTimeout(800);

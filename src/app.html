@@ -1203,6 +1203,7 @@ const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.p
 // ---------- trail data: tile cache (phone IndexedDB -> shared server cache -> Overpass) ----------
 const TILE_TTL = 45 * 24 * 3600 * 1000; // Europe tiles are rebuilt monthly
 let gcache = null; // { keys:Set, G }
+const gq = []; // the last few area graphs of a long trip
 function bboxFor(points, radiusM) {
   let s = 90, n = -90, w = 180, e = -180;
   for (const [a, o] of points) { s = Math.min(s, a); n = Math.max(n, a); w = Math.min(w, o); e = Math.max(e, o); }
@@ -1232,6 +1233,11 @@ async function euKeys() {
   if (!euIndex) euIndex = fetch(STATIC_EU + 'index.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : { keys: [] }).then(j => new Set(j.keys || [])).catch(() => { euIndex = null; return new Set(); });
   return euIndex;
 }
+let ilIndex = null;
+async function ilKeys() { // the prebuilt Israel set: a tile that is not in it (across a border, open sea) has no trails for us
+  if (!ilIndex) ilIndex = fetch(STATIC_TILES + 'index.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : { keys: [] }).then(j => new Set(j.keys || [])).catch(() => { ilIndex = null; return new Set(); });
+  return ilIndex;
+}
 function euCovered(k, ix) { // a neighbour of a prebuilt tile: inside a covered country (lake, sea, empty valley)
   const [, a, b] = k.split('_').map(Number);
   for (let di = -2; di <= 2; di++) for (let dj = -2; dj <= 2; dj++) if (ix.has(tileKey(a + di, b + dj))) return true;
@@ -1241,7 +1247,8 @@ async function staticTile(key) {
   if (!canGzip) return null;
   const b = tileBBox(key);
   const il = inIsrael((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) || inIsrael(b[0], b[1]) || inIsrael(b[2], b[3]);
-  const base = il ? STATIC_TILES : (await euKeys()).has(key) ? STATIC_EU : null;
+  const ilx = il ? await ilKeys() : null;
+  const base = il && (!ilx.size || ilx.has(key)) ? STATIC_TILES : (await euKeys()).has(key) ? STATIC_EU : null; // across the border the neighbour's set may have it
   if (!base) return null;
   try {
     const r = await fetch(base + key + '.json.gz', { cache: 'no-cache' });
@@ -1319,6 +1326,11 @@ async function ensureTiles(keys, { bg = false, say = () => {}, noOsm = false } =
     await Promise.all(need.map(async k => { const t = await serverTile(k); if (t) { got[k] = t; memTiles.set(k, t); idb.set(k, t); stat.shared++; } }));
     need = need.filter(k => !got[k] && !inflight.has(k));
   }
+  if (!noOsm && need.length) { // beside the prebuilt Israel set (over the border, at sea): empty, never a wait on the OSM servers
+    const ilx = await ilKeys(), ix = await euKeys();
+    if (ilx.size) for (const k of need) if (!ilx.has(k) && !ix.has(k) && euCovered(k, ilx)) got[k] = { w: [], p: [], m: [], at: Date.now(), key: k };
+    need = need.filter(k => !got[k]);
+  }
   if (noOsm && need.length) { // prebuilt areas: what is not in the set is empty. Only areas outside it may still ask OSM.
     const ix = await euKeys();
     for (const k of need) { const b = tileBBox(k); if (!inIsrael((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) && ix.size && !ix.has(k) && euCovered(k, ix)) got[k] = { w: [], p: [], m: [], at: Date.now(), key: k }; }
@@ -1339,7 +1351,8 @@ async function ensureTiles(keys, { bg = false, say = () => {}, noOsm = false } =
     const oneGroup = async ks => {
       const ext = ks.map(tileBBox).reduce((x, y) => [Math.min(x[0], y[0]), Math.min(x[1], y[1]), Math.max(x[2], y[2]), Math.max(x[3], y[3])]);
       const split = splitToTiles(await fetchOverpass(ext), ks), at = Date.now();
-      for (const k of ks) { const t = { ...split[k], at, key: k }; memTiles.set(k, t); idb.set(k, t); pushTile(k, t); done++; }
+      for (const k of ks) { const t = { ...split[k], at, key: k }; memTiles.set(k, t); idb.set(k, t); pushTile(k, t); done++;
+        if (gcache && gcache.keys.has(k)) gcache = null; for (let q = gq.length - 1; q >= 0; q--) if (gq[q].keys.has(k)) gq.splice(q, 1); } // a graph built without this area is rebuilt next time
       if (!bg) tickTxt();
     };
     const worker = async () => { while (queue.length) { const ks = queue.shift(); try { await oneGroup(ks); } catch { failed.push(ks); } } };
@@ -1360,24 +1373,37 @@ async function ensureTiles(keys, { bg = false, say = () => {}, noOsm = false } =
   const waiting = keys.filter(k => !got[k]);
   if (waiting.length) {
     if (!bg && !need.length) say('מסיים הורדה שכבר התחילה ברקע…');
-    const res = await Promise.all(waiting.map(k => inflight.get(k) || Promise.resolve(memTiles.get(k))));
+    // an area beside the prebuilt set that only the OSM servers have (a neighbour country not built yet): wait a few seconds at most.
+    // The download goes on in the background and is there for the next plan.
+    const ix = await euKeys(), ilx = await ilKeys(), some = Object.keys(got).length > 0;
+    const soft = k => !bg && some && !ix.has(k) && !ilx.has(k) && (euCovered(k, ix) || euCovered(k, ilx));
+    const res = await Promise.all(waiting.map(k => { const pr = inflight.get(k) || Promise.resolve(memTiles.get(k)); return soft(k) ? Promise.race([pr, new Promise(r => setTimeout(() => r(null), 6000))]) : pr; }));
     waiting.forEach((k, n) => { if (res[n]) got[k] = res[n]; });
   }
   return { tiles: got, stat };
 }
+// a real pause for the page (taps, the progress line, no "page unresponsive"); not slowed down in a background tab like timers are
+const breathe = () => new Promise(r => { const c = new MessageChannel(); c.port1.onmessage = () => { c.port1.close(); r(); }; c.port2.postMessage(0); });
+async function buildGraphSliced(els) { // the same graph, built in ~40 ms slices
+  const g = buildGraphSteps(els);
+  for (;;) { const t = performance.now(); let r; do r = g.next(); while (!r.done && performance.now() - t < 40); if (r.done) return r.value; await breathe(); }
+}
 async function loadGraph(bboxOrKeys, { quiet = false, noOsm = false } = {}) {
   const keys = typeof bboxOrKeys[0] === 'string' ? bboxOrKeys : tilesFor(bboxOrKeys);
   if (gcache && keys.every(k => gcache.keys.has(k))) return gcache.G;
+  // long trips ask for many small areas along the way: a graph that already covers the area is reused (a few are kept)
+  if (quiet) { const hit = gq.find(c => keys.every(k => c.keys.has(k))); if (hit) { gq.splice(gq.indexOf(hit), 1); gq.unshift(hit); return hit.G; } }
   const { tiles, stat } = await ensureTiles(keys, { say: quiet ? () => {} : status, noOsm });
   { const ix = await euKeys(); for (const k of keys) if (!tiles[k]) { const b = tileBBox(k), il = inIsrael((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) || inIsrael(b[0], b[1]) || inIsrael(b[2], b[3]); if ((!il && !(ix.size && ix.has(k)) && keys.some(q => tiles[q])) || keys.filter(q => !tiles[q]).length <= Math.max(1, keys.length * 0.08)) tiles[k] = { w: [], p: [], m: [], at: Date.now(), key: k }; } }
   const miss = keys.filter(k => !tiles[k]).length;
   if (miss) throw new Error(`שרתי OpenStreetMap עמוסים: ירדו ${keys.length - miss} מתוך ${keys.length} אזורים. מה שירד נשמר. לחצו שוב "בנה מסלול" בעוד דקה, וזה ימשיך מאיפה שנעצר.`);
   if (!quiet) status('מעבד את רשת השבילים…');
-  await new Promise(r => setTimeout(r, 0));
-  const G = buildGraph(tilesToElements(keys.map(k => tiles[k])));
+  await breathe();
+  const G = await buildGraphSliced(tilesToElements(keys.map(k => tiles[k])));
   G.cacheStat = stat; await tetMarkGraph(G);
   await loadReports(G);
-  if (!quiet) gcache = { keys: new Set(keys), G };
+  await breathe();
+  if (!quiet) gcache = { keys: new Set(keys), G }; else { gq.unshift({ keys: new Set(keys), G }); gq.length = Math.min(gq.length, 5); }
   return G;
 }
 
@@ -1759,6 +1785,7 @@ async function nightCandidates(points, wantLake) {
   return { camps, supply };
 }
 async function planOverland(p, sLL, eLL, viaLL) {
+  const facMemo = new WeakMap(), dirtFac = G => { let f = facMemo.get(G); if (!f) facMemo.set(G, f = factors(G, { ...p, avoid_asphalt: true, avoid_military: true })); return f; }; // one set of trail weights per area graph
   const notes = [];
   const end = eLL || (p.loop ? sLL : viaLL.length ? viaLL[viaLL.length - 1].ll : null);
   if (!end) throw new Error('לטיול ארוך צריך יעד או לפחות אזור אחד בדרך.');
@@ -1781,7 +1808,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
       if (vias[i].port) return; // ferry ports are not highlights
       if (Date.now() - T0 > 60000) throw new Error('timeout');
       const G = await Promise.race([loadGraph(tilesFor(bboxFor([vias[i].ll], 15000)), { quiet: true, noOsm: 'outside' }), new Promise((_, rj) => setTimeout(() => rj(new Error('timeout')), Math.max(5000, 60000 - (Date.now() - T0))))]);
-      const fac = factors(G, { ...p, avoid_asphalt: true, avoid_military: true });
+      const fac = dirtFac(G);
       // a stop is often a whole range ("Prenj", "Zagori"): start the loop where a road meets it, closest to its centre, so the drive goes in
       const [vla, vlo] = vias[i].ll;
       let s = -1, bd = 15000;
@@ -1885,7 +1912,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
       if (!G) return null;
       // trail density: dirt km within 7 km of each candidate
       const dens = cands.map(c => { let m = 0; for (let e = 0; e < G.eLen.length; e++) { if (G.eAsph[e]) continue; const n = G.eA[e]; if (Math.abs(G.lat[n] - c[0]) < 0.065 && Math.abs(G.lon[n] - c[1]) < 0.085) m += G.eLen[e]; } return { c, m }; }).sort((x, y) => y.m - x.m);
-      const fac = factors(G, { ...p, avoid_asphalt: true, avoid_military: true });
+      const fac = dirtFac(G);
       const s0 = nearestNode(G, a[0], a[1], fac, 3000), e0 = nearestNode(G, b[0], b[1], fac, 3000); if (s0 < 0 || e0 < 0) return null;
       let best = null;
       for (const { c, m } of dens.slice(0, 4)) {
@@ -1902,12 +1929,15 @@ async function planOverland(p, sLL, eLL, viaLL) {
     const one = async j => {
       try {
         const found = [];
+        // one graph for the whole day's corridor: every stretch tried on this day reuses it (building a graph per try was most of the wait)
+        { const u = new Set(); for (const { A, B } of j.tries) for (const k of tilesFor(bboxFor([A.c, B.c], 5000))) u.add(k);
+          if (u.size && u.size <= 60) await Promise.race([loadGraph([...u], { quiet: true, noOsm: 'outside' }), new Promise(r => setTimeout(r, 40000))]).catch(() => null); }
         for (const { A, B } of j.tries) {
           if (Date.now() > deadline) { j.late = !found.length; break; }
           const pad = 5000, a = A.c, b = B.c;
           const G = await Promise.race([loadGraph(tilesFor(bboxFor([a, b], pad)), { quiet: true, noOsm: 'outside' }), new Promise((_, rj) => setTimeout(() => rj(new Error('timeout')), 40000))]).catch(() => null);
           if (!G) break; // no prebuilt trails here: skip fast instead of waiting on OSM servers
-          const fac = factors(G, { ...p, avoid_asphalt: true, avoid_military: true }); // trails preferred, roads only as connectors
+          const fac = dirtFac(G); // trails preferred, roads only as connectors
           const s0 = nearestNode(G, a[0], a[1], fac, 3000), e0 = nearestNode(G, b[0], b[1], fac, 3000);
           if (s0 < 0 || e0 < 0 || s0 === e0) continue;
           const edges = pathEdges(G, dijkstra(G, s0, fac, null, Infinity, e0), e0);
@@ -1940,7 +1970,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
           const c = j.M.c;
           const G = await Promise.race([loadGraph(tilesFor(bboxFor([c], 9000)), { quiet: true, noOsm: 'outside' }), new Promise(r => setTimeout(() => r(null), 30000))]).catch(() => null);
           if (!G) return;
-          const fac = factors(G, { ...p, avoid_asphalt: true, avoid_military: true });
+          const fac = dirtFac(G);
           const s0 = nearestNode(G, c[0], c[1], fac, 4000); if (s0 < 0) return;
           const r = plan(G, { ...p, avoid_asphalt: true, loop: true, days: 1, via: [], distance_km: j.loopKm, duration_hours: null }, { s: s0, e: -1, vias: [], viaPois: [] }, () => {}).results[0];
           if (!r || r.len < 5000 || (r.len - r.asph) / r.len < 0.3) return;
@@ -2366,7 +2396,7 @@ async function run(fromPrompt, preset = null, changeText = null) {
       const res = multi ? (vias.length ? planMultiVia(G, pm, { s, e, vias, viaPois }, m => status(m)) : planMulti(G, pm, { s, e, vias, viaPois }, m => status(m))) : plan(G, pm, { s, e, vias, viaPois }, m => status(m));
       return { res };
     };
-    let out = attempt(p);
+    await breathe(); let out = attempt(p); await breathe(); // the page paints before and after the heavy search
     const milBlocked = ((p.days || 1) > 1 ? multiMilitary(p) : resolveMilitary(p).avoid) && (p.military_mode || 'auto') === 'auto';
     if ((out.err || !out.res.results.length) && milBlocked) {
       const alt = attempt({ ...p, military_mode: 'allow' });
@@ -2397,7 +2427,7 @@ async function run(fromPrompt, preset = null, changeText = null) {
         const wantStop = (p.poi_types || []).some(t => t !== 'nightcamp'), noStop = r => wantStop && !r.pois.some(x => x.type !== 'nightcamp') ? 1 : 0; // a stop they asked for counts like an hour
         let best = null, bd = Math.abs(h0 - p.duration_hours) + noStop(r0);
         for (const f of h0 < p.duration_hours ? [0.55, 0.75, 0.95] : [0.75, 0.9, 1.0]) { // speed is not linear in length (longer = more trail = slower): try a few, keep the closest
-          await new Promise(r => setTimeout(r, 0)); // let the page breathe between attempts (no 'page unresponsive')
+          await breathe(); // let the page breathe between attempts (no 'page unresponsive')
           const more = attempt({ ...p, distance_km: Math.min(160, base * f) });
           for (const [k, r1] of (more.res?.results || []).entries()) { // any of its alternatives may be the one that fits
             const d = Math.abs(r1.hrs + r1.pois.filter(x => x.type !== 'nightcamp').length * 0.25 - p.duration_hours) + (r1.asph / r1.len) * 0.5 + noStop(r1);
@@ -3737,7 +3767,7 @@ async function tetImport(files) { // GPX -> thinned points -> the group's server
     await api('/tracks', { method: 'POST', body: JSON.stringify({ name: f.name.replace(/\.gpx$/i, ''), pts, km: Math.round(len / 1000), created_by: store.get('nick') || null }) });
     added++; km += len / 1000;
   }
-  tetSig = null; tetCells.clear(); gcache = null; // re-read, and rebuild graphs with the new tracks
+  tetSig = null; tetCells.clear(); gcache = null; gq.length = 0; // re-read, and rebuild graphs with the new tracks
   return { added, km: Math.round(km) };
 }
 async function tetList() { try { return hasGroup() ? (await api('/tracks')).tracks || [] : []; } catch { return []; } }
