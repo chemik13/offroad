@@ -182,8 +182,11 @@ Deno.serve(async (req) => {
         };
         // a new version of an existing trip, or a new trip
         if (b.trip_id && /^[0-9a-f-]{36}$/.test(String(b.trip_id))) {
-          const { data: last } = await db.from("routes").select("version").eq("trip_id", b.trip_id).order("version", { ascending: false }).limit(1).maybeSingle();
+          const { data: last } = await db.from("routes").select("version,name").eq("trip_id", b.trip_id).order("version", { ascending: false }).limit(1).maybeSingle();
           if (!last) return json({ error: "הטיול לא נמצא" }, 404);
+          // a name someone gave the trip wins over an automatic one (auto names carry the km), even from a phone that has not seen the rename yet
+          const auto = (n: string) => /ק"מ/.test(n || "");
+          if (auto(row.name) && last.name && !auto(last.name)) row.name = last.name;
           Object.assign(row, { trip_id: b.trip_id, version: last.version + 1 });
         } else { const nid = crypto.randomUUID(); Object.assign(row, { id: nid, trip_id: nid, version: 1 }); }
         const { data, error } = await db.from("routes").insert(row).select(LIST_FIELDS).single();
