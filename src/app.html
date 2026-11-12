@@ -3490,7 +3490,8 @@ function tripBody(cur, r) {
 function autoSave(base, change) {
   if (!hasGroup() || !current || current.saved) return;
   const cur = current, r = cur.res.results[cur.sel];
-  const body = { ...tripBody(cur, r), name: base?.name && !/ק"מ/.test(base.name) ? base.name : routeTitle(r, cur.p), // a given name stays; an automatic one follows the new version ...(base ? { trip_id: base.trip_id, change } : {}) };
+  // a name someone gave stays; an automatic one follows the newest version
+  const body = { ...tripBody(cur, r), name: base?.name && !/ק"מ/.test(base.name) ? base.name : routeTitle(r, cur.p), ...(base ? { trip_id: base.trip_id, change } : {}) };
   cur.tripSaving = api('/routes', { method: 'POST', body: JSON.stringify(body) })
     .then(j => { cur.trip = { ...j.route }; cur.tripSel = cur.sel; libCache = null; if (current === cur) { drawTripMeta(); if (cur.sel !== cur.tripSel) syncAlt(); } })
     .catch(e => { cur.tripErr = e.message; if (current === cur) drawTripMeta(); });
