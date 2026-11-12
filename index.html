@@ -277,7 +277,8 @@ ul.pois li{margin-bottom:8px}
 .plinks a:first-child{background:var(--accent);color:#fff;border-color:var(--accent)}
 .popbtns button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 9px;font:500 13px var(--body);cursor:pointer;color:var(--ink)}
 .popbtns button:hover{border-color:var(--accent);color:var(--accent)}
-.hbtns{display:flex;flex:none;gap:8px;margin-inline-start:auto;pointer-events:auto}
+.hbtns{display:flex;flex:none;gap:8px;margin-inline-start:auto;pointer-events:auto;align-items:center}
+.verchip{font:500 11px var(--body);color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:2px 7px;box-shadow:0 1px 4px rgba(20,30,25,.1);white-space:nowrap}
 .textbtn{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:10px;height:40px;padding:0 12px;font:500 14px var(--body);box-shadow:0 1px 6px rgba(20,30,25,.12);cursor:pointer}
 .saverow{display:flex;gap:8px;align-items:flex-end}
 .namefield{flex:1;display:flex;flex-direction:column;gap:3px;min-width:0}
@@ -493,7 +494,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
 <div id="map"></div>
 <header>
   <div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>מתכנן מסלולי שטח<small>4x4</small></div>
-  <div class="hbtns"><button class="textbtn" id="libBtn">שמורים</button><button class="iconbtn" id="settingsBtn" title="הגדרות" aria-label="הגדרות"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button></div>
+  <div class="hbtns"><button class="textbtn" id="libBtn">שמורים</button><span class="verchip" id="verChip" title="גרסת האפליקציה"></span><button class="iconbtn" id="settingsBtn" title="הגדרות" aria-label="הגדרות"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button></div>
 </header>
 
 <section id="sheet">
@@ -634,7 +635,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.99 · 12.11.2026 14:58</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.100 · 12.11.2026 15:09</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2247,7 +2248,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.99 · 12.11.2026 14:58']],
+    ['גרסת האפליקציה', async () => ['ok', '1.100 · 12.11.2026 15:09']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -4974,6 +4975,7 @@ async function thCommit(save) {
 }
 $('thInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); thCommit(true); } else if (e.key === 'Escape') thCommit(false); });
 $('thInput').addEventListener('blur', () => thCommit(true));
+$('verChip').textContent = 'v' + '1.100 · 12.11.2026 15:09'.split(' ')[0]; // so everyone can tell which version they are on
 // naming: type a name and press Enter (or just leave the field); it is saved for every version of the trip
 $('routeName').addEventListener('focus', e => setTimeout(() => e.target.select(), 0));
 $('routeName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
