@@ -2391,11 +2391,12 @@ async function run(fromPrompt, preset = null, changeText = null) {
       if (h0 < p.duration_hours * 0.8 || h0 > p.duration_hours * 1.3) {
         status(h0 < p.duration_hours ? 'המסלול יצא קצר מהזמן שביקשתם, מאריך…' : 'המסלול יצא ארוך מהזמן שביקשתם, מקצר…');
         const base = r0.len / 1000 * p.duration_hours / Math.max(0.3, h0);
-        let best = null, bd = Math.abs(h0 - p.duration_hours);
+        const wantStop = (p.poi_types || []).some(t => t !== 'nightcamp'), noStop = r => wantStop && !r.pois.some(x => x.type !== 'nightcamp') ? 1 : 0; // a stop they asked for counts like an hour
+        let best = null, bd = Math.abs(h0 - p.duration_hours) + noStop(r0);
         for (const f of h0 < p.duration_hours ? [0.55, 0.75, 0.95] : [0.75, 0.9, 1.0]) { // speed is not linear in length (longer = more trail = slower): try a few, keep the closest
           const more = attempt({ ...p, distance_km: Math.min(160, base * f) });
           for (const [k, r1] of (more.res?.results || []).entries()) { // any of its alternatives may be the one that fits
-            const d = Math.abs(r1.hrs + r1.pois.filter(x => x.type !== 'nightcamp').length * 0.25 - p.duration_hours) + (r1.asph / r1.len) * 0.5;
+            const d = Math.abs(r1.hrs + r1.pois.filter(x => x.type !== 'nightcamp').length * 0.25 - p.duration_hours) + (r1.asph / r1.len) * 0.5 + noStop(r1);
             if (d < bd) { bd = d; best = { res: { ...more.res, results: [r1, ...more.res.results.filter((_, q) => q !== k)] } }; }
           }
         }
@@ -2737,9 +2738,15 @@ async function flyOver(coords, title, marks = []) {
   let zoomNow = 14.7;
   map3.on('load', () => {
     map3.setTerrain({ source: 'dem', exaggeration: 1.35 });
-    map3.addSource('trk', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: pts.map(p => [p[0], p[1]]) } } });
-    map3.addLayer({ id: 'trk-c', type: 'line', source: 'trk', paint: { 'line-color': '#000', 'line-width': 8, 'line-opacity': 0.45 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
-    map3.addLayer({ id: 'trk', type: 'line', source: 'trk', paint: { 'line-color': '#ffd23f', 'line-width': 4.5 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
+    // the same colours as the map: dirt brown, road black, sea blue (when this is a piece of the current route)
+    const feats = [];
+    const rr = current?.res?.results?.[current.sel], off = rr ? rr.coords.indexOf(coords[0]) : -1;
+    if (rr && off >= 0 && rr.coords[off + coords.length - 1] === coords[coords.length - 1])
+      for (const sg of segsInRange(rr, off, off + coords.length - 1)) feats.push({ type: 'Feature', properties: { c: SURF(sg) }, geometry: { type: 'LineString', coordinates: sg.pts.map(([a, o]) => [o, a]) } });
+    if (!feats.length) feats.push({ type: 'Feature', properties: { c: SURF_C.dirt }, geometry: { type: 'LineString', coordinates: pts.map(p => [p[0], p[1]]) } });
+    map3.addSource('trk', { type: 'geojson', data: { type: 'FeatureCollection', features: feats } });
+    map3.addLayer({ id: 'trk-c', type: 'line', source: 'trk', paint: { 'line-color': '#fff', 'line-width': 9, 'line-opacity': 0.85 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
+    map3.addLayer({ id: 'trk', type: 'line', source: 'trk', paint: { 'line-color': ['get', 'c'], 'line-width': 5 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
     $('flyMsg').textContent = '';
     // a small 3D black 4x4 drives the track: boxes for wheels, body, glass, roof and rails (scaled up so it reads from the air)
     map3.addSource('car', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -3235,8 +3242,16 @@ function render(i, day = null) {
   });
   if (r.unrated) $('legend').innerHTML = `<span><i style="--c:${DCOL('x')}"></i>מסלול מיובא: אין דירוג קושי לקטעים</span>`;
   if (r.overland) $('legend').hidden = true; else $('legend').hidden = false; // long trips: the stats line already says dirt vs road
-  if (r.days && r.days.length > 1) { // multi-day: the map is coloured by surface
-    $('legend').innerHTML = `<span><i style="--c:${SURF_C.dirt}"></i>שטח</span><span><i style="--c:${SURF_C.road}"></i>כביש</span>` + (r.segs.some(sg => sg.ferry) ? `<span><i style="--c:${SURF_C.sea}"></i>שייט</span>` : '');
+  if (r.days && r.days.length > 1) { // multi-day: bar and legend by surface, the same colours as the map
+    const dvv = current.day != null ? r.days[current.day] : null;
+    const km = { dirt: 0, road: 0, sea: 0 };
+    for (const sg of dvv ? segsInRange(r, dvv.from, dvv.to) : r.segs) km[sg.ferry ? 'sea' : sg.d === 0 || sg.road ? 'road' : 'dirt'] += pathLen(sg.pts);
+    const tot = km.dirt + km.road + km.sea || 1, HE = { dirt: 'שטח', road: 'כביש', sea: 'שייט' };
+    $('bar').innerHTML = ''; $('legend').innerHTML = '';
+    for (const k of ['dirt', 'road', 'sea']) if (km[k] > 0) {
+      $('bar').insertAdjacentHTML('beforeend', `<div style="width:${km[k] / tot * 100}%;background:${SURF_C[k]}"></div>`);
+      $('legend').insertAdjacentHTML('beforeend', `<span><i style="--c:${SURF_C[k]}"></i>${HE[k]} ${Math.round(km[k] / 1000)} ק"מ (${Math.round(km[k] / tot * 100)}%)</span>`);
+    }
     $('legend').hidden = false;
   }
   const w = [];

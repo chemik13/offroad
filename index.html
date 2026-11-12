@@ -634,7 +634,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.90 · 12.11.2026 09:15</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.91 · 12.11.2026 09:50</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -1026,7 +1026,7 @@ function dijkstra(G, src, fac, used, maxCost, target = -1) {
       if (nd < dist[v]) { dist[v] = nd; len[v] = len[u] + G.eLen[e]; prev[v] = e; h.push(nd, v); }
     }
   }
-  return { dist, len, prev, src };
+  return { dist, len, prev, src, fac };
 }
 
 function pathEdges(G, R, t) {
@@ -1036,7 +1036,32 @@ function pathEdges(G, R, t) {
     const e = R.prev[u]; if (e < 0) return null;
     edges.push(e); u = G.eA[e] === u ? G.eB[e] : G.eA[e];
   }
-  return edges.reverse();
+  edges.reverse();
+  return R.fac && !R.raw ? unhop(G, R.fac, edges, R.src) : edges;
+}
+
+// No hopping: a short dirt bit between two road stretches that the road itself runs alongside (a farm track
+// beside the highway, a 300 m shortcut) adds turns, not off-road. Drive those bits on the road; dirt that goes somewhere else stays.
+const HOP_M = 2500;
+function unhop(G, fac, edges, src) {
+  if (edges.length < 3) return edges;
+  const nodes = [src]; for (const e of edges) { const u = nodes[nodes.length - 1]; nodes.push(G.eA[e] === u ? G.eB[e] : G.eA[e]); }
+  let roadFac = null, out = edges;
+  for (let b = edges.length - 1; b > 0; ) {
+    if (G.eAsph[out[b]]) { b--; continue; }
+    // dirt run [a, b]
+    let a = b, L = 0; while (a >= 0 && !G.eAsph[out[a]]) { L += G.eLen[out[a]]; a--; }
+    const lo = a + 1, hi = b; b = a;
+    if (a < 0 || hi + 1 >= out.length || L >= HOP_M) continue; // touches the leg's end, or a real stretch
+    if (!roadFac) { roadFac = new Float64Array(G.E); for (let e = 0; e < G.E; e++) roadFac[e] = G.eAsph[e] && fac[e] !== Infinity ? 1 : Infinity; }
+    const s0 = nodes[lo], t0 = nodes[hi + 1];
+    const R = dijkstra(G, s0, roadFac, null, L * 1.25 + 400, t0); R.raw = true;
+    const p = pathEdges(G, R, t0);
+    if (!p || R.len[t0] > L * 1.25 + 300) continue; // only when the road runs right alongside (a dirt bit that goes somewhere else stays)
+    out = [...out.slice(0, lo), ...p, ...out.slice(hi + 1)];
+    nodes.splice(lo, hi + 2 - lo, s0, ...p.reduce((acc, e) => { const u = acc[acc.length - 1]; acc.push(G.eA[e] === u ? G.eB[e] : G.eA[e]); return acc; }, [s0]).slice(1));
+  }
+  return out;
 }
 
 // Connected pieces of the network under the current restrictions (cached per fac array).
@@ -2118,7 +2143,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.90 · 12.11.2026 09:15']],
+    ['גרסת האפליקציה', async () => ['ok', '1.91 · 12.11.2026 09:50']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -3598,11 +3623,12 @@ async function run(fromPrompt, preset = null, changeText = null) {
       if (h0 < p.duration_hours * 0.8 || h0 > p.duration_hours * 1.3) {
         status(h0 < p.duration_hours ? 'המסלול יצא קצר מהזמן שביקשתם, מאריך…' : 'המסלול יצא ארוך מהזמן שביקשתם, מקצר…');
         const base = r0.len / 1000 * p.duration_hours / Math.max(0.3, h0);
-        let best = null, bd = Math.abs(h0 - p.duration_hours);
+        const wantStop = (p.poi_types || []).some(t => t !== 'nightcamp'), noStop = r => wantStop && !r.pois.some(x => x.type !== 'nightcamp') ? 1 : 0; // a stop they asked for counts like an hour
+        let best = null, bd = Math.abs(h0 - p.duration_hours) + noStop(r0);
         for (const f of h0 < p.duration_hours ? [0.55, 0.75, 0.95] : [0.75, 0.9, 1.0]) { // speed is not linear in length (longer = more trail = slower): try a few, keep the closest
           const more = attempt({ ...p, distance_km: Math.min(160, base * f) });
           for (const [k, r1] of (more.res?.results || []).entries()) { // any of its alternatives may be the one that fits
-            const d = Math.abs(r1.hrs + r1.pois.filter(x => x.type !== 'nightcamp').length * 0.25 - p.duration_hours) + (r1.asph / r1.len) * 0.5;
+            const d = Math.abs(r1.hrs + r1.pois.filter(x => x.type !== 'nightcamp').length * 0.25 - p.duration_hours) + (r1.asph / r1.len) * 0.5 + noStop(r1);
             if (d < bd) { bd = d; best = { res: { ...more.res, results: [r1, ...more.res.results.filter((_, q) => q !== k)] } }; }
           }
         }
@@ -3944,9 +3970,15 @@ async function flyOver(coords, title, marks = []) {
   let zoomNow = 14.7;
   map3.on('load', () => {
     map3.setTerrain({ source: 'dem', exaggeration: 1.35 });
-    map3.addSource('trk', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: pts.map(p => [p[0], p[1]]) } } });
-    map3.addLayer({ id: 'trk-c', type: 'line', source: 'trk', paint: { 'line-color': '#000', 'line-width': 8, 'line-opacity': 0.45 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
-    map3.addLayer({ id: 'trk', type: 'line', source: 'trk', paint: { 'line-color': '#ffd23f', 'line-width': 4.5 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
+    // the same colours as the map: dirt brown, road black, sea blue (when this is a piece of the current route)
+    const feats = [];
+    const rr = current?.res?.results?.[current.sel], off = rr ? rr.coords.indexOf(coords[0]) : -1;
+    if (rr && off >= 0 && rr.coords[off + coords.length - 1] === coords[coords.length - 1])
+      for (const sg of segsInRange(rr, off, off + coords.length - 1)) feats.push({ type: 'Feature', properties: { c: SURF(sg) }, geometry: { type: 'LineString', coordinates: sg.pts.map(([a, o]) => [o, a]) } });
+    if (!feats.length) feats.push({ type: 'Feature', properties: { c: SURF_C.dirt }, geometry: { type: 'LineString', coordinates: pts.map(p => [p[0], p[1]]) } });
+    map3.addSource('trk', { type: 'geojson', data: { type: 'FeatureCollection', features: feats } });
+    map3.addLayer({ id: 'trk-c', type: 'line', source: 'trk', paint: { 'line-color': '#fff', 'line-width': 9, 'line-opacity': 0.85 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
+    map3.addLayer({ id: 'trk', type: 'line', source: 'trk', paint: { 'line-color': ['get', 'c'], 'line-width': 5 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
     $('flyMsg').textContent = '';
     // a small 3D black 4x4 drives the track: boxes for wheels, body, glass, roof and rails (scaled up so it reads from the air)
     map3.addSource('car', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -4442,8 +4474,16 @@ function render(i, day = null) {
   });
   if (r.unrated) $('legend').innerHTML = `<span><i style="--c:${DCOL('x')}"></i>מסלול מיובא: אין דירוג קושי לקטעים</span>`;
   if (r.overland) $('legend').hidden = true; else $('legend').hidden = false; // long trips: the stats line already says dirt vs road
-  if (r.days && r.days.length > 1) { // multi-day: the map is coloured by surface
-    $('legend').innerHTML = `<span><i style="--c:${SURF_C.dirt}"></i>שטח</span><span><i style="--c:${SURF_C.road}"></i>כביש</span>` + (r.segs.some(sg => sg.ferry) ? `<span><i style="--c:${SURF_C.sea}"></i>שייט</span>` : '');
+  if (r.days && r.days.length > 1) { // multi-day: bar and legend by surface, the same colours as the map
+    const dvv = current.day != null ? r.days[current.day] : null;
+    const km = { dirt: 0, road: 0, sea: 0 };
+    for (const sg of dvv ? segsInRange(r, dvv.from, dvv.to) : r.segs) km[sg.ferry ? 'sea' : sg.d === 0 || sg.road ? 'road' : 'dirt'] += pathLen(sg.pts);
+    const tot = km.dirt + km.road + km.sea || 1, HE = { dirt: 'שטח', road: 'כביש', sea: 'שייט' };
+    $('bar').innerHTML = ''; $('legend').innerHTML = '';
+    for (const k of ['dirt', 'road', 'sea']) if (km[k] > 0) {
+      $('bar').insertAdjacentHTML('beforeend', `<div style="width:${km[k] / tot * 100}%;background:${SURF_C[k]}"></div>`);
+      $('legend').insertAdjacentHTML('beforeend', `<span><i style="--c:${SURF_C[k]}"></i>${HE[k]} ${Math.round(km[k] / 1000)} ק"מ (${Math.round(km[k] / tot * 100)}%)</span>`);
+    }
     $('legend').hidden = false;
   }
   const w = [];

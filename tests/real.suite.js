@@ -22,10 +22,10 @@ const CASES = [
   { id: 'tirana-thess-4d', p: { ...M, country: 'AL', start: S('Tirana', 41.327, 19.819, 'AL'), end: S('Thessaloniki', 40.64, 22.94, 'GR'), via: [S('Ohrid', 41.117, 20.802, 'MK'), S('Prespa (Pretor)', 40.975, 20.97, 'MK')], days: 4, max_km_per_day: 150, poi_types: ['nightcamp'], night_near_water: true, loop: false } },
   { id: 'brasov-5d', p: { ...M, country: 'RO', start: S('Brasov', 45.657, 25.601, 'RO'), via: [S('Bucegi', 45.40, 25.45, 'RO', { area: true }), S('Piatra Craiului', 45.53, 25.22, 'RO', { area: true }), S('Harghita', 46.40, 25.60, 'RO', { area: true })], days: 5, max_km_per_day: 150, offroad_share: 0.35, poi_types: ['nightcamp'], loop: true } },
   { id: 'peloponnese-5d', p: { ...M, country: 'GR', start: S('Patras', 38.246, 21.735, 'GR'), via: [S('Kalavryta', 38.032, 22.111, 'GR'), S('Mainalo', 37.65, 22.25, 'GR', { area: true }), S('Taygetos', 37.0, 22.35, 'GR', { area: true })], days: 5, max_km_per_day: 150, poi_types: ['nightcamp'], loop: true } },
-  { id: 'split-kotor-4d', p: { ...M, country: 'HR', start: S('Split', 43.508, 16.44, 'HR'), end: S('Kotor', 42.424, 18.771, 'ME'), via: [S('Biokovo', 43.33, 17.05, 'HR', { area: true })], days: 4, max_km_per_day: 120, poi_types: ['nightcamp'], loop: false } },
+  { id: 'split-kotor-4d', minOff: 33 /* the coast has little legal dirt; it used to look higher only by hopping onto farm tracks */, p: { ...M, country: 'HR', start: S('Split', 43.508, 16.44, 'HR'), end: S('Kotor', 42.424, 18.771, 'ME'), via: [S('Biokovo', 43.33, 17.05, 'HR', { area: true })], days: 4, max_km_per_day: 120, poi_types: ['nightcamp'], loop: false } },
   { id: 'lisbon-porto-4d', p: { ...M, country: 'PT', start: S('Lisboa', 38.72, -9.14, 'PT'), end: S('Porto', 41.15, -8.61, 'PT'), via: [S('Serra da Estrela', 40.32, -7.61, 'PT', { area: true })], days: 4, max_km_per_day: 150, offroad_share: 0.3, poi_types: ['nightcamp'], loop: false } },
   { id: 'portugal-tet-7d', p: { ...M, country: 'PT', start: S('Braganca', 41.806, -6.757, 'PT'), end: S('Faro', 37.019, -7.93, 'PT'), via: [S('Serra da Estrela', 40.32, -7.61, 'PT', { area: true }), S('Monsaraz', 38.44, -7.38, 'PT')], days: 7, max_km_per_day: 130, offroad_share: 0.35, poi_types: ['nightcamp'], loop: false } },
-  { id: 'balkan-10d', p: { ...M, country: 'GR', start: S('Thessaloniki', 40.64, 22.94, 'GR'), end: S('Dubrovnik', 42.65, 18.09, 'HR'), via: [S('Ohrid', 41.117, 20.802, 'MK'), S('Theth', 42.395, 19.773, 'AL'), S('Durmitor', 43.15, 19.08, 'ME', { area: true })], days: 10, max_km_per_day: 120, offroad_share: 0.35, poi_types: ['nightcamp'], night_near_water: true, loop: false } },
+  { id: 'balkan-10d', minOff: 24 /* long transfers; honest share after hop removal */, p: { ...M, country: 'GR', start: S('Thessaloniki', 40.64, 22.94, 'GR'), end: S('Dubrovnik', 42.65, 18.09, 'HR'), via: [S('Ohrid', 41.117, 20.802, 'MK'), S('Theth', 42.395, 19.773, 'AL'), S('Durmitor', 43.15, 19.08, 'ME', { area: true })], days: 10, max_km_per_day: 120, offroad_share: 0.35, poi_types: ['nightcamp'], night_near_water: true, loop: false } },
   { id: 'dolomites-21d', p: { ...M, country: 'GR', start: S('Thessaloniki', 40.64, 22.94, 'GR'), days: 21, max_km_per_day: 100, offroad_share: 0.35, night_near_water: true, resupply_every_days: 2, poi_types: ['nightcamp'], loop: true,
     via: [S('Zagori', 39.88, 20.75, 'GR', { area: true }), S('Igoumenitsa', 39.505, 20.265, 'GR', { ferry_to_next: true, ferry_hours: 26 }), S('Venezia', 45.44, 12.32, 'IT'), S('Passo Giau', 46.48, 12.05, 'IT'), S('Lago di Braies', 46.69, 12.08, 'IT'), S('Venezia porto', 45.43, 12.31, 'IT', { ferry_to_next: true, ferry_hours: 26 }), S('Igoumenitsa port', 39.50, 20.26, 'GR'), S('Meteora', 39.71, 21.63, 'GR')] } },
 ];
@@ -90,7 +90,10 @@ const CASES_IL = [
         const nights = D ? D.slice(0, -1).map(d => d.camp ? (d.camp.ferry ? 'ferry' : d.camp.type === 'dayend' ? 'none' : d.camp.wild ? (d.camp.lake ? 'wild-lake' : 'wild') : d.camp.lake ? 'lake' : 'camp') : 'none') : [];
         const startD = P.start ? hav(P.start.lat, P.start.lon, r.coords[0][0], r.coords[0][1]) : 0;
         const endLL = P.loop ? P.start : P.end; const endD = endLL ? hav(endLL.lat, endLL.lon, r.coords[r.coords.length - 1][0], r.coords[r.coords.length - 1][1]) : 0;
+        // hopping: short dirt bits (< 2.5 km) between two road stretches
+        let hops = 0, hopKm = 0; { const ss = r.segs.filter(sg => !sg.ferry); for (let i = 1; i + 1 < ss.length; i++) { const isRoad = sg => sg.road || sg.d === 0; if (isRoad(ss[i])) continue; let j = i, L = 0; while (j < ss.length && !isRoad(ss[j])) { for (let k = 1; k < ss[j].pts.length; k++) L += hav(ss[j].pts[k - 1][0], ss[j].pts[k - 1][1], ss[j].pts[k][0], ss[j].pts[k][1]); j++; } if (j < ss.length && isRoad(ss[i - 1]) && L < 2500) { hops++; hopKm += L; } i = j; } }
         return {
+          hops, hopKm: Math.round(hopKm / 1000),
           days: D ? D.length : 1, km: Math.round(r.len / 1000), off: Math.round((r.len - r.asph) / r.len * 100), hrs: +r.hrs.toFixed(1), hrsAll: +(r.hrs + r.pois.filter(x => x.type !== 'nightcamp').length * 0.25).toFixed(1),
           dayKm: D ? D.map(d => Math.round(d.len / 1000)) : [Math.round(r.len / 1000)], dayOff: D ? D.map(d => Math.round((d.off ?? 0) / 1000)) : [],
           nights, viaMiss, jumps, jumpAt, milKm: +((r.mil || 0) / 1000).toFixed(1), aaKm: +((r.aa || 0) / 1000).toFixed(1), reuseKm: +((r.reuse || 0) / 1000).toFixed(1), again: Math.round(again / tot * 100), side: Math.round(side / tot * 100), startKm: +(startD / 1000).toFixed(1), endKm: +(endD / 1000).toFixed(1),
@@ -110,7 +113,7 @@ const CASES_IL = [
       if (P.days > 1 && res.days !== P.days) bad.push(`days ${res.days}≠${P.days}`);
       if (P.max_km_per_day && Math.max(...res.dayKm) > P.max_km_per_day * 1.25 && !res.warns.concat(res.issues).some(t => /ק"מ ליום|עוברים את/.test(t))) bad.push(`day km up to ${Math.max(...res.dayKm)} > ${P.max_km_per_day}`);
       const want = P.offroad_share ? P.offroad_share * 100 * 0.75 : res.overland ? 15 : 40;
-      if (res.off < want) bad.push(`off-road ${res.off}% < ${Math.round(want)}%`);
+      if (res.off < (c.minOff ?? want)) bad.push(`off-road ${res.off}% < ${Math.round(want)}%`);
       if (res.viaMiss.length) bad.push('missed: ' + res.viaMiss.join(', '));
       if (res.jumps) bad.push(`${res.jumps} straight jumps`);
       if (res.again > 35 && !c.allowReuse) bad.push(`${res.again}% driven twice`);
@@ -128,7 +131,7 @@ const CASES_IL = [
     }
     res.bad = bad;
     rows.push({ id: c.id, ...res });
-    console.log(`${bad.length ? '✗' : '✓'} ${c.id.padEnd(20)} ${res.sec}s ${res.fail ? '' : `${res.days}d ${res.km}km off ${res.off}% nights[${(res.nights || []).join(',')}] dayKm[${(res.dayKm || []).join(' ')}]`}`);
+    console.log(`${bad.length ? '✗' : '✓'} ${c.id.padEnd(20)} ${res.sec}s ${res.fail ? '' : `${res.days}d ${res.km}km off ${res.off}% nights[${(res.nights || []).join(',')}] dayKm[${(res.dayKm || []).join(" ")}] hops ${res.hops}/${res.hopKm}km`}`);
     for (const x of bad) console.log('    - ' + x);
     await pg.screenshot({ path: `${out}/${c.id}.png` }).catch(() => {});
     await pg.close();

@@ -350,7 +350,7 @@ function dijkstra(G, src, fac, used, maxCost, target = -1) {
       if (nd < dist[v]) { dist[v] = nd; len[v] = len[u] + G.eLen[e]; prev[v] = e; h.push(nd, v); }
     }
   }
-  return { dist, len, prev, src };
+  return { dist, len, prev, src, fac };
 }
 
 function pathEdges(G, R, t) {
@@ -360,7 +360,32 @@ function pathEdges(G, R, t) {
     const e = R.prev[u]; if (e < 0) return null;
     edges.push(e); u = G.eA[e] === u ? G.eB[e] : G.eA[e];
   }
-  return edges.reverse();
+  edges.reverse();
+  return R.fac && !R.raw ? unhop(G, R.fac, edges, R.src) : edges;
+}
+
+// No hopping: a short dirt bit between two road stretches that the road itself runs alongside (a farm track
+// beside the highway, a 300 m shortcut) adds turns, not off-road. Drive those bits on the road; dirt that goes somewhere else stays.
+const HOP_M = 2500;
+function unhop(G, fac, edges, src) {
+  if (edges.length < 3) return edges;
+  const nodes = [src]; for (const e of edges) { const u = nodes[nodes.length - 1]; nodes.push(G.eA[e] === u ? G.eB[e] : G.eA[e]); }
+  let roadFac = null, out = edges;
+  for (let b = edges.length - 1; b > 0; ) {
+    if (G.eAsph[out[b]]) { b--; continue; }
+    // dirt run [a, b]
+    let a = b, L = 0; while (a >= 0 && !G.eAsph[out[a]]) { L += G.eLen[out[a]]; a--; }
+    const lo = a + 1, hi = b; b = a;
+    if (a < 0 || hi + 1 >= out.length || L >= HOP_M) continue; // touches the leg's end, or a real stretch
+    if (!roadFac) { roadFac = new Float64Array(G.E); for (let e = 0; e < G.E; e++) roadFac[e] = G.eAsph[e] && fac[e] !== Infinity ? 1 : Infinity; }
+    const s0 = nodes[lo], t0 = nodes[hi + 1];
+    const R = dijkstra(G, s0, roadFac, null, L * 1.25 + 400, t0); R.raw = true;
+    const p = pathEdges(G, R, t0);
+    if (!p || R.len[t0] > L * 1.25 + 300) continue; // only when the road runs right alongside (a dirt bit that goes somewhere else stays)
+    out = [...out.slice(0, lo), ...p, ...out.slice(hi + 1)];
+    nodes.splice(lo, hi + 2 - lo, s0, ...p.reduce((acc, e) => { const u = acc[acc.length - 1]; acc.push(G.eA[e] === u ? G.eB[e] : G.eA[e]); return acc; }, [s0]).slice(1));
+  }
+  return out;
 }
 
 // Connected pieces of the network under the current restrictions (cached per fac array).
