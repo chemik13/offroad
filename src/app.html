@@ -1419,7 +1419,7 @@ function dictation(btn, field, onDone, grow = () => {}) {
   btn.onclick = () => {
     if (!SR) { status('הדפדפן הזה לא תומך בזיהוי דיבור. השתמשו במיקרופון שבמקלדת של הטלפון.', true); field.focus(); return; }
     if (active) { finish(true); return; } // tap again = done
-    base = field.value.trim(); if (current && base && base === (current.prompt || '').trim()) base = ''; // a new request, not an addition to the last one said = ''; interim = ''; lastErr = null; started = Date.now(); active = true;
+    base = field.value.trim(); if (current && base && base === (current.prompt || '').trim()) base = ''; said = ''; interim = ''; lastErr = null; started = Date.now(); active = true; // a repeat of the last request starts fresh, not as an addition
     ui(true); status('מקשיב… דברו בחופשיות. מסיים אחרי 3 שניות שקט, או בלחיצה על המיקרופון.');
     arm(FIRST_WORDS);
     try { startRec(); } catch { finish(false); status('לא הצלחתי להפעיל את המיקרופון.', true); }

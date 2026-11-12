@@ -634,7 +634,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.96 · 12.11.2026 10:36</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.97 · 12.11.2026 14:02</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2143,7 +2143,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.96 · 12.11.2026 10:36']],
+    ['גרסת האפליקציה', async () => ['ok', '1.97 · 12.11.2026 14:02']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -2651,7 +2651,7 @@ function dictation(btn, field, onDone, grow = () => {}) {
   btn.onclick = () => {
     if (!SR) { status('הדפדפן הזה לא תומך בזיהוי דיבור. השתמשו במיקרופון שבמקלדת של הטלפון.', true); field.focus(); return; }
     if (active) { finish(true); return; } // tap again = done
-    base = field.value.trim(); if (current && base && base === (current.prompt || '').trim()) base = ''; // a new request, not an addition to the last one said = ''; interim = ''; lastErr = null; started = Date.now(); active = true;
+    base = field.value.trim(); if (current && base && base === (current.prompt || '').trim()) base = ''; said = ''; interim = ''; lastErr = null; started = Date.now(); active = true; // a repeat of the last request starts fresh, not as an addition
     ui(true); status('מקשיב… דברו בחופשיות. מסיים אחרי 3 שניות שקט, או בלחיצה על המיקרופון.');
     arm(FIRST_WORDS);
     try { startRec(); } catch { finish(false); status('לא הצלחתי להפעיל את המיקרופון.', true); }
