@@ -3139,7 +3139,8 @@ function render(i, day = null) {
   res.results.forEach((x, k) => { if (k !== i) L.polyline(x.coords, { color: '#646b66', weight: 3, opacity: .5, dashArray: '4 6' }).addTo(routeLayer).on('click', () => { render(k); syncAlt(); }); });
   L.polyline(r.coords, { color: '#fff', weight: 9, opacity: dv ? .6 : 1 }).addTo(routeLayer);
   if (D && !dv) { // whole trip: colour by surface (dirt brown, road black, sea blue); a "יום N" label where each day starts
-    for (const sg of r.segs) if (!sg.ferry) L.polyline(sg.pts, { color: SURF(sg), weight: 5 }).addTo(routeLayer);
+    for (const sg of r.segs) if (!sg.ferry && SURF(sg) === SURF_C.road) L.polyline(sg.pts, { color: SURF_C.road, weight: 3 }).addTo(routeLayer);
+    for (const sg of r.segs) if (!sg.ferry && SURF(sg) === SURF_C.dirt) L.polyline(sg.pts, { color: SURF_C.dirt, weight: 7 }).addTo(routeLayer);
     D.forEach((d, k) => {
       const c = r.coords[d.from];
       L.marker(c, { icon: L.divIcon({ className: '', html: `<div class="daylab">יום ${k + 1}</div>`, iconSize: [52, 22], iconAnchor: [26, 11] }), zIndexOffset: 800 }).addTo(markLayer).bindTooltip('תחילת יום ' + (k + 1));
@@ -3456,7 +3457,10 @@ function unpackRoute(row) {
   const segs = [];
   if (st.runs && !st.unrated) {
     let i = 0;
-    st.runs.forEach(([d, n], k) => { const startI = k === 0 ? 0 : i - 1; const endI = k === 0 ? n : i + n; segs.push(d === -2 ? { d: 0, ferry: true, pts: coords.slice(Math.max(0, startI), endI) } : { d, pts: coords.slice(Math.max(0, startI), endI) }); i = endI; });
+    st.runs.forEach(([d, n], k) => { const startI = k === 0 ? 0 : i - 1; const endI = k === 0 ? n : i + n; const pts = coords.slice(Math.max(0, startI), endI);
+      // trips saved before ferries were kept: a "road" with a jump of tens of km between points is a sea crossing
+      const sea = d === -2 || (d === 0 && pts.some((c, j) => j && hav(c[0], c[1], pts[j - 1][0], pts[j - 1][1]) > 15000));
+      segs.push(sea ? { d: 0, ferry: true, pts } : { d, pts }); i = endI; });
   } else segs.push({ d: -1, pts: coords });
   return { coords, segs, pois: row.waypoints || [], len: st.len || pathLen(coords), hrs: st.hrs || pathLen(coords) / 1000 / 15, maxD: st.maxD ?? 0, byD: st.byD || [0, 0, 0, 0, 0, 0], unk: st.unk || 0, mil: st.mil || 0, aa: st.aa || 0, js: st.js || 0, reuse: st.reuse || 0, unrated: !!st.unrated || !st.runs, days: st.days || null, overland: !!st.overland, asph: st.asph || 0 };
 }
@@ -3486,7 +3490,7 @@ function tripBody(cur, r) {
 function autoSave(base, change) {
   if (!hasGroup() || !current || current.saved) return;
   const cur = current, r = cur.res.results[cur.sel];
-  const body = { ...tripBody(cur, r), name: base?.name || routeTitle(r, cur.p), ...(base ? { trip_id: base.trip_id, change } : {}) };
+  const body = { ...tripBody(cur, r), name: base?.name && !/ק"מ/.test(base.name) ? base.name : routeTitle(r, cur.p), // a given name stays; an automatic one follows the new version ...(base ? { trip_id: base.trip_id, change } : {}) };
   cur.tripSaving = api('/routes', { method: 'POST', body: JSON.stringify(body) })
     .then(j => { cur.trip = { ...j.route }; cur.tripSel = cur.sel; libCache = null; if (current === cur) { drawTripMeta(); if (cur.sel !== cur.tripSel) syncAlt(); } })
     .catch(e => { cur.tripErr = e.message; if (current === cur) drawTripMeta(); });
