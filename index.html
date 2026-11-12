@@ -634,7 +634,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.94 · 12.11.2026 10:20</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.95 · 12.11.2026 10:31</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2143,7 +2143,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.94 · 12.11.2026 10:20']],
+    ['גרסת האפליקציה', async () => ['ok', '1.95 · 12.11.2026 10:31']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -3532,7 +3532,7 @@ async function run(fromPrompt, preset = null, changeText = null) {
     const sLL = await geocode(p.start);
     if (!sLL) throw new Error(p._basic && !hasGroup()
       ? `לא מצאתי את "${p.start?.name}". הפענוח החכם לא פעיל: הכניסו קוד קבוצה ב-⚙ כדי שאבין בקשות כמו "בעקבות מבצע…" ואחפש ברשת.`
-      : `לא מצאתי את "${p.start?.name}". נסו שם אחר, או לחצו על המפה ובחרו "התחלה מכאן".`);
+      : (p.start?.name ? `לא מצאתי את "${p.start.name}". נסו שם אחר, או לחצו על המפה ובחרו "התחלה מכאן".` : 'לא הבנתי מאיפה מתחילים. כתבו את נקודת ההתחלה, או לחצו על המפה ובחרו "התחלה מכאן".'));
     setStart(sLL);
     const abroadTrip = !inIsrael(sLL[0], sLL[1]);
     if (abroadTrip && p.avoid_asphalt == null && fromPrompt) { p.avoid_asphalt = true; $('pAsph').checked = true; } // abroad: dirt first, roads only to connect
@@ -4327,6 +4327,12 @@ $('refineBtn').onclick = async () => {
     // edits only search the web when they ask for something new to find; otherwise Claude just edits the parameters (much faster)
     const search = /מעניין|הכי|מומלץ|המלצ|תמצא|חפש|אטרקצי|נקודות עניין|מקומות|היסטור|יפה|שווה|מפורסם|נוף|אתר/.test(ask);
     const np = local ? JSON.parse(JSON.stringify(current.p)) : await parseSmart(`הפרמטרים הנוכחיים של הטיול (JSON):\n${JSON.stringify(slim)}\n\nבקשת שינוי: ${ask}\n\nהחזר את כל הפרמטרים המעודכנים ב-route_request.`, { search });
+    // an edit never loses the start: Claude sometimes returns only what changed, or a place without a name
+    const placeOk = x => x && (x.name || (x.lat != null && x.lon != null));
+    if (!placeOk(np.start)) np.start = current.p.start;
+    if (np.end && !placeOk(np.end)) np.end = np.loop ? null : current.p.end;
+    if (np.loop == null) np.loop = current.p.loop;
+    np.via = (np.via == null ? current.p.via || [] : np.via).filter(placeOk); // left out = unchanged; an empty list = removed on purpose
     for (const k of ['start', 'end']) if (np[k] && current.p[k] && np[k].name === current.p[k].name && current.p[k].latlng) np[k].latlng = current.p[k].latlng;
     np.via = (np.via || []).map(v => ({ ...((current.p.via || []).find(o => o.name === v.name) || {}), ...v }));
     if (!np.date && current.p.date) np.date = current.p.date;
