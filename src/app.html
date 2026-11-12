@@ -990,6 +990,7 @@ function stageSummary(p) {
   if (nm(p.start)) chips.push(p.loop ? `לופ מ${nm(p.start)}` : `מ${nm(p.start)}${nm(p.end) ? ' ל' + nm(p.end) : ''}`);
   if (p.days > 1) chips.push(`${p.days} ימים`); else if (p.duration_hours) chips.push(`${p.duration_hours} שעות`);
   if (p.max_km_per_day) chips.push(`עד ${p.max_km_per_day} ק"מ ביום`);
+  if (p.stay_within_km) chips.push(`באזור (עד ${p.stay_within_km} ק"מ מההתחלה)`);
   const fer = (p.via || []).filter(v => v.ferry_to_next).length; if (fer) chips.push(`⛴ ${fer === 1 ? 'מעבורת' : fer + ' מעבורות'}`);
   if ((p.via || []).length) chips.push(`${p.via.length} עצירות`);
   if (p.offroad_share) chips.push(`${Math.round(p.offroad_share * 100)}% שטח`);
@@ -1047,6 +1048,7 @@ const TOOL = {
       days: { type: 'integer', description: 'Number of trip days for multi-day trips (2-30; for long journeys = total km / max_km_per_day). סופ"ש / weekend = 2. Omit for a single day.' },
       hours_per_day: { type: 'number', description: 'Driving hours per day for multi-day trips, if stated' },
       max_km_per_day: { type: 'number', description: 'Maximum driving distance per day in km, if stated (use the upper bound of a range)' },
+      stay_within_km: { type: 'number', description: 'When the user asks for a trip in or around one area ("באיזור ירושלים", "סביב הכנרת", "בגליל העליון") and not a journey between places: how far from the start the trip may go, in km (usually 20–30; a big region like הנגב 60). Leave out for journeys.' },
       offroad_share: { type: 'number', description: 'Wanted off-road share of the driving, 0-1 ("30-40% שטח" = 0.35). Omit if not stated (the default is mostly off-road).' },
       more_offroad_days: { type: 'array', items: { type: 'integer' }, description: 'Days (1-based) the user asks for MORE off-road on ("יותר שטח ביום 14" = [14]). Keep all other parameters of the current trip.' },
       wild_camping: { type: 'boolean', description: 'User is fine sleeping outside campsites (in nature, by a lake, in a forest)' },
@@ -2282,6 +2284,7 @@ async function run(fromPrompt, preset = null, changeText = null) {
           : 'לא כתבתם מאיפה יוצאים. כתבו מקום, "מהמיקום שלי", או עשו זום לאזור במפה.');
       }
       { const mk = maxKmPerDay(text); if (mk && !p.max_km_per_day) p.max_km_per_day = mk; }
+      if (p._basic && p.stay_within_km == null && !p.end?.name && /(?:באיזור|באזור|סביב|מסביב ל|בסביבת|around)\s*\S/.test(text)) p.stay_within_km = 25; // "a trip around X" stays around X
       { const sh = offroadShare(text); if (sh && !p.offroad_share) p.offroad_share = sh; }
       { const m = [...text.matchAll(/(?:יותר|עוד|הרבה)\s+שטח[^\d]{0,12}(?:ב?ימים?|ב?יום)\s*([\d ,ו-]+)/g)].flatMap(x => x[1].match(/\d+/g) || []).map(Number); if (m.length && !p.more_offroad_days?.length) p.more_offroad_days = m; }
       if (p.wild_camping == null && /בלי קמפינג|לא חייב(ים)? (להיות )?קמפינג|לינת שטח|לינה בטבע|ביער|wild camp/i.test(text)) p.wild_camping = true;
@@ -2292,7 +2295,7 @@ async function run(fromPrompt, preset = null, changeText = null) {
     } else {
       p = readForm(current?.p || {});
       p.story_he = current?.p?.story_he; p._startNote = current?.p?._startNote; p.nightPins = current?.p?.nightPins; p._prevDayOff = current?.p?._prevDayOff;
-      for (const k of ['offroad_share', 'wild_camping', 'camp_every_days', 'resupply_every_days', 'max_km_per_day', 'night_near_water', 'country', 'more_offroad_days']) if (current?.p?.[k] != null && p[k] == null) p[k] = current.p[k];
+      for (const k of ['offroad_share', 'wild_camping', 'camp_every_days', 'resupply_every_days', 'max_km_per_day', 'stay_within_km', 'night_near_water', 'country', 'more_offroad_days']) if (current?.p?.[k] != null && p[k] == null) p[k] = current.p[k];
     }
 
     status('מאתר מקומות…');
@@ -2394,6 +2397,7 @@ async function run(fromPrompt, preset = null, changeText = null) {
         const wantStop = (p.poi_types || []).some(t => t !== 'nightcamp'), noStop = r => wantStop && !r.pois.some(x => x.type !== 'nightcamp') ? 1 : 0; // a stop they asked for counts like an hour
         let best = null, bd = Math.abs(h0 - p.duration_hours) + noStop(r0);
         for (const f of h0 < p.duration_hours ? [0.55, 0.75, 0.95] : [0.75, 0.9, 1.0]) { // speed is not linear in length (longer = more trail = slower): try a few, keep the closest
+          await new Promise(r => setTimeout(r, 0)); // let the page breathe between attempts (no 'page unresponsive')
           const more = attempt({ ...p, distance_km: Math.min(160, base * f) });
           for (const [k, r1] of (more.res?.results || []).entries()) { // any of its alternatives may be the one that fits
             const d = Math.abs(r1.hrs + r1.pois.filter(x => x.type !== 'nightcamp').length * 0.25 - p.duration_hours) + (r1.asph / r1.len) * 0.5 + noStop(r1);

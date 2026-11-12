@@ -364,24 +364,44 @@ function pathEdges(G, R, t) {
   return R.fac && !R.raw ? unhop(G, R.fac, edges, R.src) : edges;
 }
 
+// shortest way from s to t on open paved roads only, if it is shorter than maxLen; a small local search
+// (Map-based, so it costs nothing on big graphs) because it runs for every short dirt bit of every route
+function roadNear(G, fac, s, t, maxLen) {
+  const dist = new Map([[s, 0]]), prev = new Map(), h = new Heap(); h.push(0, s);
+  while (h.size) {
+    const [d, u] = h.pop();
+    if (d > (dist.get(u) ?? Infinity)) continue;
+    if (u === t) break;
+    if (d > maxLen) return null;
+    for (let j = G.start[u]; j < G.start[u + 1]; j++) {
+      const e = G.adj[j];
+      if (!G.eAsph[e] || fac[e] === Infinity) continue;
+      const fwd = G.eA[e] === u; if (!fwd && G.eOne[e]) continue;
+      const v = fwd ? G.eB[e] : G.eA[e], nd = d + G.eLen[e];
+      if (nd < (dist.get(v) ?? Infinity)) { dist.set(v, nd); prev.set(v, e); h.push(nd, v); }
+    }
+  }
+  if (!((dist.get(t) ?? Infinity) <= maxLen)) return null;
+  const out = []; let u = t;
+  while (u !== s) { const e = prev.get(u); out.push(e); u = G.eA[e] === u ? G.eB[e] : G.eA[e]; }
+  return out.reverse();
+}
 // No hopping: a short dirt bit between two road stretches that the road itself runs alongside (a farm track
 // beside the highway, a 300 m shortcut) adds turns, not off-road. Drive those bits on the road; dirt that goes somewhere else stays.
 const HOP_M = 2500;
 function unhop(G, fac, edges, src) {
   if (edges.length < 3) return edges;
   const nodes = [src]; for (const e of edges) { const u = nodes[nodes.length - 1]; nodes.push(G.eA[e] === u ? G.eB[e] : G.eA[e]); }
-  let roadFac = null, out = edges;
+  let out = edges;
   for (let b = edges.length - 1; b > 0; ) {
     if (G.eAsph[out[b]]) { b--; continue; }
     // dirt run [a, b]
     let a = b, L = 0; while (a >= 0 && !G.eAsph[out[a]]) { L += G.eLen[out[a]]; a--; }
     const lo = a + 1, hi = b; b = a;
     if (a < 0 || hi + 1 >= out.length || L >= HOP_M) continue; // touches the leg's end, or a real stretch
-    if (!roadFac) { roadFac = new Float64Array(G.E); for (let e = 0; e < G.E; e++) roadFac[e] = G.eAsph[e] && fac[e] !== Infinity ? 1 : Infinity; }
     const s0 = nodes[lo], t0 = nodes[hi + 1];
-    const R = dijkstra(G, s0, roadFac, null, L * 1.25 + 400, t0); R.raw = true;
-    const p = pathEdges(G, R, t0);
-    if (!p || R.len[t0] > L * 1.25 + 300) continue; // only when the road runs right alongside (a dirt bit that goes somewhere else stays)
+    const p = roadNear(G, fac, s0, t0, L * 1.25 + 300); // only when the road runs right alongside (a dirt bit that goes somewhere else stays)
+    if (!p) continue;
     out = [...out.slice(0, lo), ...p, ...out.slice(hi + 1)];
     nodes.splice(lo, hi + 2 - lo, s0, ...p.reduce((acc, e) => { const u = acc[acc.length - 1]; acc.push(G.eA[e] === u ? G.eB[e] : G.eA[e]); return acc; }, [s0]).slice(1));
   }
@@ -404,11 +424,22 @@ function components(G, fac) {
 }
 // Nearest usable node; prefers the connected network over small isolated fragments
 // (city centres have no residential streets in our data, so a nearby stub can be cut off).
+// nodes bucketed by ~550 m cells, so finding the nearest one looks at a few cells, not the whole graph
+const CELL = 0.005;
+function nodeGrid(G) {
+  if (G._grid) return G._grid;
+  const m = new Map();
+  for (let i = 0; i < G.N; i++) { const k = Math.floor(G.lat[i] / CELL) * 100000 + Math.floor(G.lon[i] / CELL); let a = m.get(k); if (!a) m.set(k, a = []); a.push(i); }
+  return (G._grid = m);
+}
 function nearestNode(G, la, lo, fac, maxM = 3000) {
   const { comp, size } = components(G, fac);
-  const big = Math.min(300, Math.max(...size.slice(0, 1000), 1) * 0.5);
+  const big = size._big ?? (size._big = Math.min(300, Math.max(...size.slice(0, 1000), 1) * 0.5));
   let best = -1, bd = Infinity, bestAny = -1, bdAny = Infinity;
-  for (let i = 0; i < G.N; i++) {
+  const grid = nodeGrid(G), ci = Math.floor(la / CELL), cj = Math.floor(lo / CELL), R = Math.ceil(maxM / (CELL * 111000 * Math.max(0.2, Math.cos(la * Math.PI / 180)))) + 1;
+  for (let di = -R; di <= R; di++) for (let dj = -R; dj <= R; dj++) {
+    const cell = grid.get((ci + di) * 100000 + (cj + dj)); if (!cell) continue;
+    for (const i of cell) {
     const dl = (G.lat[i] - la) * 111000, dO = (G.lon[i] - lo) * 96000;
     const d2 = dl * dl + dO * dO;
     if (d2 >= bdAny && d2 >= bd) continue;
@@ -417,7 +448,7 @@ function nearestNode(G, la, lo, fac, maxM = 3000) {
     if (!ok) continue;
     if (d2 < bdAny) { bdAny = d2; bestAny = i; }
     if (d2 < bd && size[comp[i]] >= big) { bd = d2; best = i; }
-  }
+  } }
   if (best >= 0 && Math.sqrt(bd) <= maxM) return best;
   return Math.sqrt(bdAny) <= maxM ? bestAny : -1;
 }
@@ -477,6 +508,7 @@ function snapPois(G, fac, types, R0, minL, maxL, authOnly = true, snapM = 500) {
     if (types.length ? !types.includes(p.type) : SAFETY_TYPES.includes(p.type)) continue;
     if (p.type === 'nightcamp' && !p.auth && authOnly) continue;
     if (p.type !== 'nightcamp' && (!p.name || p.name === POI_TYPES[p.type]?.he)) continue; // unnamed stops are not worth a detour
+    if (hav(G.lat[R0.src], G.lon[R0.src], p.lat, p.lon) > maxL + snapM) continue; // farther than the route can reach
     const n = nearestNode(G, p.lat, p.lon, fac, snapM);
     if (n < 0 || R0.len[n] < minL || R0.len[n] > maxL) continue;
     if (out.some(o => o.node === n)) continue;
@@ -844,7 +876,8 @@ function planMulti(G, p, nodes, onProgress = () => {}) {
   if (p.max_km_per_day) dayL = Math.min(dayL, p.max_km_per_day * 1000 * 0.95);
   const maxCost = dayL * 6;
   const types = (p.poi_types || []).filter(t => t !== 'nightcamp');
-  const camps = G.pois.filter(c => c.type === 'nightcamp' && c.auth).map(c => ({ ...c, node: nearestNode(G, c.lat, c.lon, fac, 2500) })).filter(c => c.node >= 0);
+  const within = p.stay_within_km ? p.stay_within_km * 1000 : Infinity; // "a trip around X": nights stay around X
+  const camps = G.pois.filter(c => c.type === 'nightcamp' && c.auth && hav(G.lat[s], G.lon[s], c.lat, c.lon) <= within).map(c => ({ ...c, node: nearestNode(G, c.lat, c.lon, fac, 2500) })).filter(c => c.node >= 0);
   const Rend = end >= 0 ? dijkstra(G, end, fac, null, Infinity) : null;
   const totalDirect = Rend ? Rend.len[s] : null;
   onProgress(`מצאתי ${camps.length} חניוני לילה מורשים באזור. מתכנן ${N} ימים…`);
@@ -862,7 +895,7 @@ function planMulti(G, p, nodes, onProgress = () => {}) {
       for (const c of camps) {
         if (st.camps.some(x => x.node === c.node) || c.node === st.at) continue;
         const d = R.len[c.node];
-        if (!isFinite(d) || d < dayL * 0.45 || d > dayL * 1.6) continue;
+        if (!isFinite(d) || d < dayL * (within < Infinity ? 0.2 : 0.45) || d > dayL * 1.6) continue; // around an area the nights are closer, the days wander
         let sc = Math.abs(d - dayL) / dayL;
         if (Rend) {
           const rem = Rend.len[c.node];
@@ -913,9 +946,21 @@ function planMulti(G, p, nodes, onProgress = () => {}) {
         cands.sort((x, y) => (R.len[x.node] + hav(G.lat[x.node], G.lon[x.node], G.lat[b], G.lon[b])) - (R.len[y.node] + hav(G.lat[y.node], G.lon[y.node], G.lat[b], G.lon[b])));
         if (cands[0]) { mid = cands[0]; seq = [a, mid.node, b]; }
       }
+      // around an area the camps are close: a short day wanders out through a turn point that stays in the area
+      let turn = null;
+      if (within < Infinity) {
+        const from = mid ? mid.node : a, R = Rfrom(from), so = mid ? Rfrom(a).len[mid.node] : 0, direct = so + R.len[b];
+        if (isFinite(direct) && direct < dayL * 0.7) {
+          const need = dayL - so;
+          const tc = genericCands(G, from, R, need * 0.45, 8).filter(c => hav(G.lat[s], G.lon[s], c.lat, c.lon) <= within && c.node !== b);
+          tc.sort((x, y) => Math.abs(R.len[x.node] + hav(x.lat, x.lon, G.lat[b], G.lon[b]) * 1.3 - need) - Math.abs(R.len[y.node] + hav(y.lat, y.lon, G.lat[b], G.lon[b]) * 1.3 - need));
+          if (tc[0]) { turn = tc[0].node; seq = [...seq.slice(0, -1), turn, b]; }
+        }
+      }
       const snap = used.slice();
       let edges = buildRoute(G, fac, seq, maxCost * 2, used);
-      if (mid && edges) { const L = edges.reduce((s, e) => s + G.eLen[e], 0); const direct = Rfrom(a).len[b]; if (L > direct * 1.35) { used.set(snap); edges = buildRoute(G, fac, [a, b], maxCost * 2, used); mid = null; } }
+      if (turn != null && (!edges || !edges.length)) { used.set(snap); seq = seq.filter(x => x !== turn); edges = buildRoute(G, fac, seq, maxCost * 2, used); }
+      if (mid && edges && turn == null) { const L = edges.reduce((s, e) => s + G.eLen[e], 0); const direct = Rfrom(a).len[b]; if (L > direct * 1.35) { used.set(snap); edges = buildRoute(G, fac, [a, b], maxCost * 2, used); mid = null; } }
       if (!edges || !edges.length) { ok = false; break; }
       const dl = edges.reduce((s, e) => s + G.eLen[e], 0);
       let dh = 0; for (const e of edges) dh += G.eLen[e] / 1000 / DIFF[G.eD[e]].speed;

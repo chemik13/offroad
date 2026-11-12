@@ -52,6 +52,8 @@ const CASES_IL = [
   { id: 'il-3d-loop-bs', p: { ...M, country: 'IL', start: IL('באר שבע', 31.25, 34.79), days: 3, poi_types: ['nightcamp'], loop: true } },
   { id: 'il-paran-long', p: { ...M, country: 'IL', start: IL('צופר', 30.56, 35.18), end: IL('אילת', 29.56, 34.95), loop: false, distance_km: 150 } },
   { id: 'il-golan-eilat-5d', p: { ...M, country: 'IL', start: IL('קצרין', 32.99, 35.69), end: IL('אילת', 29.56, 34.95), days: 5, max_km_per_day: 150, poi_types: ['nightcamp'], loop: false } },
+  // "a 2-day trip around Jerusalem": the night must stay in the area (it went to Tel Ashkelon), and the page must not freeze
+  { id: 'il-jerusalem-2d', maxNightKm: 30, p: { ...M, country: 'IL', start: IL('עין חמד', 31.795, 35.125), days: 2, stay_within_km: 25, poi_types: ['nightcamp', 'spring', 'viewpoint'], loop: true } },
   { id: 'il-galil-2d', p: { ...M, country: 'IL', start: IL('צפת', 32.965, 35.496), end: IL('קצרין', 32.99, 35.69), days: 2, poi_types: ['nightcamp', 'spring'], loop: false } },
 ];
 (async () => {
@@ -65,13 +67,17 @@ const CASES_IL = [
     await pg.route(/tile\.|arcgis|fonts|opentopomap/, r => r.abort());
     await pg.route(/overpass|kumi|coffee|mail\.ru/, r => r.abort());
     await pg.route(/project-osrm/, async r => { try { const resp = await r.fetch({ timeout: 60000 }); await r.fulfill({ response: resp, headers: { ...resp.headers(), 'access-control-allow-origin': '*' } }); } catch { r.abort(); } });
+    await pg.addInitScript(() => { window.__maxBlock = 0; try { new PerformanceObserver(l => { for (const e of l.getEntries()) window.__maxBlock = Math.max(window.__maxBlock, e.duration); }).observe({ type: 'longtask', buffered: true }); } catch {} });
     await pg.goto('file://' + html);
     const t0 = Date.now();
     let res;
     try {
+      if (process.env.PROF) await pg.evaluate(() => { window.__prof = {}; for (const n of ['buildGraph', 'plan', 'planMulti', 'planMultiVia', 'routeStats', 'snapPois', 'buildRoute', 'components', 'analyzeElevation', 'applyReports', 'factors']) { const f = window[n]; if (typeof f !== 'function') continue; window[n] = function (...a) { const t = performance.now(); if (n === 'planMulti') window.__G = a[0]; try { return f.apply(this, a); } finally { const d = performance.now() - t; const q = window.__prof[n] || (window.__prof[n] = { n: 0, ms: 0, max: 0 }); q.n++; q.ms += d; q.max = Math.max(q.max, d); } }; } });
       await pg.evaluate(P => { run(true, JSON.parse(JSON.stringify(P))); }, { ...c.p, ...(process.env.EXTRA ? JSON.parse(process.env.EXTRA) : {}) });
       await pg.waitForTimeout(500);
       await pg.waitForFunction(() => !busy, null, { timeout: 300000 });
+      if (process.env.PROF && process.env.CAMPS) console.log(JSON.stringify(await pg.evaluate(([la, lo]) => window.__G.pois.filter(c => c.type === 'nightcamp').map(c => [Math.round(hav(la, lo, c.lat, c.lon) / 1000), c.auth ? 'A' : '-', c.name]).sort((a, b) => a[0] - b[0]).slice(0, 25), [c.p.start.lat, c.p.start.lon])));
+      if (process.env.PROF) console.log(JSON.stringify(await pg.evaluate(() => Object.fromEntries(Object.entries(window.__prof).map(([k, v]) => [k, { n: v.n, ms: Math.round(v.ms), max: Math.round(v.max) }])))));
       res = await pg.evaluate(P => {
         const r = current?.res?.results?.[0];
         if (!r || document.getElementById('results').hidden) return { fail: document.getElementById('status').textContent };
@@ -92,7 +98,9 @@ const CASES_IL = [
         const endLL = P.loop ? P.start : P.end; const endD = endLL ? hav(endLL.lat, endLL.lon, r.coords[r.coords.length - 1][0], r.coords[r.coords.length - 1][1]) : 0;
         // hopping: short dirt bits (< 2.5 km) between two road stretches
         let hops = 0, hopKm = 0; { const ss = r.segs.filter(sg => !sg.ferry); for (let i = 1; i + 1 < ss.length; i++) { const isRoad = sg => sg.road || sg.d === 0; if (isRoad(ss[i])) continue; let j = i, L = 0; while (j < ss.length && !isRoad(ss[j])) { for (let k = 1; k < ss[j].pts.length; k++) L += hav(ss[j].pts[k - 1][0], ss[j].pts[k - 1][1], ss[j].pts[k][0], ss[j].pts[k][1]); j++; } if (j < ss.length && isRoad(ss[i - 1]) && L < 2500) { hops++; hopKm += L; } i = j; } }
+        const nightKm = D ? Math.max(0, ...D.slice(0, -1).filter(d => d.camp).map(d => Math.round(hav(P.start.lat, P.start.lon, d.camp.lat, d.camp.lon) / 1000))) : 0;
         return {
+          nightKm, block: Math.round(window.__maxBlock || 0),
           hops, hopKm: Math.round(hopKm / 1000),
           days: D ? D.length : 1, km: Math.round(r.len / 1000), off: Math.round((r.len - r.asph) / r.len * 100), hrs: +r.hrs.toFixed(1), hrsAll: +(r.hrs + r.pois.filter(x => x.type !== 'nightcamp').length * 0.25).toFixed(1),
           dayKm: D ? D.map(d => Math.round(d.len / 1000)) : [Math.round(r.len / 1000)], dayOff: D ? D.map(d => Math.round((d.off ?? 0) / 1000)) : [],
@@ -110,6 +118,8 @@ const CASES_IL = [
       if (c.maxSide != null && res.side > c.maxSide) bad.push(`drives beside ground already covered: ${res.side}%`);
       if (c.wantPoi && !/פיקניק/.test(res.stopsText || '')) bad.push('no picnic stop');
       if (c.trueEnd) { const [a1, o1] = c.trueEnd, [a2, o2] = res.last, d = Math.hypot((a1 - a2) * 111, (o1 - o2) * 94); if (d > 2) bad.push(`ended ${d.toFixed(1)} km from the real finish`); }
+      if (c.maxNightKm && res.nightKm > c.maxNightKm) bad.push(`night ${res.nightKm} km from the start (area trip)`);
+      if (res.block > 20000) bad.push(`page frozen for ${Math.round(res.block / 1000)}s at once`);
       if (P.days > 1 && res.days !== P.days) bad.push(`days ${res.days}≠${P.days}`);
       if (P.max_km_per_day && Math.max(...res.dayKm) > P.max_km_per_day * 1.25 && !res.warns.concat(res.issues).some(t => /ק"מ ליום|עוברים את/.test(t))) bad.push(`day km up to ${Math.max(...res.dayKm)} > ${P.max_km_per_day}`);
       const want = P.offroad_share ? P.offroad_share * 100 * 0.75 : res.overland ? 15 : 40;
@@ -131,7 +141,7 @@ const CASES_IL = [
     }
     res.bad = bad;
     rows.push({ id: c.id, ...res });
-    console.log(`${bad.length ? '✗' : '✓'} ${c.id.padEnd(20)} ${res.sec}s ${res.fail ? '' : `${res.days}d ${res.km}km off ${res.off}% nights[${(res.nights || []).join(',')}] dayKm[${(res.dayKm || []).join(" ")}] hops ${res.hops}/${res.hopKm}km`}`);
+    console.log(`${bad.length ? '✗' : '✓'} ${c.id.padEnd(20)} ${res.sec}s ${res.fail ? '' : `${res.days}d ${res.km}km off ${res.off}% nights[${(res.nights || []).join(',')}] dayKm[${(res.dayKm || []).join(" ")}] hops ${res.hops}/${res.hopKm}km block ${Math.round((res.block||0)/1000)}s nightKm ${res.nightKm}`}`);
     for (const x of bad) console.log('    - ' + x);
     await pg.screenshot({ path: `${out}/${c.id}.png` }).catch(() => {});
     await pg.close();
