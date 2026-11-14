@@ -1059,7 +1059,7 @@ const TOOL = {
       distance_km: { type: 'number', description: 'Total distance in km, if stated' },
       difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'] },
       poi_types: { type: 'array', items: { type: 'string', enum: Object.keys(POI_TYPES).filter(k => !POI_TYPES[k].safety) }, description: 'Kinds of stops wanted along the way. nightcamp = overnight camping site (חניון לילה); camp = day picnic site only.' },
-      via: { type: 'array', items: { type: 'object', properties: { name: { type: 'string', description: 'Hebrew name as on a map' }, lat: { type: 'number' }, lon: { type: 'number' }, note: { type: 'string', description: 'One short Hebrew line: why this stop (what happened here / what to see)' }, ferry_to_next: { type: 'boolean', description: 'This via is a ferry port: sail with the car from here to the NEXT point (next via, or end/start)' }, ferry_hours: { type: 'number', description: 'Crossing time in hours for that ferry' }, ferry_depart: { type: 'string', description: 'Usual departure time of that ferry, local, HH:MM (from the operator timetable; leave out if not found)' }, ferry_operator: { type: 'string', description: 'Companies that sail this line with cars, e.g. "Minoan Lines, Superfast"' }, ferry_freq: { type: 'string', description: 'Short Hebrew: how often and when it sails, e.g. "כל יום בקיץ, 4 בשבוע בחורף"' }, ferry_url: { type: 'string', description: 'Official booking page of one operator for this line, only a URL you saw in the search results' } }, required: ['name', 'lat', 'lon'] }, description: 'Ordered stops the route must pass (max 10). For themed trips these are the theme sites.' },
+      via: { type: 'array', items: { type: 'object', properties: { name: { type: 'string', description: 'Hebrew name as on a map' }, lat: { type: 'number' }, lon: { type: 'number' }, note: { type: 'string', description: 'One short Hebrew line: why this stop (what happened here / what to see)' }, ferry_to_next: { type: 'boolean', description: 'This via is a ferry port: sail with the car from here to the NEXT point (next via, or end/start)' }, ferry_hours: { type: 'number', description: 'Crossing time in hours for that ferry' }, ferry_depart: { type: 'string', description: 'Usual departure time of that ferry, local, HH:MM (from the operator timetable; leave out if not found)' }, ferry_operator: { type: 'string', description: 'Companies that sail this line with cars, e.g. "Minoan Lines, Superfast"' }, ferry_freq: { type: 'string', description: 'Short Hebrew: how often and when it sails, e.g. "כל יום בקיץ, 4 בשבוע בחורף"' }, ferry_url: { type: 'string', description: 'Booking page for this line, preferably on the operator\'s own site; only a URL you saw in the search results' } }, required: ['name', 'lat', 'lon'] }, description: 'Ordered stops the route must pass (max 10). For themed trips these are the theme sites.' },
       story_he: { type: 'string', description: 'For themed trips: 2-4 Hebrew sentences telling the story the trip follows. Omit otherwise.' },
       from_my_location: { type: 'boolean', description: 'True if the user says to start from their current location (מהמיקום שלי / מכאן)' },
       avoid_asphalt: { type: 'boolean' },
@@ -2891,12 +2891,12 @@ function placeLinks(pt) {
   if (/מעבורת/.test(pt.name || '')) {
     const line = String(pt.fer?.line || nm).replace(/[\u2068\u2069]/g, '').replace(/^מעבורת:?\s*/, '');
     const ports = line.split('←').map(x => x.trim()).filter(Boolean);
-    if (pt.fer?.url) out.push(['אתר החברה והזמנה', pt.fer.url]);
+    if (pt.fer?.url) out.push(['דף ההפלגה והזמנה', pt.fer.url]);
     out.push(['לוח הפלגות וכרטיסים', 'https://www.google.com/search?q=' + q(`${ports.join(' to ')} car ferry timetable tickets ${pt.fer?.ops || ''}`.trim())]);
     out.push(['Ferryhopper', 'https://www.ferryhopper.com/en/'], ['Direct Ferries', 'https://www.directferries.com/']);
   } else if (pt.type === 'nightcamp' && !pt.wild && !pt.ferry && pt.type !== 'dayend') {
     const anon = /^(קמפינג|חניון קרוואנים|חניון לילה|camping|campsite)$/i.test(nm.trim());
-    if (pt.website) out.push([pt.webFound ? 'אתר הקמפינג (נמצא בחיפוש)' : 'אתר הקמפינג והזמנה', /^https?:/.test(pt.website) ? pt.website : 'https://' + pt.website]);
+    if (pt.website) out.push([pt.webFound === 'portal' ? 'דף הקמפינג (נמצא בחיפוש)' : pt.webFound ? 'אתר הקמפינג (נמצא בחיפוש)' : 'אתר הקמפינג והזמנה', /^https?:/.test(pt.website) ? pt.website : 'https://' + pt.website]);
     if (pt.phone) out.push(['טלפון ' + pt.phone, 'tel:' + pt.phone.replace(/[^\d+]/g, '')]);
     if (pt.email && !pt.website) out.push(['מייל', 'mailto:' + pt.email]);
     // the place itself on Google Maps (photos, reviews, phone, its website button), found by name next to these coordinates
@@ -2924,10 +2924,10 @@ async function findCampSite(pt, a) {
     const url = o && /^https?:\/\/[^\s"]+$/.test(o.url || '') ? o.url : '';
     let host = ''; try { host = new URL(url).hostname.replace(/^www\./, ''); } catch {}
     if (!url || !host || !seen.includes(host)) { a.textContent = 'לא מצאתי אתר. נסו "פרטים והזמנה (Google)"'; a.onclick = e => e.preventDefault(); return; } // only a site the search really returned
-    pt.website = url; pt.webFound = true; if (o.phone && !pt.phone && /\d{6,}/.test(String(o.phone).replace(/[^\d]/g, ''))) pt.phone = String(o.phone).slice(0, 24);
+    pt.website = url; pt.webFound = o.portal ? 'portal' : true; if (o.phone && !pt.phone && /\d{6,}/.test(String(o.phone).replace(/[^\d]/g, ''))) pt.phone = String(o.phone).slice(0, 24);
     const r = current?.res?.results?.[current.sel];
-    if (r) for (const x of [...(r.pois || []), ...(r.days || []).map(d => d.camp).filter(Boolean)]) if (x !== pt && x.type === 'nightcamp' && Math.abs(x.lat - pt.lat) < 1e-5 && Math.abs(x.lon - pt.lon) < 1e-5) { x.website = pt.website; x.webFound = true; if (pt.phone) x.phone = pt.phone; }
-    a.textContent = 'אתר הקמפינג (נמצא בחיפוש)'; a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.className = ''; a.onclick = null;
+    if (r) for (const x of [...(r.pois || []), ...(r.days || []).map(d => d.camp).filter(Boolean)]) if (x !== pt && x.type === 'nightcamp' && Math.abs(x.lat - pt.lat) < 1e-5 && Math.abs(x.lon - pt.lon) < 1e-5) { x.website = pt.website; x.webFound = pt.webFound; if (pt.phone) x.phone = pt.phone; }
+    a.textContent = o.portal ? 'דף הקמפינג (נמצא בחיפוש)' : 'אתר הקמפינג (נמצא בחיפוש)'; a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.className = ''; a.onclick = null;
     const sv = current?.saved || current?.trip; // kept with the trip, so everyone gets the link
     if (sv?.id && r) { const b = packRoute(r); api('/routes/' + sv.id, { method: 'PATCH', body: JSON.stringify({ coords: b.coords, waypoints: b.waypoints, stats: b.stats }) }).then(() => { libCache = null; }).catch(() => {}); }
   } catch (e) { a.textContent = was; status('החיפוש לא הצליח: ' + (e.message || e), true); }
