@@ -635,7 +635,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.102 · 14.11.2026 12:18</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.103 · 14.11.2026 12:32</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2285,7 +2285,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.102 · 14.11.2026 12:18']],
+    ['גרסת האפליקציה', async () => ['ok', '1.103 · 14.11.2026 12:32']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -3399,7 +3399,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
     const pin = p.nightPins?.[k]; if (pin && !c.ferryNight) { sinceCamp = pin.wild ? sinceCamp + 1 : 0; return { ...pin, pinned: true }; } // the user's choice for this night
     if (c.ferryNight) { sinceCamp = 0; const f = c.fer || {}, t = f.s ? ferryTimes(f) : null;
       return { type: 'nightcamp', name: '⛴ לילה על המעבורת', lat: c.c[0], lon: c.c[1], auth: 'מעבורת לילה: הזמינו תא או מושבים ומקום לרכב', ferry: true,
-        fer: t ? { line: f.name || '', ...t, ops: f.ops || '', freq: f.freq || '', url: f.url || '' } : null }; }
+        fer: t ? { line: f.name || '', ...t, ops: f.ops || '', freq: f.freq || '', url: f.url || '', from: f.from || null, to: f.to || null } : null }; }
     const rule = WILD_NIGHT[countryAt(c.c)] || 'no';
     if (wildOk && rule !== 'no' && sinceCamp + 1 < every) { // a night in nature, then a campsite every few nights (showers, water, laundry)
       let w = null, ws = Infinity;
@@ -4266,6 +4266,7 @@ function placeLinks(pt) {
     const ports = line.split('←').map(x => x.trim()).filter(Boolean);
     if (pt.fer?.url) out.push(['דף ההפלגה והזמנה', pt.fer.url]);
     out.push(['לוח הפלגות וכרטיסים', 'https://www.google.com/search?q=' + q(`${ports.join(' to ')} car ferry timetable tickets ${pt.fer?.ops || ''}`.trim())]);
+    if (pt.fer && (pt.fer.est || !pt.fer.ops) && hasGroup()) out.push(['מצא שעות הפלגה וחברות', '#findferry']);
     out.push(['Ferryhopper', 'https://www.ferryhopper.com/en/'], ['Direct Ferries', 'https://www.directferries.com/']);
   } else if (pt.type === 'nightcamp' && !pt.wild && !pt.ferry && pt.type !== 'dayend') {
     const anon = /^(קמפינג|חניון קרוואנים|חניון לילה|camping|campsite)$/i.test(nm.trim());
@@ -4275,15 +4276,50 @@ function placeLinks(pt) {
     // the place itself on Google Maps (photos, reviews, phone, its website button), found by name next to these coordinates
     out.push([pt.website ? 'ביקורות ותמונות' : 'פרטים והזמנה (Google)', anon ? `https://www.google.com/maps/search/camping/@${ll},15z` : `https://www.google.com/maps/search/${q(nm)}/@${ll},14z`]);
     if (!pt.website && !anon && hasGroup()) out.push(['חפש את אתר הקמפינג', '#findsite']);
+    if (!pt.website && !inIsrael(pt.lat, pt.lon)) out.push(['הזמנה ב-Pitchup', '#pitchup']); // a booking site for campsites: the bookable ones around this town
+  }
+  if (pt.type === 'nightcamp' && !pt.ferry && pt.type !== 'dayend' && !inIsrael(pt.lat, pt.lon)) { // every place campers sleep around here, with their reviews
+    out.push(['Park4night באזור', `https://park4night.com/en/search?lat=${(+pt.lat).toFixed(5)}&lng=${(+pt.lon).toFixed(5)}&z=13`]);
   }
   out.push([pt.ferry ? 'Waze לנמל' : 'Waze', `https://waze.com/ul?ll=${ll}&navigate=yes`], [pt.ferry ? 'הנמל ב-Google Maps' : 'Google Maps', `https://www.google.com/maps/search/?api=1&query=${ll}`]);
   const box = document.createElement('div'); box.className = 'plinks';
   for (const [t, u] of out) {
     const a = document.createElement('a'); a.href = u; a.textContent = t; box.append(a);
     if (u === '#findsite') { a.className = 'findsite'; a.onclick = e => { e.preventDefault(); findCampSite(pt, a); }; }
+    else if (u === '#findferry') { a.className = 'findsite'; a.onclick = e => { e.preventDefault(); findFerry(pt, a); }; }
+    else if (u === '#pitchup') { a.onclick = e => { e.preventDefault(); openPitchup(pt, nm); }; }
     else if (!/^(tel|mailto):/.test(u)) { a.target = '_blank'; a.rel = 'noopener'; }
   }
   return box;
+}
+// Pitchup searches by a town's name: the tab opens at once (so the phone does not block it) and goes there when the town is known
+async function openPitchup(pt, nm) {
+  const w = window.open('', '_blank'); let town = pt.town || '';
+  if (!town) try { const j = await (await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&zoom=10&accept-language=en&lat=${pt.lat}&lon=${pt.lon}`, { signal: AbortSignal.timeout(6000) })).json(); const a = j.address || {}; town = [a.city || a.town || a.village || a.municipality || a.county, a.country].filter(Boolean).join(', '); pt.town = town; } catch {}
+  const url = 'https://www.pitchup.com/search/?q=' + encodeURIComponent(town || nm);
+  if (w) w.location = url; else location.href = url;
+}
+// a night ferry whose timetable is not known yet: one web search for the operators and the usual sailing time; kept with the trip
+const ferryTried = new Set();
+async function findFerry(pt, a, quiet) {
+  const f = pt.fer; if (!f || (a && a.dataset.busy)) return; if (a) { a.dataset.busy = 1; a.textContent = 'מחפש…'; }
+  try {
+    const line = String(f.line || '').replace(/[\u2068\u2069]/g, ''), at = c => c ? `${(+c[0]).toFixed(3)},${(+c[1]).toFixed(3)}` : '';
+    const ask = `Car ferry${line ? ' "' + line.replace('←', '->') + '"' : ''}${f.from && f.to ? ` from the port at ${at(f.from)} to the port at ${at(f.to)}` : ''} (about ${f.hours} hours).\nSearch the web for the current timetable of this line for cars. Answer with one line of JSON only: {"depart":"HH:MM","hours":number,"operator":"companies","freq":"short Hebrew: how often, which season","url":"https://... a booking page for this line that appeared in the results"}. Use "" for what you did not find; never guess a time.`;
+    const j = await api('/claude', { method: 'POST', body: JSON.stringify({ max_tokens: 600, system: 'You look up ferry timetables. Facts from the search results only.', messages: [{ role: 'user', content: ask }], tools: [{ type: WEB_SEARCH.type, max_uses: 3 }] }) });
+    const txt = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join(' '), m = txt.match(/\{[^{}]*"depart"[^{}]*\}/); let o = null; try { o = m && JSON.parse(m[0]); } catch {}
+    if (!o || (!o.operator && !/^\d{1,2}:\d{2}$/.test(o.depart || ''))) { if (a) { a.textContent = 'לא מצאתי לוח הפלגות. נסו "לוח הפלגות וכרטיסים"'; a.onclick = e => e.preventDefault(); } return; }
+    const hours = o.hours > 0.5 && o.hours < 60 ? +o.hours : f.hours, depart = /^\d{1,2}:\d{2}$/.test(o.depart || '') ? timeToH(o.depart) : null;
+    let host = ''; try { host = new URL(o.url).hostname.replace(/^www\./, ''); } catch {}
+    const nf = { ...f, ...ferryTimes({ s: hours * 3600, depart: depart ?? (f.est ? null : f.depart) }), ops: String(o.operator || f.ops || '').slice(0, 80), freq: String(o.freq || f.freq || '').slice(0, 120), url: host && JSON.stringify(j.content || []).includes(host) ? o.url : f.url || '' };
+    const r = current?.res?.results?.[current.sel];
+    if (r) for (const x of [...(r.pois || []), ...(r.days || []).map(d => d.camp).filter(Boolean)]) if (x.fer && (x === pt || (x.fer.line === f.line && Math.abs(x.lat - pt.lat) < 0.5))) x.fer = { ...x.fer, ...nf, short: x.fer.short };
+    pt.fer = { ...pt.fer, ...nf };
+    const sv = current?.saved || current?.trip;
+    if (sv?.id && r) { const b = packRoute(r); api('/routes/' + sv.id, { method: 'PATCH', body: JSON.stringify({ coords: b.coords, waypoints: b.waypoints, stats: b.stats }) }).then(() => { libCache = null; }).catch(() => {}); }
+    if (current && r) render(current.sel, current.day ?? null);
+  } catch (e) { if (a) a.textContent = 'מצא שעות הפלגה וחברות'; if (!quiet) status('החיפוש לא הצליח: ' + (e.message || e), true); }
+  finally { if (a) delete a.dataset.busy; }
 }
 // a campsite with no website on the map: one web search for its own site; the answer is kept with the trip, for everyone
 async function findCampSite(pt, a) {
@@ -4772,6 +4808,7 @@ function render(i, day = null) {
       if (shut.length) w.push(`לפי שעות הפתיחה, הקמפינג סגור בתאריך הטיול: ${shut.join(', ')}. בדקו מול המקום או החליפו לינה.`);
       const fer = D.map((d, k) => d.camp?.fer ? { k, f: d.camp.fer } : null).filter(Boolean);
       for (const { k, f } of fer) info.push(`מעבורת בלילה ${k + 1}: ${ferrySub(D[k].camp)}`);
+      if (hasGroup()) for (const { k, f } of fer.slice(0, 3)) { const key = (current.saved || current.trip)?.id + ':' + k; if (f.est && !f.ops && !ferryTried.has(key) && (current.saved || current.trip)) { ferryTried.add(key); findFerry(D[k].camp, null, true); } }
     }
     if (!current.saved && r.marked > 1000) info.push(`${(r.marked / 1000).toFixed(0)} ק"מ בשבילים מסומנים`);
     if (!current.saved && r.tet > 1000) info.push(`${(r.tet / 1000).toFixed(0)} ק"מ על המסלולים המועדפים (TET)`);
@@ -4944,7 +4981,7 @@ function routeTitle(r, p) {
 // ---------- serialize / deserialize ----------
 const R5 = x => Math.round(x * 1e5) / 1e5;
 // a saved place keeps everything it knows (website, phone, ferry times, why it is a stop), not only its name
-const litePlace = x => { const o = {}; for (const [k, v] of Object.entries(x)) if (v != null && v !== '' && k !== 'alts' && k !== 'node' && k[0] !== '_' && (typeof v !== 'object' || k === 'fer')) o[k] = (k === 'lat' || k === 'lon') ? R5(v) : v; return o; };
+const litePlace = x => { const o = {}; for (const [k, v] of Object.entries(x)) if (v != null && v !== '' && k !== 'alts' && k !== 'node' && k[0] !== '_' && (typeof v !== 'object' || k === 'fer' || k === 'from' || k === 'to')) o[k] = (k === 'lat' || k === 'lon') ? R5(v) : v; return o; };
 function packRoute(r) {
   const runs = []; // [d, nPoints] over coords
   r.segs.forEach((sg, i) => { const n = sg.pts.length - (i === 0 ? 0 : 1), d = sg.ferry ? -2 : sg.d; const last = runs[runs.length - 1]; if (last && last[0] === d) last[1] += n; else runs.push([d, n]); });
@@ -4967,6 +5004,13 @@ function unpackRoute(row) {
   } else segs.push({ d: -1, pts: coords });
   // trips saved before places kept all their fields: tell a ferry night and a night in nature by their names
   for (const c of [...(st.days || []).map(d => d.camp), ...(row.waypoints || [])]) if (c && c.type === 'nightcamp') { if (/^⛴/.test(c.name || '')) c.ferry = true; if (/^🌲/u.test(c.name || '')) c.wild = true; }
+  (st.days || []).forEach((d, k) => { const c = d.camp; if (!c || !c.ferry || c.fer) return; // sailing times were not kept then: the line and its length from what was saved, the clock as an estimate until it is looked up
+    const nx = st.days[k + 1]; if (!nx) return;
+    const sea = segs.filter(sg => sg.ferry); let best = null, bd = Infinity; for (const sg of sea) { const d0 = hav(sg.pts[0][0], sg.pts[0][1], c.lat, c.lon); if (d0 < bd) { bd = d0; best = sg; } }
+    if (!best) return; const A = best.pts[0], B = best.pts[best.pts.length - 1], m = pathLen(best.pts);
+    const via = (row.waypoints || []).find(x => x.type === 'via' && /מעבורת/.test(x.name || '') && hav(x.lat, x.lon, A[0], A[1]) < 30000);
+    const hm = (via?.note || '').match(/כ-(\d+):(\d+) שעות שיט/), hours = hm ? +hm[1] + hm[2] / 60 : m / 1000 / 30;
+    c.fer = { line: (via?.name || '').replace(/^⛴\s*מעבורת:?\s*/, ''), ...ferryTimes({ s: hours * 3600, depart: null }), ops: '', freq: '', url: '', from: A, to: B }; });
   return { coords, segs, pois: row.waypoints || [], len: st.len || pathLen(coords), hrs: st.hrs || pathLen(coords) / 1000 / 15, maxD: st.maxD ?? 0, byD: st.byD || [0, 0, 0, 0, 0, 0], unk: st.unk || 0, mil: st.mil || 0, aa: st.aa || 0, js: st.js || 0, reuse: st.reuse || 0, unrated: !!st.unrated || !st.runs, days: st.days || null, overland: !!st.overland, asph: st.asph || 0 };
 }
 function pathLen(c) { let s = 0; for (let i = 1; i < c.length; i++) s += hav(c[i - 1][0], c[i - 1][1], c[i][0], c[i][1]); return s; }
@@ -5085,7 +5129,7 @@ async function thCommit(save) {
 }
 $('thInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); thCommit(true); } else if (e.key === 'Escape') thCommit(false); });
 $('thInput').addEventListener('blur', () => thCommit(true));
-$('verChip').textContent = 'v' + '1.102 · 14.11.2026 12:18'.split(' ')[0]; // so everyone can tell which version they are on
+$('verChip').textContent = 'v' + '1.103 · 14.11.2026 12:32'.split(' ')[0]; // so everyone can tell which version they are on
 // naming: type a name and press Enter (or just leave the field); it is saved for every version of the trip
 $('routeName').addEventListener('focus', e => setTimeout(() => e.target.select(), 0));
 $('routeName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
