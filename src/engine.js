@@ -108,6 +108,42 @@ function ringHas(m, lat, lon) {
   return inside;
 }
 
+// what a traveller needs to know about a campsite, from its OSM tags: how to see and book it, when it is open, what it has
+function campInfo(t) {
+  const first = (...ks) => { for (const k of ks) { const v = (t[k] || '').split(';')[0].trim(); if (v) return v; } return ''; };
+  let web = first('website', 'contact:website', 'url', 'contact:url');
+  if (web && !/^https?:\/\//i.test(web)) web = /^[\w-]+(\.[\w-]+)+(\/|$)/.test(web) ? 'https://' + web : '';
+  const o = { fee: t.fee, water: t.drinking_water, toilets: t.toilets };
+  if (web) o.website = web;
+  const ph = first('phone', 'contact:phone', 'contact:mobile'); if (/\d{6,}/.test(ph.replace(/[^\d]/g, ''))) o.phone = ph;
+  const em = first('email', 'contact:email'); if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) o.email = em;
+  if (t.opening_hours) o.hours = String(t.opening_hours).slice(0, 80);
+  if (t.reservation) o.reservation = t.reservation;
+  if (t.shower && t.shower !== 'no') o.shower = 1;
+  if (t.power_supply && t.power_supply !== 'no') o.power = 1;
+  if (t.internet_access && t.internet_access !== 'no') o.wifi = 1;
+  if (t.dog) o.dog = t.dog;
+  if (t.sanitary_dump_station && t.sanitary_dump_station !== 'no') o.dump = 1;
+  if (t.tents === 'no') o.noTents = 1;
+  if (t.charge) o.charge = String(t.charge).slice(0, 30);
+  return o;
+}
+// is a place open on a date, by the months in its opening_hours ("Apr-Oct", "May 15-Sep 30", "24/7")? true / false / null = cannot tell
+function openOn(hours, iso) {
+  if (!hours || !iso) return null;
+  const s = String(hours).toLowerCase();
+  if (/^24\/7/.test(s.trim())) return true;
+  const M = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  const m = +iso.slice(5, 7), d = +iso.slice(8, 10), at = m * 100 + d;
+  const re = /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*(\d{1,2})?\s*-\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*(\d{1,2})?([^;]*)/g;
+  let any = false, open = false, x;
+  while ((x = re.exec(s))) {
+    any = true; if (/\b(off|closed)\b/.test(x[5])) continue;
+    const a = (M.indexOf(x[1]) + 1) * 100 + (+x[2] || 1), b = (M.indexOf(x[3]) + 1) * 100 + (+x[4] || 31);
+    if (a <= b ? at >= a && at <= b : at >= a || at <= b) open = true;
+  }
+  return any ? open : null;
+}
 // Build graph from Overpass elements
 // the work is cut into steps so the page can stay alive while a big area is processed:
 // buildGraph() runs them all at once (tests, small areas); the app runs them in short slices
@@ -128,7 +164,7 @@ function* buildGraphSteps(elements) {
         if (matchPoi(k, el.tags)) {
           const t = el.tags;
           const poi = { type: k, lat: plat, lon: plon, name: t['name:he'] || t.name || def.he, img: t.image, commons: t.wikimedia_commons, wd: t.wikidata };
-          if (k === 'nightcamp') { poi.auth = campAuth(t, plat, plon); poi.fee = t.fee; poi.water = t.drinking_water; poi.toilets = t.toilets; if (!t.name && !t['name:he']) poi.name = !inIsrael(plat, plon) ? (t.tourism === 'caravan_site' ? 'חניון קרוואנים' : 'קמפינג') : poi.auth ? 'חניון לילה' : 'אתר קמפינג'; }
+          if (k === 'nightcamp') { poi.auth = campAuth(t, plat, plon); Object.assign(poi, campInfo(t)); if (!t.name && !t['name:he']) poi.name = !inIsrael(plat, plon) ? (t.tourism === 'caravan_site' ? 'חניון קרוואנים' : 'קמפינג') : poi.auth ? 'חניון לילה' : 'אתר קמפינג'; }
           pois.push(poi); break;
         }
       }
@@ -260,7 +296,7 @@ function campAuth(t, la, lo) {
   if (la != null && !inIsrael(la, lo)) { // Europe & elsewhere: an official campsite / caravan site is a legal night stop
     if (t.access === 'private' || t.access === 'no' || t.backcountry === 'yes' || t.group_only === 'yes') return null;
     if (t.tourism === 'caravan_site') return 'חניון קרוואנים';
-    return t.name || t.operator || t.fee || t.website ? 'קמפינג רשמי' : null;
+    return t.name || t.operator || t.fee || t.website || t['contact:website'] || t.phone || t['contact:phone'] ? 'קמפינג רשמי' : null;
   }
   const op = [t.operator, t.owner, t['operator:he'], t['operator:en']].filter(Boolean).join(' ');
   if (AUTH_OPS.test(op)) return /קק"?ל|קרן קיימת|kkl|jnf/i.test(op) ? 'קק"ל' : /מועצה/.test(op) ? 'מועצה אזורית' : 'רט"ג';
@@ -874,6 +910,7 @@ function corridorTiles(points, radiusM) {
 function tileBBox(key) { const [, i, j] = key.split('_').map(Number); return [i * TILE, j * TILE, (i + 1) * TILE, (j + 1) * TILE]; }
 const WAY_TAGS = ['highway', 'tracktype', 'surface', 'smoothness', '4wd_only', 'access', 'motor_vehicle', 'motorcar', 'vehicle', 'oneway', 'name', 'name:he', 'ref', 'mark'];
 const POI_TAGS = ['amenity', 'brand', 'backcountry', 'group_only', 'website', 'access', 'tourism', 'natural', 'historic', 'name', 'name:he', 'image', 'wikimedia_commons', 'wikidata', 'operator', 'owner', 'operator:he', 'operator:en', 'fee', 'drinking_water', 'toilets'];
+const CAMP_TAGS = ['contact:website', 'url', 'contact:url', 'phone', 'contact:phone', 'contact:mobile', 'email', 'contact:email', 'reservation', 'opening_hours', 'seasonal', 'capacity', 'stars', 'tents', 'caravans', 'motorhome', 'dog', 'shower', 'power_supply', 'internet_access', 'sanitary_dump_station', 'charge', 'swimming_pool', 'openfire', 'addr:city'];
 const MIL_TAGS = ['landuse', 'military', 'leisure', 'boundary', 'protect_class', 'name', 'name:he', 'name:en'];
 const pick = (t, keys) => { const o = {}; for (const k of keys) if (t[k] != null) o[k] = t[k]; return o; };
 const r6 = x => Math.round(x * 1e6) / 1e6;
@@ -898,7 +935,7 @@ function splitToTiles(elements, keys) {
       for (const k of keys) if (boxHit(bx, boxes[k])) out[k].m.push([el.type[0] + el.id, rings, pick(t, MIL_TAGS)]);
     } else if (el.type === 'node' || el.center) {
       const la = el.type === 'node' ? el.lat : el.center.lat, lo = el.type === 'node' ? el.lon : el.center.lon;
-      for (const k of keys) { const b = boxes[k]; if (la >= b[0] && la < b[2] && lo >= b[1] && lo < b[3]) { out[k].p.push([el.type[0], el.id, r6(la), r6(lo), pick(t, POI_TAGS)]); break; } }
+      for (const k of keys) { const b = boxes[k]; if (la >= b[0] && la < b[2] && lo >= b[1] && lo < b[3]) { out[k].p.push([el.type[0], el.id, r6(la), r6(lo), pick(t, t.tourism === 'camp_site' || t.tourism === 'caravan_site' ? POI_TAGS.concat(CAMP_TAGS) : POI_TAGS)]); break; } }
     }
   }
   return out;
@@ -1332,5 +1369,5 @@ function parseLocal(text) {
   return p;
 }
 
-if (typeof module !== 'undefined') module.exports = { buildGraphSteps, safetyInfo, bailDist, inIsrael, isReserve, SAFETY_TYPES, sampleRoute, analyzeElevation, applyReports, dijkstra, multiMilitary, corridorTiles, planMultiVia, pathEdges, TILE, tileKey, tilesFor, tileBBox, splitToTiles, tilesToElements, planMulti, addDays, campAuth, KNOWN_CAMPS, AREA_A, inAreaA, lookupPlace, dayInfo, resolveMilitary, nextSaturday, buildGraph, plan, nearestNode, factors, toGPX, parseLocal, targetLengthM, wayInfo, POI_TYPES };
+if (typeof module !== 'undefined') module.exports = { campInfo, openOn, buildGraphSteps, safetyInfo, bailDist, inIsrael, isReserve, SAFETY_TYPES, sampleRoute, analyzeElevation, applyReports, dijkstra, multiMilitary, corridorTiles, planMultiVia, pathEdges, TILE, tileKey, tilesFor, tileBBox, splitToTiles, tilesToElements, planMulti, addDays, campAuth, KNOWN_CAMPS, AREA_A, inAreaA, lookupPlace, dayInfo, resolveMilitary, nextSaturday, buildGraph, plan, nearestNode, factors, toGPX, parseLocal, targetLengthM, wayInfo, POI_TYPES };
 // ===== END ENGINE =====

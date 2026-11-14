@@ -66,7 +66,8 @@ const CASES_IL = [
     const errs = []; pg.on('pageerror', e => errs.push(e.message)); if (process.env.DBG) pg.on('console', m => { if (/dbg|piece|stretch|seek/.test(m.text())) console.log('C', m.text().slice(0, 200)); });
     await pg.route(/tile\.|arcgis|fonts|opentopomap/, r => r.abort());
     await pg.route(/overpass|kumi|coffee|mail\.ru/, r => r.abort());
-    await pg.route(/project-osrm/, async r => { try { const resp = await r.fetch({ timeout: 60000 }); await r.fulfill({ response: resp, headers: { ...resp.headers(), 'access-control-allow-origin': '*' } }); } catch { r.abort(); } });
+    // the routing server through curl: the browser's own request to it does not always pass the sandbox proxy
+    await pg.route(/project-osrm/, r => require('child_process').execFile('curl', ['-sS', '-m', '60', r.request().url()], { maxBuffer: 1 << 28 }, (e, out) => e || !out ? r.abort() : r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: out })));
     await pg.addInitScript(() => { window.__maxBlock = 0; try { new PerformanceObserver(l => { for (const e of l.getEntries()) { window.__maxBlock = Math.max(window.__maxBlock, e.duration); (window.__blocks = window.__blocks || []).push(Math.round(e.duration)); } }).observe({ type: 'longtask', buffered: true }); } catch {} });
     await pg.goto('file://' + html);
     const t0 = Date.now();

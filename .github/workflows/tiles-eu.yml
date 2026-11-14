@@ -1,11 +1,11 @@
-# Weekly: trail tiles for the countries in tools/eu_extracts.txt, published on the orphan branch "tiles-eu".
-# Incremental: a country is rebuilt when its tiles are older than 25 days (index.json "countries"), so adding a
+# Nightly: trail tiles for the countries in tools/eu_extracts.txt, published on the orphan branch "tiles-eu".
+# Incremental: a country is rebuilt when its tiles are older than 25 days, or were built before the kept tags changed (POI_SCHEMA), (index.json "countries"), so adding a
 # country builds only that one, and a long list is spread over several runs instead of hitting the job time limit.
 # Same format as the Israel tiles; border tiles shared by two countries are merged (the newer build wins).
 name: Build trail tiles (Europe)
 on:
   schedule:
-    - cron: "41 3 * * 2"   # Tuesdays 03:41 UTC
+    - cron: "41 3 * * *"   # every night 03:41 UTC: a run only builds what is stale, so a long queue (new countries, changed tags) is worked off night by night
   workflow_dispatch:
     inputs:
       force: { description: "Rebuild every country now", type: boolean, default: false }
@@ -42,7 +42,7 @@ jobs:
             age=$(python3 -c "import json,sys,datetime as d
           try: c=json.load(open('index.json')).get('countries',{}).get('$name')
           except Exception: c=None
-          print(9999 if not c else (d.datetime.utcnow()-d.datetime.strptime(c['built'],'%Y-%m-%dT%H:%M:%SZ')).days)")
+          print(9999 if not c or c.get('poi',1) < $(grep -oP '^POI_SCHEMA = \K\d+' ../tools/build_tiles.py) else (d.datetime.utcnow()-d.datetime.strptime(c['built'],'%Y-%m-%dT%H:%M:%SZ')).days)")
             if [ -z "$FORCE" ] && [ "$age" -lt 25 ]; then echo "skip $name (built $age days ago)"; continue; fi
             if [ $(( $(date +%s) - start )) -gt 17400 ]; then echo "time is up; $name and the rest next run"; break; fi
             echo "::group::$name"

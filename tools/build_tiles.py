@@ -22,6 +22,11 @@ MAIN_HW = {"track", "unclassified", "tertiary", "secondary", "primary", "trunk",
 UNPAVED = {"unpaved", "gravel", "fine_gravel", "dirt", "ground", "sand", "compacted", "rock", "pebblestone", "earth", "mud"}
 WAY_TAGS = ["highway", "tracktype", "surface", "smoothness", "4wd_only", "access", "motor_vehicle", "motorcar", "vehicle", "oneway", "name", "name:he", "ref"]
 POI_TAGS = ["shop", "amenity", "brand", "backcountry", "group_only", "website", "access", "tourism", "natural", "historic", "name", "name:he", "image", "wikimedia_commons", "wikidata", "operator", "owner", "operator:he", "operator:en", "fee", "drinking_water", "toilets"]
+# a place to sleep needs more: how to reach and book it, when it is open, what it has (kept for campsites only, so tiles stay small)
+CAMP_TAGS = ["contact:website", "url", "contact:url", "phone", "contact:phone", "contact:mobile", "email", "contact:email", "reservation", "opening_hours", "seasonal",
+             "capacity", "stars", "tents", "caravans", "motorhome", "dog", "shower", "power_supply", "internet_access", "sanitary_dump_station", "charge", "swimming_pool", "openfire", "addr:city"]
+POI_SCHEMA = 2  # raised when the kept tags change: the EU workflow rebuilds countries built with an older one
+def poi_tags(t): return pick(t, POI_TAGS + CAMP_TAGS) if t.get("tourism") in ("camp_site", "caravan_site") else pick(t, POI_TAGS)
 MIL_TAGS = ["landuse", "military", "leisure", "boundary", "protect_class", "name", "name:he", "name:en"]
 MIL_KINDS = {"danger_area", "training_area", "range"}
 
@@ -110,7 +115,7 @@ class Builder(osmium.SimpleHandler):
         if not t or not poi_node(t) or not n.location.valid(): return
         la, lo = n.location.lat, n.location.lon
         if not self.in_bbox(la, lo, la, lo): return
-        self.T(*tile_of(la, lo))["p"].append(["n", n.id, r6(la), r6(lo), pick(t, POI_TAGS)])
+        self.T(*tile_of(la, lo))["p"].append(["n", n.id, r6(la), r6(lo), poi_tags(t)])
 
     def way(self, w):
         t = {tg.k: tg.v for tg in w.tags}
@@ -157,7 +162,7 @@ class Builder(osmium.SimpleHandler):
             for i, j in self.tiles_for_box(s, wv, n, e): self.T(i, j)["lk"].append(rec)
         if camp:  # same as Overpass "out center": centre of the bounding box
             la, lo = (s + n) / 2, (wv + e) / 2
-            self.T(*tile_of(la, lo))["p"].append([tp, a.orig_id(), r6(la), r6(lo), pick(t, POI_TAGS)])
+            self.T(*tile_of(la, lo))["p"].append([tp, a.orig_id(), r6(la), r6(lo), poi_tags(t)])
 
 
 def merge_into(old, new):
@@ -196,7 +201,7 @@ def main(src, out, world=False, merge=False, name=None):
         try:
             with open(ip) as f: countries = json.load(f).get("countries", {})
         except Exception: pass
-    if name: countries[name] = {"built": built, "tiles": len(b.tiles), "marked": len(rm.marks)}
+    if name: countries[name] = {"built": built, "tiles": len(b.tiles), "marked": len(rm.marks), "poi": POI_SCHEMA}
     with open(ip, "w") as f:
         json.dump({"version": VER, "at": at, "built": built, "source": os.path.basename(src), "countries": countries, "keys": keys}, f)
     print(f"{len(keys)} tiles, {total / 1e6:.1f} MB, {time.time() - t0:.0f}s")
