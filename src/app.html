@@ -1075,7 +1075,7 @@ const TOOL = {
 const SYSTEM = () => `Today is ${new Date().toISOString().slice(0, 10)} (${new Date().toLocaleDateString('en-US', { weekday: 'long' })}). You plan 4x4 jeep trips in Israel and in Europe for a group of Israeli friends and convert each request into structured parameters by calling route_request exactly once at the end.
 - Include lat/lon for every place and set country.
 - Long journeys (hundreds of km, e.g. between countries): put off-road highlight areas in via, in driving order (real dirt-road areas: TET sections, mountain gravel roads). days = TOTAL trip days including the way back. A round trip that returns to the start: loop=true, and the vias cover the way there AND back.
-- Car ferries: when a ferry saves driving days (e.g. Igoumenitsa/Patras <-> Venice/Ancona/Bari, Durres <-> Bari, Split <-> Ancona), or when the user asks for one, put the departure port as a via with ferry_to_next=true and ferry_hours, and the arrival port as the next via. Look the line up on the web and fill ferry_operator, ferry_depart (usual departure time), ferry_freq and ferry_url from what you found; only lines that take cars and really sail between these two ports (if no such line exists, choose the nearest port pair that has one). A round trip by ferry both ways has two ferry pairs. Keep total vias <= 10.
+- Car ferries: when a ferry saves driving days (e.g. Igoumenitsa/Patras <-> Venice/Ancona/Bari, Durres <-> Bari, Split <-> Ancona), or when the user asks for one, put the departure port as a via with ferry_to_next=true and ferry_hours, and the arrival port as the next via. Look the line up on the web and fill ferry_operator, ferry_depart (usual departure time), ferry_freq and ferry_url from what you found; only lines that take cars and really sail between these two ports (if no such line exists, choose the nearest port pair that has one). A round trip by ferry both ways has two ferry pairs. Every ferry_to_next via MUST be followed by its arrival port as the next via (never leave the trip's end or start as the arrival unless that town itself is the port the ferry lands at); if that would pass 10 vias, drop a sightseeing via, not a port. Keep total vias <= 10.
 - Europe: names in the local/English form. Prefer regions and routes where driving unpaved public roads is legal (e.g. known overland/4x4 routes, TET sections), start at a town, and for several days rely on official campsites (nightcamp). Israeli rules (firing zones, Area A) do not apply abroad. Use web_search when you are not sure of a place's location or when the request is themed.
 - Themed requests (a historical event or military operation, a book, a person, a named trail, "in the footsteps of", "בעקבות"): research the theme, then choose the real sites in order as start, via and end. Prefer points reachable by 4x4 (trailheads, memorial sites, viewpoints, ruins) over city centers, and skip sites that are now inside military bases or Area A. Add a short Hebrew note per via and a 2-4 sentence Hebrew story_he. Keep at most 8 vias and keep notes short. The theme's final destination MUST be "end" (with lat/lon), never left out or put only in via.
 - Refinement requests come with the current parameters as JSON: return the full updated parameters, changing only what was asked.
@@ -1833,7 +1833,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
   // 2. road skeleton and day cut points (by time and km)
   status('מחשב את קטעי הכביש…');
   const wp0 = [sLL, ...vias.map((v, i) => pieces[i]?.at || v.ll), end];
-  const ferAt = new Map(); vias.forEach((v, i) => { if (v.ferry) ferAt.set(i + 1, { ...(v.ferryInfo || {}), hours: v.ferryHours, name: v.ferryName || `\u2068${v.name}\u2069 ← \u2068${vias[i + 1]?.name || 'יעד'}\u2069` }); });
+  const ferAt = new Map(); vias.forEach((v, i) => { if (v.ferry) ferAt.set(i + 1, { ...(v.ferryInfo || {}), hours: v.ferryHours, name: v.ferryName || `\u2068${v.name}\u2069 ← \u2068${vias[i + 1]?.name || (p.loop ? p.start?.name : p.end?.name) || 'יעד'}\u2069` }); });
   const sk = await osrmFerry(wp0, ferAt);
   { const land = [], sea = []; let cur = [], isSea = null; // the road skeleton, the sea legs dashed blue
     sk.coords.forEach((c, i) => { const s = !!(sk.ferry[i] && sk.ferry[i + 1]); if (s !== isSea && cur.length) { (isSea ? sea : land).push([...cur, c]); cur = []; } isSea = s; cur.push(c); }); if (cur.length) (isSea ? sea : land).push(cur);
@@ -2065,7 +2065,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
   const seq = [{ ll: sLL }, ...marks, { ll: end }];
   status('מחשב את המסלול הסופי…');
   const ferSeq = new Map();
-  seq.forEach((x, k) => { const nx = seq[k + 1]; if (!nx) return; const a = nx.via != null ? nx.via - 1 : (k + 1 === seq.length - 1 ? vias.length - 1 : -2); if (a >= 0 && vias[a]?.ferry) ferSeq.set(k, { ...(vias[a].ferryInfo || {}), hours: vias[a].ferryHours, name: vias[a].ferryName || `\u2068${vias[a].name}\u2069 ← \u2068${vias[a + 1]?.name || 'יעד'}\u2069` }); });
+  seq.forEach((x, k) => { const nx = seq[k + 1]; if (!nx) return; const a = nx.via != null ? nx.via - 1 : (k + 1 === seq.length - 1 ? vias.length - 1 : -2); if (a >= 0 && vias[a]?.ferry) ferSeq.set(k, { ...(vias[a].ferryInfo || {}), hours: vias[a].ferryHours, name: vias[a].ferryName || `\u2068${vias[a].name}\u2069 ← \u2068${vias[a + 1]?.name || (p.loop ? p.start?.name : p.end?.name) || 'יעד'}\u2069` }); });
   const fin = await osrmFerry(seq.map(x => x.ll), ferSeq);
   const li = legSplit(fin.coords, seq.map(x => x.ll));
   // 5. assemble coords + segments, splicing each off-road loop in at its highlight
@@ -2544,7 +2544,7 @@ function ferrySub(c) { // everything known about the crossing, and what is only 
   const f = c.fer; if (!f) return c.auth;
   const bits = [latinName(String(f.line || '').replace(/[\u2068\u2069]/g, '')), `כ-${f.hours} שעות`, `הפלגה ${hToTime(f.depart)}${f.est ? ' (משוער)' : ''}, ירידה ~${hToTime(f.arrive)} למחרת`];
   if (f.ops) bits.push(f.ops); if (f.freq) bits.push(f.freq);
-  bits.push(f.est || !f.ops ? 'בדקו שעות וימי הפלגה באתר החברה לפני שמזמינים' : 'להזמין מראש: רכב + תא או מושבים');
+  bits.push(f.none ? '⚠ לא מצאתי ברשת קו מעבורת לרכב בין שני הנמלים האלה. ייתכן שמפליגים לנמל אחר וממשיכים בנסיעה: בדקו לפני שבונים על היום הזה' : f.est || !f.ops ? 'בדקו שעות וימי הפלגה באתר החברה לפני שמזמינים' : 'להזמין מראש: רכב + תא או מושבים');
   return bits.filter(Boolean).join(' · ');
 }
 function campSub(c) {
@@ -2893,7 +2893,7 @@ function placeLinks(pt) {
     const ports = line.split('←').map(x => x.trim()).filter(Boolean);
     if (pt.fer?.url) out.push(['דף ההפלגה והזמנה', pt.fer.url]);
     out.push(['לוח הפלגות וכרטיסים', 'https://www.google.com/search?q=' + q(`${ports.join(' to ')} car ferry timetable tickets ${pt.fer?.ops || ''}`.trim())]);
-    if (pt.fer && (pt.fer.est || !pt.fer.ops) && hasGroup()) out.push(['מצא שעות הפלגה וחברות', '#findferry']);
+    if (pt.fer && (pt.fer.est || !pt.fer.ops) && hasGroup()) out.push([pt.fer.none ? 'חפש שוב שעות הפלגה' : 'מצא שעות הפלגה וחברות', '#findferry']);
     out.push(['Ferryhopper', 'https://www.ferryhopper.com/en/'], ['Direct Ferries', 'https://www.directferries.com/']);
   } else if (pt.type === 'nightcamp' && !pt.wild && !pt.ferry && pt.type !== 'dayend') {
     const anon = /^(קמפינג|חניון קרוואנים|חניון לילה|camping|campsite)$/i.test(nm.trim());
@@ -2928,6 +2928,10 @@ async function openPitchup(pt, nm) {
 }
 // a night ferry whose timetable is not known yet: one web search for the operators and the usual sailing time; kept with the trip
 const ferryTried = new Set();
+function ferryAuto() { // once per ferry of a saved trip, by itself
+  const r = current?.res?.results?.[current.sel], sv = current?.saved || current?.trip; if (!r?.days || !sv?.id || !hasGroup()) return;
+  r.days.map((d, k) => [d.camp, k]).filter(([c]) => c?.fer && c.fer.est && !c.fer.ops && !c.fer.none).slice(0, 3).forEach(([c, k]) => { const key = sv.id + ':' + k; if (!ferryTried.has(key)) { ferryTried.add(key); findFerry(c, null, true); } });
+}
 async function findFerry(pt, a, quiet) {
   const f = pt.fer; if (!f || (a && a.dataset.busy)) return; if (a) { a.dataset.busy = 1; a.textContent = 'מחפש…'; }
   try {
@@ -2935,13 +2939,16 @@ async function findFerry(pt, a, quiet) {
     const ask = `Car ferry${line ? ' "' + line.replace('←', '->') + '"' : ''}${f.from && f.to ? ` from the port at ${at(f.from)} to the port at ${at(f.to)}` : ''} (about ${f.hours} hours).\nSearch the web for the current timetable of this line for cars. Answer with one line of JSON only: {"depart":"HH:MM","hours":number,"operator":"companies","freq":"short Hebrew: how often, which season","url":"https://... a booking page for this line that appeared in the results"}. Use "" for what you did not find; never guess a time.`;
     const j = await api('/claude', { method: 'POST', body: JSON.stringify({ max_tokens: 600, system: 'You look up ferry timetables. Facts from the search results only.', messages: [{ role: 'user', content: ask }], tools: [{ type: WEB_SEARCH.type, max_uses: 3 }] }) });
     const txt = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join(' '), m = txt.match(/\{[^{}]*"depart"[^{}]*\}/); let o = null; try { o = m && JSON.parse(m[0]); } catch {}
-    if (!o || (!o.operator && !/^\d{1,2}:\d{2}$/.test(o.depart || ''))) { if (a) { a.textContent = 'לא מצאתי לוח הפלגות. נסו "לוח הפלגות וכרטיסים"'; a.onclick = e => e.preventDefault(); } return; }
+    if (!o || (!o.operator && !/^\d{1,2}:\d{2}$/.test(o.depart || ''))) { // no such line was found: say it, and keep that with the trip
+      pt.fer = { ...f, none: true }; const r0 = current?.res?.results?.[current.sel], sv0 = current?.saved || current?.trip;
+      if (sv0?.id && r0) { const b = packRoute(r0); api('/routes/' + sv0.id, { method: 'PATCH', body: JSON.stringify({ coords: b.coords, waypoints: b.waypoints, stats: b.stats }) }).catch(() => {}); }
+      if (current && r0) render(current.sel, current.day ?? null); return; }
     const hours = o.hours > 0.5 && o.hours < 60 ? +o.hours : f.hours, depart = /^\d{1,2}:\d{2}$/.test(o.depart || '') ? timeToH(o.depart) : null;
     let host = ''; try { host = new URL(o.url).hostname.replace(/^www\./, ''); } catch {}
     const nf = { ...f, ...ferryTimes({ s: hours * 3600, depart: depart ?? (f.est ? null : f.depart) }), ops: String(o.operator || f.ops || '').slice(0, 80), freq: String(o.freq || f.freq || '').slice(0, 120), url: host && JSON.stringify(j.content || []).includes(host) ? o.url : f.url || '' };
     const r = current?.res?.results?.[current.sel];
-    if (r) for (const x of [...(r.pois || []), ...(r.days || []).map(d => d.camp).filter(Boolean)]) if (x.fer && (x === pt || (x.fer.line === f.line && Math.abs(x.lat - pt.lat) < 0.5))) x.fer = { ...x.fer, ...nf, short: x.fer.short };
-    pt.fer = { ...pt.fer, ...nf };
+    if (r) for (const x of [...(r.pois || []), ...(r.days || []).map(d => d.camp).filter(Boolean)]) if (x.fer && (x === pt || (x.fer.line === f.line && Math.abs(x.lat - pt.lat) < 0.5))) x.fer = { ...x.fer, ...nf, none: false, short: x.fer.short };
+    pt.fer = { ...pt.fer, ...nf, none: false };
     const sv = current?.saved || current?.trip;
     if (sv?.id && r) { const b = packRoute(r); api('/routes/' + sv.id, { method: 'PATCH', body: JSON.stringify({ coords: b.coords, waypoints: b.waypoints, stats: b.stats }) }).then(() => { libCache = null; }).catch(() => {}); }
     if (current && r) render(current.sel, current.day ?? null);
@@ -3434,8 +3441,8 @@ function render(i, day = null) {
       D.forEach((d, k) => { const c = d.camp; if (!c || c.wild || c.ferry) return; c.closedOn = openOn(c.hours, addDays(date, k)) === false; if (c.closedOn) shut.push(`לילה ${k + 1} (\u2068${latinName(c.name)}\u2069, פתוח ${c.hours})`); });
       if (shut.length) w.push(`לפי שעות הפתיחה, הקמפינג סגור בתאריך הטיול: ${shut.join(', ')}. בדקו מול המקום או החליפו לינה.`);
       const fer = D.map((d, k) => d.camp?.fer ? { k, f: d.camp.fer } : null).filter(Boolean);
-      for (const { k, f } of fer) info.push(`מעבורת בלילה ${k + 1}: ${ferrySub(D[k].camp)}`);
-      if (hasGroup()) for (const { k, f } of fer.slice(0, 3)) { const key = (current.saved || current.trip)?.id + ':' + k; if (f.est && !f.ops && !ferryTried.has(key) && (current.saved || current.trip)) { ferryTried.add(key); findFerry(D[k].camp, null, true); } }
+      for (const { k, f } of fer) (f.none ? w : info).push(`מעבורת בלילה ${k + 1}: ${ferrySub(D[k].camp)}`);
+      ferryAuto();
     }
     if (!current.saved && r.marked > 1000) info.push(`${(r.marked / 1000).toFixed(0)} ק"מ בשבילים מסומנים`);
     if (!current.saved && r.tet > 1000) info.push(`${(r.tet / 1000).toFixed(0)} ק"מ על המסלולים המועדפים (TET)`);
@@ -3669,7 +3676,7 @@ function autoSave(base, change) {
   // a name someone gave stays; an automatic one follows the newest version
   const body = { ...tripBody(cur, r), name: base?.name && !/ק"מ/.test(base.name) ? base.name : routeTitle(r, cur.p), ...(base ? { trip_id: base.trip_id, change } : {}) };
   cur.tripSaving = api('/routes', { method: 'POST', body: JSON.stringify(body) })
-    .then(j => { cur.trip = { ...j.route }; cur.tripSel = cur.sel; libCache = null; if (current === cur) { drawTripMeta(); tripHead(cur.res.results[cur.sel], cur.p); if (cur.sel !== cur.tripSel) syncAlt(); } })
+    .then(j => { cur.trip = { ...j.route }; cur.tripSel = cur.sel; libCache = null; if (current === cur) { drawTripMeta(); tripHead(cur.res.results[cur.sel], cur.p); if (cur.sel !== cur.tripSel) syncAlt(); ferryAuto(); } })
     .catch(e => { cur.tripErr = e.message; if (current === cur) drawTripMeta(); });
 }
 let altTimer = null;
