@@ -635,7 +635,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.104 · 14.11.2026 12:36</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.105 · 14.11.2026 12:39</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2285,7 +2285,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.104 · 14.11.2026 12:36']],
+    ['גרסת האפליקציה', async () => ['ok', '1.105 · 14.11.2026 12:39']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -4310,9 +4310,10 @@ async function findFerry(pt, a, quiet) {
   try {
     const line = String(f.line || '').replace(/[\u2068\u2069]/g, ''), at = c => c ? `${(+c[0]).toFixed(3)},${(+c[1]).toFixed(3)}` : '';
     const ask = `Car ferry${line ? ' "' + line.replace('←', '->') + '"' : ''}${f.from && f.to ? ` from the port at ${at(f.from)} to the port at ${at(f.to)}` : ''} (about ${f.hours} hours).\nSearch the web for the current timetable of this line for cars. Answer with one line of JSON only: {"depart":"HH:MM","hours":number,"operator":"companies","freq":"short Hebrew: how often, which season","url":"https://... a booking page for this line that appeared in the results"}. Use "" for what you did not find; never guess a time.`;
-    const j = await api('/claude', { method: 'POST', body: JSON.stringify({ max_tokens: 600, system: 'You look up ferry timetables. Facts from the search results only.', messages: [{ role: 'user', content: ask }], tools: [{ type: WEB_SEARCH.type, max_uses: 3 }] }) });
+    const j = await api('/claude', { method: 'POST', body: JSON.stringify({ max_tokens: 4000, system: 'You look up ferry timetables. Facts from the search results only.', messages: [{ role: 'user', content: ask }], tools: [{ type: WEB_SEARCH.type, max_uses: 3 }] }) });
     const txt = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join(' '), m = txt.match(/\{[^{}]*"depart"[^{}]*\}/); let o = null; try { o = m && JSON.parse(m[0]); } catch {}
-    if (!o || (!o.operator && !/^\d{1,2}:\d{2}$/.test(o.depart || ''))) { // no such line was found: say it, and keep that with the trip
+    if (!o) throw new Error('החיפוש לא החזיר תשובה, נסו שוב'); // cut short or unreadable: not the same as "no such line"
+    if (!o.operator && !/^\d{1,2}:\d{2}$/.test(o.depart || '')) { // the search answered and found no such line: say it, and keep that with the trip
       pt.fer = { ...f, none: true }; const r0 = current?.res?.results?.[current.sel], sv0 = current?.saved || current?.trip;
       if (sv0?.id && r0) { const b = packRoute(r0); api('/routes/' + sv0.id, { method: 'PATCH', body: JSON.stringify({ coords: b.coords, waypoints: b.waypoints, stats: b.stats }) }).catch(() => {}); }
       if (current && r0) render(current.sel, current.day ?? null); return; }
@@ -4325,7 +4326,7 @@ async function findFerry(pt, a, quiet) {
     const sv = current?.saved || current?.trip;
     if (sv?.id && r) { const b = packRoute(r); api('/routes/' + sv.id, { method: 'PATCH', body: JSON.stringify({ coords: b.coords, waypoints: b.waypoints, stats: b.stats }) }).then(() => { libCache = null; }).catch(() => {}); }
     if (current && r) render(current.sel, current.day ?? null);
-  } catch (e) { if (a) a.textContent = 'מצא שעות הפלגה וחברות'; if (!quiet) status('החיפוש לא הצליח: ' + (e.message || e), true); }
+  } catch (e) { if (a) a.textContent = 'מצא שעות הפלגה וחברות'; if (!quiet) status('החיפוש לא הצליח: ' + (e.message || e), true); else console.warn('ferry lookup', e.message); }
   finally { if (a) delete a.dataset.busy; }
 }
 // a campsite with no website on the map: one web search for its own site; the answer is kept with the trip, for everyone
@@ -4334,10 +4335,11 @@ async function findCampSite(pt, a) {
   try {
     const cc = await countryOf(+pt.lat, +pt.lon).catch(() => '');
     const ask = `Campsite: "${String(pt.name).replace(/[\u2068\u2069]/g, '')}" at ${(+pt.lat).toFixed(4)},${(+pt.lon).toFixed(4)}${cc ? ' (' + cc + ')' : ''}.\nSearch the web and find this campsite's own official website (not a directory or booking portal, unless it has no site of its own: then its page on the best-known portal). Answer with one line of JSON only: {"url":"https://...","phone":"...","portal":true|false} using a URL that appeared in the search results, or {"url":""} if you are not sure it is this very place.`;
-    const j = await api('/claude', { method: 'POST', body: JSON.stringify({ max_tokens: 500, system: 'You find the official website of a campsite. Never guess a URL.', messages: [{ role: 'user', content: ask }], tools: [{ type: WEB_SEARCH.type, max_uses: 2 }] }) });
+    const j = await api('/claude', { method: 'POST', body: JSON.stringify({ max_tokens: 3000, system: 'You find the official website of a campsite. Never guess a URL.', messages: [{ role: 'user', content: ask }], tools: [{ type: WEB_SEARCH.type, max_uses: 2 }] }) });
     const txt = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join(' '), m = txt.match(/\{[^{}]*"url"[^{}]*\}/);
     const seen = JSON.stringify(j.content || []); let o = null; try { o = m && JSON.parse(m[0]); } catch {}
-    const url = o && /^https?:\/\/[^\s"]+$/.test(o.url || '') ? o.url : '';
+    if (!o) throw new Error('החיפוש לא החזיר תשובה, נסו שוב');
+    const url = /^https?:\/\/[^\s"]+$/.test(o.url || '') ? o.url : '';
     let host = ''; try { host = new URL(url).hostname.replace(/^www\./, ''); } catch {}
     if (!url || !host || !seen.includes(host)) { a.textContent = 'לא מצאתי אתר. נסו "פרטים והזמנה (Google)"'; a.onclick = e => e.preventDefault(); return; } // only a site the search really returned
     pt.website = url; pt.webFound = o.portal ? 'portal' : true; if (o.phone && !pt.phone && /\d{6,}/.test(String(o.phone).replace(/[^\d]/g, ''))) pt.phone = String(o.phone).slice(0, 24);
@@ -5136,7 +5138,7 @@ async function thCommit(save) {
 }
 $('thInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); thCommit(true); } else if (e.key === 'Escape') thCommit(false); });
 $('thInput').addEventListener('blur', () => thCommit(true));
-$('verChip').textContent = 'v' + '1.104 · 14.11.2026 12:36'.split(' ')[0]; // so everyone can tell which version they are on
+$('verChip').textContent = 'v' + '1.105 · 14.11.2026 12:39'.split(' ')[0]; // so everyone can tell which version they are on
 // naming: type a name and press Enter (or just leave the field); it is saved for every version of the trip
 $('routeName').addEventListener('focus', e => setTimeout(() => e.target.select(), 0));
 $('routeName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
