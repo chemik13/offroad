@@ -677,7 +677,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.117 · 15.11.2026 14:47</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.118 · 15.11.2026 14:52</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2327,7 +2327,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.117 · 15.11.2026 14:47']],
+    ['גרסת האפליקציה', async () => ['ok', '1.118 · 15.11.2026 14:52']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -3698,19 +3698,23 @@ function setSupply(k, on) { store.set(SUP[k].key, on ? '1' : '0'); const a = doc
 function supplyHtml(x) {
   const ll = `${x.lat},${x.lon}`, known = x.diesel || x.petrol || x.lpg, mark = (v, t) => `<span class="fl ${v === 'yes' ? 'y' : v === 'no' ? 'n' : 'u'}">${v === 'yes' ? '✓' : v === 'no' ? '✗' : '?'} ${t}</span>`;
   return `<b>${gEsc(x.name)}</b> <small>${x.kind === 'fuel' ? 'תחנת דלק' : x.small ? 'מכולת / מינימרקט' : 'סופרמרקט'}</small>` +
-    (x.kind === 'fuel' ? `<div class="fuels">${mark(x.petrol, 'בנזין')}${mark(x.diesel, 'סולר')}${mark(x.lpg, 'גז')}</div>${known ? '' : `<small>${x.asked === 1 ? 'בודק במפה…' : 'סוגי הדלק של התחנה לא מופו. בנזין וסולר יש כמעט בכל תחנה; גז צריך לוודא.'}</small>`}` : '') +
+    (x.kind === 'fuel' ? `<div class="fuels">${mark(x.petrol, 'בנזין')}${mark(x.diesel, 'סולר')}${mark(x.lpg, 'גז')}</div>${known ? '' : `<small>סוגי הדלק של התחנה לא מופו. בנזין וסולר יש כמעט בכל תחנה; גז צריך לוודא.</small>`}` : '') +
     (x.hours ? `<br><small dir="ltr">${gEsc(x.hours)}</small>` : '') +
     `<div class="garlinks"><a href="https://www.google.com/maps/search/${encodeURIComponent(x.kind === 'fuel' ? (/תחנת דלק/.test(x.name) ? 'gas station' : x.name + ' gas station') : x.name)}/@${ll},17z" target="_blank" rel="noopener">${x.kind === 'fuel' ? 'התחנה ב-Google (דלקים ומחירים)' : 'Google Maps'}</a><a href="https://waze.com/ul?ll=${ll}&navigate=yes" target="_blank" rel="noopener">Waze</a></div>`;
 }
-// A station whose fuels the trail tiles do not carry: ask the map itself, once, when its popup opens
-async function supplyAsk(x, mk) {
-  if (x.kind !== 'fuel' || x.asked || x.diesel || x.petrol || x.lpg || !/^[nwr]\d+$/.test(x.osm || '')) return;
-  x.asked = 1; mk.setPopupContent(`<div class="garpop">${supplyHtml(x)}</div>`);
-  try {
-    const kind = { n: 'node', w: 'way', r: 'relation' }[x.osm[0]], els = await overpassRaw(`[out:json][timeout:15];${kind}(${x.osm.slice(1)});out tags;`), t = els?.[0]?.tags || {};
-    x.diesel = t['fuel:diesel'] || ''; x.lpg = t['fuel:lpg'] || ''; x.petrol = t['fuel:octane_95'] || t['fuel:octane_98'] || ''; x.hours = x.hours || t.opening_hours || '';
-  } catch {}
-  x.asked = 2; if (mk.isPopupOpen()) mk.setPopupContent(`<div class="garpop">${supplyHtml(x)}</div>`);
+// Stations whose fuels the trail tiles do not carry: ask OpenStreetMap itself for all of them at once (a few quick requests),
+// so the best stations can be told apart right away. Answers are kept for the session.
+const supTags = new Map();
+async function supplyTypes(list) {
+  const set = (x, t) => { x.diesel = t['fuel:diesel'] || ''; x.lpg = t['fuel:lpg'] || ''; x.petrol = t['fuel:octane_95'] || t['fuel:octane_98'] || ''; x.hours = x.hours || t.opening_hours || ''; x.asked = 2; };
+  const need = list.filter(x => x.kind === 'fuel' && !x.asked && !(x.diesel || x.petrol || x.lpg) && /^[nw]\d+$/.test(x.osm || ''));
+  for (const x of need) if (supTags.has(x.osm)) set(x, supTags.get(x.osm));
+  const jobs = [];
+  for (const [ch, kind] of [['n', 'nodes'], ['w', 'ways']]) { const ask = need.filter(x => !x.asked && x.osm[0] === ch);
+    for (let i = 0; i < ask.length; i += 300) { const part = ask.slice(i, i + 300);
+      jobs.push(fetch(`https://api.openstreetmap.org/api/0.6/${kind}.json?${kind}=${part.map(x => x.osm.slice(1)).join(',')}`).then(r => r.ok ? r.json() : null).then(j => { if (!j) return;
+        const by = new Map((j.elements || []).map(e => [ch + e.id, e.tags || {}])); for (const x of part) { const t = by.get(x.osm); if (t) { supTags.set(x.osm, t); set(x, t); } } }).catch(() => {})); } }
+  await Promise.all(jobs); return need.length;
 }
 // What is on screen is drawn. From afar one marker per small patch of the screen, the best station first
 // (all three fuels, then LPG, then any station whose fuels are known), so the map stays readable and something always shows.
@@ -3726,7 +3730,7 @@ function drawSupply(force) {
     if (thin) { const best = new Map(); for (const x of list) { const pt = map.latLngToContainerPoint([x.lat, x.lon]), c = Math.floor(pt.x / thin) + ',' + Math.floor(pt.y / thin), o = best.get(c); if (!o || supRank(x) > supRank(o)) best.set(c, x); } list = [...best.values()]; }
     list.sort((x, y) => supRank(y) - supRank(x));
     for (const x of list) { if (++n > SUP_MAX) return;
-      L.marker([x.lat, x.lon], { zIndexOffset: supRank(x) * 100, icon: L.divIcon({ className: '', html: `<div class="safeic ${k}${k === 'fuel' && supRank(x) === 3 ? ' all3' : x.lpg === 'yes' ? ' lpg' : ''}">${ico(SUP[k].icon)}</div>`, iconSize: [20, 20], iconAnchor: [10, 10] }) }).addTo(supLayer).bindPopup(`<div class="garpop">${supplyHtml(x)}</div>`).on('popupopen', e => { supOpen = true; supplyAsk(x, e.target); }).on('popupclose', () => { if (supOpen) { supOpen = false; setTimeout(drawSupply, 0); } }); } }
+      L.marker([x.lat, x.lon], { zIndexOffset: supRank(x) * 100, icon: L.divIcon({ className: '', html: `<div class="safeic ${k}${k === 'fuel' && supRank(x) === 3 ? ' all3' : x.lpg === 'yes' ? ' lpg' : ''}">${ico(SUP[k].icon)}</div>`, iconSize: [20, 20], iconAnchor: [10, 10] }) }).addTo(supLayer).bindPopup(`<div class="garpop">${supplyHtml(x)}</div>`).on('popupopen', () => { supOpen = true; }).on('popupclose', () => { if (supOpen) { supOpen = false; setTimeout(drawSupply, 0); } }); } }
 }
 map.on('moveend zoomend', drawSupply);
 async function renderSupply(r, dv) {
@@ -3737,7 +3741,7 @@ async function renderSupply(r, dv) {
     const lpg = supData ? supData.fuel.filter(x => x.lpg === 'yes').length : 0, typed = supData ? supData.fuel.filter(x => x.diesel || x.lpg || x.petrol).length : 0;
     box.dataset.sum = state === 'load' ? 'טוען…' : state === 'none' ? 'אין נתונים לאזור' : !supOn('fuel') && !supOn('food') ? 'כבוי' : [supOn('fuel') && `${n('fuel')} תחנות`, supOn('food') && `${n('food')} סופרים`].filter(Boolean).join(' · ');
     const all3 = supData ? supData.fuel.filter(x => supRank(x) === 3).length : 0;
-    box.innerHTML = `<div class="wx"><h3>דלק והצטיידות</h3><div class="suprow">${row('fuel', supOn('fuel') && supData ? `<small>${typed ? `עם בנזין, סולר וגז: ${all3} (מודגשות בצהוב ומוצגות ראשונות). עם גז: ${lpg} (טבעת צהובה). סוגי הדלק ידועים ב-${typed} תחנות.` : 'בלחיצה על תחנה: בנזין, סולר, גז. הנתון הזה יתחיל להופיע אחרי עדכון נתוני המפה הקרוב.'}</small>` : '')}${row('food')}` +
+    box.innerHTML = `<div class="wx"><h3>דלק והצטיידות</h3><div class="suprow">${row('fuel', supOn('fuel') && supData ? `<small>${typed ? `עם בנזין, סולר וגז: ${all3} (מודגשות בצהוב ומוצגות ראשונות). עם גז: ${lpg} (טבעת צהובה). סוגי הדלק ידועים ב-${typed} תחנות.` : 'בלחיצה על תחנה: בנזין, סולר, גז, אם מופו.'}</small>` : '')}${row('food')}` +
       `<small>${state === 'none' ? 'אין נתוני מפה מוכנים לאזור הזה.' : `עד ${SUP_NEAR / 1000} ק"מ מהמסלול, לפי OpenStreetMap. במבט רחוק מוצג חלק מהמקומות; התקרבו במפה כדי לראות את כולם.`}</small></div></div>`;
     for (const c of box.querySelectorAll('input[data-sup]')) c.onchange = () => setSupply(c.dataset.sup, c.checked);
   };
@@ -3751,6 +3755,7 @@ async function renderSupply(r, dv) {
   const near = x => { const a = Math.floor(x.lat / 0.02), b = Math.floor(x.lon / 0.02); for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) for (const c of cells.get(key(a + i, b + j)) || []) if (hav(x.lat, x.lon, c[0], c[1]) <= SUP_NEAR) return true; return false; };
   const all = got.supply.filter(near); supData = { fuel: all.filter(x => x.kind === 'fuel'), food: all.filter(x => x.kind === 'food') };
   paint(); drawSupply(true);
+  if (supOn('fuel') && await supplyTypes(supData.fuel) && tok === supTok) { paint(); drawSupply(); }
 }
 
 // ---------- cost estimate: fuel, campsites, ferries, road tolls, borders ----------
@@ -5451,7 +5456,7 @@ async function thCommit(save) {
 }
 $('thInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); thCommit(true); } else if (e.key === 'Escape') thCommit(false); });
 $('thInput').addEventListener('blur', () => thCommit(true));
-$('verChip').textContent = 'v' + '1.117 · 15.11.2026 14:47'.split(' ')[0]; // so everyone can tell which version they are on
+$('verChip').textContent = 'v' + '1.118 · 15.11.2026 14:52'.split(' ')[0]; // so everyone can tell which version they are on
 // naming: type a name and press Enter (or just leave the field); it is saved for every version of the trip
 $('routeName').addEventListener('focus', e => setTimeout(() => e.target.select(), 0));
 $('routeName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });

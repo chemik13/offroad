@@ -4,6 +4,7 @@ const b=await chromium.launch();const p=await b.newPage({viewport:{width:420,hei
 await p.route(/functions\/v1\/api/,async r=>{const u=new URL(r.request().url());const path=u.pathname.replace(/^.*\/api/,'');const J=(o,s=200)=>r.fulfill({status:s,contentType:'application/json',body:JSON.stringify(o)});
  if(path==='/health')return J({ok:true,claude:true,group:true});return J({error:'nf'},404);});
 await p.route(/tile|arcgis|israelhiking|nominatim|open-meteo|wikimedia|wikidata|githubusercontent/,r=>r.abort());
+let osm=0;await p.route(/api\.openstreetmap\.org\/api\/0\.6\/nodes\.json\?nodes=123$/,r=>{osm++;r.fulfill({contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify({elements:[{type:'node',id:123,tags:{'fuel:diesel':'yes','fuel:octane_95':'yes','fuel:lpg':'no'}}]})});});
 await p.addInitScript(()=>{localStorage.setItem('groupCode','abc');localStorage.setItem('accAll','1');localStorage.setItem('nick','חמי');});
 await p.goto('file://'+process.argv[2]);await p.waitForTimeout(500);
 const ok=(c,t)=>{console.log((c?'PASS ':'FAIL ')+t);if(!c)process.exitCode=1;};
@@ -25,9 +26,7 @@ ok(t.f===2&&t.s===2,'zoom 10: all four');
 await p.locator('.safeic.fuel.all3').dispatchEvent('click');await p.waitForTimeout(300);
 ok(await p.evaluate(()=>document.querySelectorAll('.garpop .fl.y').length===3&&/24\/7/.test(document.querySelector('.garpop').textContent)),'station popup: the fuels sold and the hours');
 await p.evaluate(()=>map.closePopup());
-await p.evaluate(()=>{window.oq='';overpassRaw=async q=>{window.oq=q;return[{tags:{'fuel:diesel':'yes','fuel:octane_95':'yes','fuel:lpg':'no'}}];};});
-await p.locator('.safeic.fuel:not(.all3)').first().dispatchEvent('click');await p.waitForTimeout(500);
-ok(await p.evaluate(()=>/node\(123\)/.test(window.oq)&&document.querySelectorAll('.garpop .fl.y').length===2&&document.querySelectorAll('.garpop .fl.n').length===1),'a station with unknown fuels asks the map when opened');
+ok(osm===1&&await p.evaluate(()=>{const x=supData.fuel.find(x=>x.osm==='n123');return x.diesel==='yes'&&x.lpg==='no'&&x.petrol==='yes';}),'stations with unknown fuels: asked from OpenStreetMap in one request');
 await p.evaluate(()=>map.closePopup());
 await p.click('input[data-sup=food]');await p.waitForTimeout(500);t=await st();
 ok(t.f===2&&t.s===0&&/^2 תחנות$/.test(t.sum)&&await p.evaluate(()=>document.querySelector('.garctl a.sfood').classList.contains('off')),'supermarkets off from the panel: '+t.sum);
