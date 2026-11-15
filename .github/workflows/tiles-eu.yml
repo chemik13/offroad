@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install osmium==3.7.0
+      - run: pip install osmium==3.7.0 && sudo apt-get -qq update && sudo apt-get -qq install -y osmium-tool
       - name: Build and publish country by country (each one is usable as soon as it is pushed)
         env:
           REMOTE: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
@@ -48,13 +48,19 @@ jobs:
             echo "::group::$name"
             if curl -fsSL --retry 3 -o ../x.osm.pbf "https://download.geofabrik.de/$path"; then
               ls -lh ../x.osm.pbf
+              # keep only what the builder reads (roads/tracks, POIs, military/reserves, lakes, campsites, trail relations):
+              # big countries (France: buildings, addresses, land use) then fit in the runner's memory
+              osmium tags-filter ../x.osm.pbf w/highway nwr/tourism nwr/amenity=fuel,drinking_water nwr/shop=supermarket,convenience \
+                nwr/natural=spring,peak,water nwr/historic nwr/landuse=military nwr/military nwr/leisure=nature_reserve \
+                nwr/boundary=national_park,protected_area r/route=hiking,foot,4wd,mtb,bicycle \
+                -o ../f.osm.pbf --overwrite && mv ../f.osm.pbf ../x.osm.pbf && ls -lh ../x.osm.pbf
               if python ../tools/build_tiles.py ../x.osm.pbf . --world --merge --name "$name"; then
                 git add -A; git commit -qm "$name $(date -u +%Y-%m-%d)"
                 git push -q "$REMOTE" HEAD:tiles-eu && built=$((built+1))
                 echo "published $name: $(ls *.json.gz | wc -l) tiles, $(du -sh . --exclude=.git | cut -f1)"
               else echo "::warning::build failed for $name"; git checkout -q -- . ; git clean -qfd; fi
             else echo "::warning::download failed for $path"; fi
-            rm -f ../x.osm.pbf
+            rm -f ../x.osm.pbf ../f.osm.pbf
             echo "::endgroup::"
           done
           # squash into one commit so the branch history does not grow
