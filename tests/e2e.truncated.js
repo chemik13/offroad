@@ -7,7 +7,7 @@ const FULL={content:[{type:'tool_use',id:'t2',name:'route_request',input:{loop:f
  await p.route(/functions\/v1\/api/,r=>{const path=new URL(r.request().url()).pathname;if(path.endsWith('/claude')){bodies.push(r.request().postDataJSON());return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(n++?FULL:CUT)});}r.fulfill({status:404,contentType:'application/json',body:'{}'});});
  await p.route(/overpass|kumi|coffee|mail\.ru|osrm|nominatim|wikimedia|wikidata|open-meteo|githubusercontent/,r=>r.fulfill({status:503,contentType:'application/json',body:'{}'}));
  await p.route(/tile\.|arcgis|fonts/,r=>r.abort());
- await p.addInitScript(()=>{localStorage.setItem('groupCode','abc');window.planOverlandHit=0;});
+ await p.addInitScript(()=>{localStorage.setItem('groupCode','abc');localStorage.setItem('accAll','1');window.planOverlandHit=0;});
  await p.goto('file://'+process.argv[2]);
  await p.evaluate(()=>{const o=window.planOverland;window.planOverland=undefined;});
  await p.fill('#prompt','תתכנן לי טיול מסלוניקי לדולומיטים לא יותר מ70-100 ק״מ ביום');await p.click('#goBtn');

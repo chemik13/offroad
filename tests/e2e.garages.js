@@ -9,7 +9,7 @@ await p.route(/offroad\/data\/toyota\.json/,r=>{hits++;r.fulfill({contentType:'a
  [39.64,20.84,{name:'Toyota Ioannina',kind:'repair',addr:'Dodonis 5',city:'Ioannina',phone:'+30 2651 000000',website:'www.toyota-ioannina.gr',hours:'Mo-Fr 08:00-16:00'}],
  [39.60,20.40,{name:'Toyota <West>',kind:'dealer'}],
  [41.5,23.5,{name:'Toyota Far',kind:'dealer'}]]})});});
-await p.addInitScript(()=>{localStorage.setItem('groupCode','abc');localStorage.setItem('nick','חמי');});
+await p.addInitScript(()=>{localStorage.setItem('groupCode','abc');localStorage.setItem('accAll','1');localStorage.setItem('nick','חמי');});
 await p.goto('file://'+process.argv[2]);await p.waitForTimeout(500);
 const ok=(c,t)=>{console.log((c?'PASS ':'FAIL ')+t);if(!c)process.exitCode=1;};
 await p.evaluate(()=>{const coords=[[39.66,20.85],[39.62,20.7],[39.58,20.5],[39.55,20.3]];

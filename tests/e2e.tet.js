@@ -11,7 +11,7 @@ await pg.route(/functions\/v1\/api/,async r=>{const u=new URL(r.request().url())
   if(path==='/tracks'&&m==='POST'){const b=JSON.parse(r.request().postData());const i=TR.findIndex(t=>t.name===b.name);const row={...b,created_at:new Date().toISOString()};if(i>=0)TR[i]=row;else TR.push(row);return J({ok:true},201);}
   const d=path.match(/^\/tracks\/(.+)$/);if(d&&m==='DELETE'){const n=decodeURIComponent(d[1]);const i=TR.findIndex(t=>t.name===n);if(i>=0)TR.splice(i,1);return J({ok:true});}
   return J({error:'nf'},404);});
-await pg.addInitScript(()=>{localStorage.setItem('groupCode','abc');localStorage.setItem('nick','חמי');});
+await pg.addInitScript(()=>{localStorage.setItem('groupCode','abc');localStorage.setItem('accAll','1');localStorage.setItem('nick','חמי');});
 await pg.goto('file://'+process.argv[2]);
 let fails=0;const ok=(c,t)=>{console.log((c?'PASS ':'FAIL ')+t);if(!c)fails++;};
 const P={country:'IL',start:{name:'מצפה רמון',lat:30.6097,lon:34.8013,researched:true,country:'IL'},loop:true,duration_hours:3,difficulty:'medium',military_mode:'auto',via:[]};

@@ -20,7 +20,7 @@ function fakeOSM(){const els=[];let id=1;const la0=30.45,lo0=34.65,st=0.004,n=90
   r.fulfill({status:path.includes('/tiles/')?404:200,contentType:'application/json',body:'{}'});});
  await p.route(/nominatim|wikimedia|wikidata|open-meteo/,r=>r.fulfill({status:200,contentType:'application/json',body:'{}'}));
  await p.route(/tile\.|arcgis|fonts/,r=>r.abort());
- await p.addInitScript(()=>{localStorage.setItem('groupCode','abc');
+ await p.addInitScript(()=>{localStorage.setItem('groupCode','abc');localStorage.setItem('accAll','1');
   const lines=['אני רוצה טיול ממצפה רמון','שלוש שעות','תקצר את זה','זהו'];let n=0;window.__spoken=[];
   class FakeSR{start(){const me=this;const k=n++;if(k<lines.length){setTimeout(()=>me.onresult&&me.onresult({resultIndex:0,results:[Object.assign([{transcript:lines[k]}],{isFinal:true})]}),200);}}stop(){setTimeout(()=>this.onend&&this.onend(),5);}}
   Object.defineProperty(window,'webkitSpeechRecognition',{value:FakeSR,configurable:true});Object.defineProperty(window,'SpeechRecognition',{value:FakeSR,configurable:true});

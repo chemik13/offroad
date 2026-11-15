@@ -9,7 +9,7 @@ await p.route(/functions\/v1\/api/,async r=>{const u=new URL(r.request().url());
  if(/^\/routes\/[^/]+$/.test(path)&&m==='PATCH'){patch=JSON.parse(r.request().postData());return J({route:{id:'t1'}});}
  return J({error:'nf'},404);});
 await p.route(/tile|arcgis|israelhiking|nominatim|open-meteo|wikimedia|wikidata|githubusercontent/,r=>r.abort());
-await p.addInitScript(()=>{localStorage.setItem('groupCode','abc');localStorage.setItem('nick','חמי');});
+await p.addInitScript(()=>{localStorage.setItem('groupCode','abc');localStorage.setItem('accAll','1');localStorage.setItem('nick','חמי');});
 await p.goto('file://'+process.argv[2]);await p.waitForTimeout(500);
 const ok=(c,t)=>{console.log((c?'PASS ':'FAIL ')+t);if(!c)process.exitCode=1;};
 await p.evaluate(()=>{const A=[39.50,20.26],B=[43.62,13.51];const line=(a,b,n)=>Array.from({length:n+1},(_,i)=>[a[0]+(b[0]-a[0])*i/n,a[1]+(b[1]-a[1])*i/n]);const c1=line([39.66,20.85],A,8),c2=line(B,[44.27,11.72],16);const coords=[...c1,...c2];

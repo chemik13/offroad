@@ -27,7 +27,7 @@ await p.route(/functions\/v1\/api/,async r=>{const u=new URL(r.request().url());
  if(mm&&m==='DELETE'){const x=DB.find(x=>x.id===mm[1]);for(let i=DB.length-1;i>=0;i--)if(DB[i].trip_id===x.trip_id)DB.splice(i,1);return J({ok:true});}
  return J({error:'nf'},404);});
 await p.route(/tile|arcgis/,r=>r.abort());
-await p.addInitScript(()=>{localStorage.setItem('groupCode','abc');localStorage.setItem('nick','חמי');});
+await p.addInitScript(()=>{localStorage.setItem('groupCode','abc');localStorage.setItem('accAll','1');localStorage.setItem('nick','חמי');});
 await p.goto('file://'+process.argv[2]);
 let fails=0;const ok=(c,t)=>{console.log((c?'PASS ':'FAIL ')+t);if(!c)fails++;};
 const ui=()=>p.evaluate(()=>({ver:$('verBtn').hidden?null:$('verBtn').textContent,tag:$('savedTag').hidden?null:$('savedTag').textContent,save:$('saveBtn').textContent,tabs:$('tabs').querySelectorAll('button').length}));

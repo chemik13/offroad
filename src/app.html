@@ -356,8 +356,8 @@ ul.pois li{margin-bottom:8px}
 .safeic.fuel{background:#333}.safeic.water{background:#1f6fd6}
 .safeic.gar{background:#eb0a1e;width:24px;height:24px}.safeic.gar .ico{width:14px;height:14px}
 .garctl a.off{opacity:.45}.garctl a .ico{width:18px;height:18px;margin:0;vertical-align:-4px;stroke:#eb0a1e}
-.garhead{display:flex;align-items:center;gap:8px;cursor:pointer}.garhead input{width:18px;height:18px;margin:0;accent-color:#eb0a1e}
-.garlist{padding:0 12px 10px;font-size:13px;line-height:1.5}.garitem{padding:8px 0;border-top:1px solid var(--line)}.garitem b{font-size:14px}
+.garhead{display:flex;align-items:center;gap:8px;cursor:pointer;font:600 13.5px var(--body);padding:2px 0 8px}.garhead input{width:18px;height:18px;margin:0;accent-color:#eb0a1e}
+.garlist{padding:0 12px 4px;font-size:13px;line-height:1.5}.garitem{padding:8px 0;border-top:1px solid var(--line)}.garitem b{font-size:14px}
 .garitem small{color:var(--muted)}.garitem .garlinks{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:3px}.garitem a{color:var(--accent,#0a58ca)}
 .gargoogle{margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}.gargoogle div,.p4nrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px}.gargoogle a,.p4nrow a{border:1px solid var(--line);border-radius:999px;padding:3px 10px;text-decoration:none;color:var(--ink);background:#fff;font-size:12.5px}
 .costset{display:flex;flex-wrap:wrap;gap:8px;padding:8px 12px 2px;font-size:12.5px}.costset label{display:flex;align-items:center;gap:5px;color:var(--muted)}
@@ -366,6 +366,27 @@ ul.pois li{margin-bottom:8px}
 .costtab small{color:var(--muted);display:block;line-height:1.4}.costtab tr.sum td{font-weight:700;font-size:15px;border-top:2px solid var(--ink)}
 .costbtn{margin:8px 12px 10px;padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:#fff;font:600 13px var(--body);cursor:pointer;color:var(--ink)}
 .costnote{padding:4px 12px 10px;font-size:12px;color:var(--muted);line-height:1.5}
+#dayPlan .daycard:not(.sel) .plinks,#dayPlan .daycard:not(.sel) .dalts,#dayPlan .daycard:not(.sel) .dnight>.fly3d,#dayPlan .daycard:not(.sel) .dnight>.gmapsbtn,#dayPlan .daycard:not(.sel) .dphoto{display:none}
+.dnight.tap{cursor:pointer}
+/* the trip's sections: one list, a row per subject with its key figure; opened on demand */
+.accgroup{border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-top:10px;background:#fff}
+.accgroup:not(:has(.acc:not([hidden]))){display:none}
+.acc{border-top:1px solid var(--line)}.acc.first{border-top:0}
+.acc>summary{list-style:none;display:flex;align-items:center;gap:10px;padding:10px 12px;min-height:50px;cursor:pointer;font:600 15px var(--body);color:var(--ink);-webkit-tap-highlight-color:transparent;user-select:none}
+.acc>summary::-webkit-details-marker{display:none}
+.acc>summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.accic{width:30px;height:30px;border-radius:9px;background:var(--stone);display:grid;place-items:center;flex:none;color:var(--ink)}.accic .ico{margin:0;width:17px;height:17px}
+.accsum{margin-inline-start:auto;color:var(--muted);font:500 13px var(--body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-variant-numeric:tabular-nums}
+.accchev{flex:none;width:18px;height:18px;margin:0;stroke:var(--muted);transition:transform .18s}
+.acc[open]>summary .accchev{transform:rotate(180deg)}
+.acc[open]>summary{border-bottom:1px solid var(--line);background:var(--stone)}
+.acc>div{padding:10px 12px 12px}
+.acc.bare>summary{display:none}.acc.bare>div{padding:10px 12px}
+.acc .wx{border:0;border-radius:0;margin:0;overflow:visible}.acc .wx>h3{display:none}
+.acc .wxrow,.acc .safelist,.acc .garlist,.acc .costset,.acc .costnote{padding-inline:0}.acc .costtab td{padding-inline:0}.acc .costbtn{margin-inline:0}
+.acc .checklist{border:0;margin:0}.acc .checklist>summary{display:none}.acc .checklist ul{padding:0}
+.acc #poiList,.acc .pois{margin-top:0}
+@media (prefers-reduced-motion:reduce){.accchev{transition:none}}
 .garpop{font:13px/1.5 var(--body);min-width:190px}.garpop a{display:inline-block;margin-inline-end:10px}
 .safelist{padding:2px 12px 10px;font-size:13px;line-height:1.6;color:var(--ink2,#444)}
 .steepic{background:#fff;border:1.5px solid #d23a2a;color:#d23a2a;border-radius:4px;font:700 10px var(--body);padding:0 4px;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.25)}
@@ -541,28 +562,30 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
       <div class="daychips" id="dayChips" hidden></div>
       <div class="stats" id="stats" style="margin-top:8px"></div>
       <div style="margin-top:8px"><div class="bar" id="bar"></div><div class="legend" id="legend"></div></div>
+      <div class="actions" style="margin-top:10px">
+        <button class="go offroad" id="offroadBtn"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 15.5h16l-1.6-4.6a2 2 0 0 0-1.9-1.4H7.5a2 2 0 0 0-1.9 1.4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M3.5 15.5h17v2.5h-17z" fill="currentColor"/><circle cx="7.5" cy="18.5" r="2.2" fill="currentColor" stroke="var(--accent)" stroke-width="1.2"/><circle cx="16.5" cy="18.5" r="2.2" fill="currentColor" stroke="var(--accent)" stroke-width="1.2"/><path d="M9 9.5V7h6v2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>פתיחה ב-Off-Road</button>
+        <button class="ghost" id="gpxBtn" title="הורדת קובץ GPX">GPX</button>
+        <a class="ghost" id="gmapsMain" target="_blank" rel="noopener" title="גוגל מנווט בכבישים שלו, לא בשבילי השטח">Google Maps</a>
+      </div>
       <div id="warns" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
-      <div id="checklist"></div>
-      <div id="dayPlan"></div>
-      <div id="stopsBox"></div>
-      <div id="safe"></div>
-      <div id="garages"></div>
-      <div id="p4n"></div>
-      <div id="cost"></div>
-      <div id="elev"></div>
-      <div id="wx"></div>
-      <div id="poiList" style="margin-top:6px"></div>
+      <div class="accgroup" id="accGroup">
+        <div id="dayPlan"></div>
+        <div id="stopsBox"></div>
+        <div id="poiList"></div>
+        <div id="checklist"></div>
+        <div id="cost"></div>
+        <div id="wx"></div>
+        <div id="elev"></div>
+        <div id="safe"></div>
+        <div id="garages"></div>
+        <div id="p4n"></div>
+      </div>
       <div class="saverow" style="margin-top:10px" id="saveRow">
         <label class="namefield"><span>שם הטיול ✎</span><input type="text" id="routeName" aria-label="שם הטיול" placeholder="תנו לטיול שם" enterkeyhint="done"></label>
         <button class="ghost" id="saveBtn">שמירה</button>
         <button class="ghost" id="shareBtn" title="קישור לחבורה">שיתוף</button>
       </div>
       <div class="savedtag" id="savedTag" hidden></div>
-      <div class="actions" style="margin-top:10px">
-        <button class="go offroad" id="offroadBtn"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 15.5h16l-1.6-4.6a2 2 0 0 0-1.9-1.4H7.5a2 2 0 0 0-1.9 1.4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M3.5 15.5h17v2.5h-17z" fill="currentColor"/><circle cx="7.5" cy="18.5" r="2.2" fill="currentColor" stroke="var(--accent)" stroke-width="1.2"/><circle cx="16.5" cy="18.5" r="2.2" fill="currentColor" stroke="var(--accent)" stroke-width="1.2"/><path d="M9 9.5V7h6v2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>פתיחה ב-Off-Road</button>
-        <button class="ghost" id="gpxBtn" title="הורדת קובץ GPX">GPX</button>
-        <a class="ghost" id="gmapsMain" target="_blank" rel="noopener" title="גוגל מנווט בכבישים שלו, לא בשבילי השטח">Google Maps</a>
-      </div>
       <div class="orhint" id="orHint" hidden></div>
       <div class="saverow" id="orLinkRow" style="margin-top:8px" hidden>
         <input type="url" id="orLink" aria-label="קישור Off-Road" placeholder="https://off-road.io/track/… (קישור מ-Off-Road)" style="direction:ltr">
@@ -2219,6 +2242,7 @@ function renderSafety(r, dv) {
   const km = x => x.toFixed(0);
   const fuelTxt = S.fuel.length ? S.fuel.slice(0, 6).map(f => `ק"מ ${km(f.km)}`).join(', ') + (S.fuel.length > 6 ? '…' : '') : 'אין תחנות ליד המסלול (עד 2.5 ק"מ)';
   const waterTxt = S.water.length ? S.water.slice(0, 6).map(f => `ק"מ ${km(f.km)}`).join(', ') : 'אין ברזיות מסומנות ליד המסלול. קחו לפחות 5 ליטר לאדם ליום, יותר בקיץ.';
+  box.dataset.sum = `${S.fuel.length} תחנות דלק${S.bail ? ` · עד ${(S.bail.m / 1000).toFixed(0)} ק"מ מכביש` : ''}`;
   box.innerHTML = `<div class="wx"><h3>בטיחות בדרך<small>לפי OSM</small></h3>
     <div class="wxrow" style="grid-template-columns:1fr 1fr 1fr;text-align:center"><span><b>${S.bail ? (S.bail.m / 1000).toFixed(1) : '?'}</b><br><small>ק"מ מקסימום מכביש</small></span><span><b>${S.fuel.length}</b><br><small>תחנות דלק בדרך</small></span><span><b>${S.water.length}</b><br><small>נקודות מי שתייה</small></span></div>
     <div class="safelist">${ico('fuel')}${fuelTxt}<br>${ico('water')}${waterTxt}</div></div>`;
@@ -2269,14 +2293,15 @@ function syncGarCtl() { const a = document.querySelector('.garctl a'); if (a) a.
 async function renderGarages(r, dv, D) {
   garLast = [r, dv, D]; const tok = ++garTok, box = $('garages');
   if (garLayer) { garLayer.remove(); garLayer = null; }
-  const head = n => `<div class="wx"><h3><label class="garhead"><input type="checkbox" id="garChk" ${garOn() ? 'checked' : ''}>מוסכי טויוטה ליד המסלול${n != null ? ` (${n})` : ''}</label><small>לפי OSM</small></h3>`;
+  const head = n => { box.dataset.sum = !garOn() ? 'כבוי' : n == null ? '' : n ? `${n} ליד המסלול` : 'אין ליד המסלול'; return `<div class="wx"><h3>מוסכי טויוטה ליד המסלול</h3><label class="garhead"><input type="checkbox" id="garChk" ${garOn() ? 'checked' : ''}>הצגה על המפה וברשימה</label>`; };
   const wire = () => { const c = $('garChk'); if (c) c.onchange = () => setGarages(c.checked); };
   if (!r?.coords?.length) { box.innerHTML = ''; $('p4n').innerHTML = ''; return; }
   const coords = dv ? r.coords.slice(dv.from, dv.to + 1) : r.coords;
   // live search in Google Maps (ratings, reviews, open now), where the map data is thin too: per day on a long trip, else start / middle / end
   const gPts = !dv && D && D.length > 1 ? D.map((d, k) => [`יום ${k + 1}`, r.coords[Math.round(((k ? D[k - 1].to : 0) + d.to) / 2)]]) : [['התחלה', coords[0]], ['אמצע', coords[coords.length >> 1]], ['סוף', coords[coords.length - 1]]];
   const gLinks = `<div class="gargoogle"><small>חיפוש חי ב-Google Maps (דירוג, ביקורות, פתוח עכשיו):</small><div>${gPts.filter(x => x[1]).map(([t, c]) => `<a href="https://www.google.com/maps/search/Toyota+service/@${c[0].toFixed(4)},${c[1].toFixed(4)},10z" target="_blank" rel="noopener">${t}</a>`).join('')}</div></div>`;
-  $('p4n').innerHTML = `<div class="wx"><h3>לינה לאורך הדרך<small>Park4night</small></h3><div class="garlist"><small>חניוני לילה, לינת שטח, מים ושירותים עם ביקורות ותמונות. נפתח באתר Park4night, סביב סוף כל יום:</small><div class="p4nrow">${(!dv && D && D.length > 1 ? D.map((d, k) => [`יום ${k + 1}`, r.coords[d.to]]) : gPts).filter(x => x[1]).map(([t, c]) => `<a href="https://park4night.com/en/search?lat=${c[0].toFixed(5)}&lng=${c[1].toFixed(5)}&z=11" target="_blank" rel="noopener">${t}</a>`).join('')}</div></div></div>`;
+  $('p4n').dataset.sum = 'Park4night';
+  $('p4n').innerHTML = `<div class="wx"><h3>לינה לאורך הדרך</h3><div class="garlist"><small>חניוני לילה, לינת שטח, מים ושירותים עם ביקורות ותמונות. נפתח באתר Park4night, סביב סוף כל יום:</small><div class="p4nrow">${(!dv && D && D.length > 1 ? D.map((d, k) => [`יום ${k + 1}`, r.coords[d.to]]) : gPts).filter(x => x[1]).map(([t, c]) => `<a href="https://park4night.com/en/search?lat=${c[0].toFixed(5)}&lng=${c[1].toFixed(5)}&z=11" target="_blank" rel="noopener">${t}</a>`).join('')}</div></div></div>`;
   if (!garOn()) { box.innerHTML = head(null) + '</div>'; wire(); return; }
   const items = await garagesAll(); if (tok !== garTok) return;
   if (!items) { box.innerHTML = head(null) + `<div class="garlist"><small>רשימת המוסכים לא נטענה. נסו שוב מאוחר יותר.</small>${gLinks}</div></div>`; wire(); return; }
@@ -2285,7 +2310,7 @@ async function renderGarages(r, dv, D) {
   const icon = L.divIcon({ className: '', html: `<div class="safeic gar">${ico('wrench')}</div>`, iconSize: [24, 24], iconAnchor: [12, 12] });
   for (const g of near) L.marker([g.lat, g.lon], { icon }).addTo(garLayer).bindPopup(`<div class="garpop">${garageHtml(g, multi)}</div>`);
   const rows = near.map(g => `<div class="garitem">${garageHtml(g, multi)}</div>`).join('');
-  box.innerHTML = head(near.length) + `<div class="garlist">${near.length ? (near.length > 4 ? `<details><summary>הצגת הרשימה</summary>${rows}</details>` : rows) : `<small>אין מוסך או סוכנות טויוטה מסומנים עד ${GAR_NEAR / 1000} ק"מ מהמסלול.</small>`}<small>סוכנויות ומוסכים של טויוטה כפי שמופו ב-OpenStreetMap. הרשימה לא מלאה: התקשרו לוודא שמטפלים בלנדקרוזר ושיש חלקים.</small>${gLinks}</div></div>`;
+  box.innerHTML = head(near.length) + `<div class="garlist">${near.length ? rows : `<small>אין מוסך או סוכנות טויוטה מסומנים עד ${GAR_NEAR / 1000} ק"מ מהמסלול.</small>`}<small>סוכנויות ומוסכים של טויוטה כפי שמופו ב-OpenStreetMap. הרשימה לא מלאה: התקשרו לוודא שמטפלים בלנדקרוזר ושיש חלקים.</small>${gLinks}</div></div>`;
   wire();
 }
 // ---------- cost estimate: fuel, campsites, ferries, road tolls, borders ----------
@@ -2364,6 +2389,7 @@ function renderCost(r, p) {
       `<div class="costnote">${K.missing.length ? `אין מחיר ${FUELS[set.fuel]} ב: ${K.missing.map(nm).join(', ')} (לא נכלל בסכום). ` : ''}אומדן בלבד, לא כולל אוכל, כניסות לאתרים ותיקונים. מחירים נבדקו ברשת ב-${C.at.split('-').reverse().join('.')}.${C.notes ? ' ' + gEsc(C.notes) : ''}` +
       (hasGroup() ? ` <a href="#" id="costGo">${costBusy ? 'מעדכן…' : 'עדכן מחירים'}</a>` : '') + `</div>`;
   }
+  box.dataset.sum = C ? `${eur(costCalc(r, C, set).total)} לרכב` : costBusy ? 'מחפש מחירים…' : 'לחישוב';
   box.innerHTML = `<div class="wx"><h3>אומדן עלויות<small>לרכב, לכל הטיול</small></h3>${settings}${body}</div>`;
   const on = (id, key) => { const el = $(id); if (el) el.onchange = () => { store.set(key, el.value); renderCost(r, p); }; };
   on('costFuel', 'costFuel'); on('costCons', 'costCons'); on('costPeople', 'costPeople');
@@ -2727,6 +2753,12 @@ const ICON = {
   tree: '<path d="M12 3 6 11h3l-4 6h14l-4-6h3z"/><path d="M12 17v4"/>',
   download: '<path d="M12 4v11M7 10l5 5 5-5M5 19h14"/>',
   wrench: '<path d="M14.5 6.5a4 4 0 0 0 5 5L11 20a2.1 2.1 0 0 1-3-3l8.5-8.5a4 4 0 0 0-2-2z"/><path d="M14.5 6.5 17 4a4 4 0 0 0-5 5"/>',
+  chev: '<path d="m6 9 6 6 6-6"/>',
+  check: '<path d="M4 6h3v3H4zM4 15h3v3H4zM10.5 7.5H20M10.5 16.5H20"/><path d="m4.6 16.4 1 1 1.9-2.2"/>',
+  coins: '<circle cx="12" cy="12" r="8.5"/><path d="M15 9.2a3.4 3.4 0 1 0 0 5.6M8 11h5M8 13.2h5"/>',
+  sun: '<circle cx="12" cy="12" r="3.6"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M5.6 18.4l1.6-1.6M16.8 7.2l1.6-1.6"/>',
+  route: '<circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8.2 18H15a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h6.8"/>',
+  bed: '<path d="M3 18V7M3 14h18v4M21 14v-2a3 3 0 0 0-3-3h-7v5"/><circle cx="7" cy="11" r="1.6"/>',
   cart: '<path d="M3 4h2.5l2.2 10.5h10.6L20.5 7H7"/><circle cx="9.5" cy="19" r="1.6"/><circle cx="17" cy="19" r="1.6"/>',
   ferry: '<path d="M3 15l1.6 4.2h14.8L21 15H3z"/><path d="M6 15V10h12v5M9 10V6h6v4M12 6V3.5"/><path d="M2.5 21.5c1.5 0 1.5-.8 3-.8s1.5.8 3 .8 1.5-.8 3-.8 1.5.8 3 .8 1.5-.8 3-.8 1.5.8 3 .8" opacity=".6"/>',
   moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
@@ -2744,6 +2776,32 @@ const ICON = {
   mountain: '<path d="M2.5 19.5 9 8l4 6.5 2.5-3.5 6 8.5z"/>',
 };
 const ico = (k, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON[k] || ''}</svg>`;
+// The trip's sections as one accordion: each box becomes a row with an icon, a title and its key figure, opened on demand.
+// A row shows only while its box has something in it; which rows are open is remembered on this device.
+{
+  const ACC = [['dayPlan', 'route', 'ימים ולינות', 1], ['stopsBox', 'flag', 'תחנות המסלול', 0], ['poiList', 'pin', 'נקודות במסלול', 0], ['checklist', 'check', 'לפני היציאה', 0], ['cost', 'coins', 'עלויות', 0],
+    ['wx', 'sun', 'מזג אוויר', 0], ['elev', 'mountain', 'גובה ועליות', 0], ['safe', 'fuel', 'בטיחות, דלק ומים', 0], ['garages', 'wrench', 'מוסכי טויוטה', 0], ['p4n', 'bed', 'לינה לאורך הדרך', 0]];
+  let saved = {}; try { saved = JSON.parse(store.get('acc') || '{}'); } catch {}
+  const all = store.get('accAll') === '1';
+  const figure = { // rows whose figure is read off what was drawn
+    dayPlan: b => { const n = b.querySelectorAll('.daycard').length; return n ? `${n} ימים` : null; },
+    checklist: b => (b.querySelector('summary')?.textContent.match(/\((.*)\)/) || [])[1] || '',
+    poiList: b => { const n = b.querySelectorAll('li').length; return n ? String(n) : ''; },
+    stopsBox: b => { const n = b.querySelectorAll('li').length; return n ? String(n) : ''; },
+  };
+  const sync = () => { let first = true;
+    for (const [id] of ACC) { const box = $(id), acc = box.parentElement, has = !!box.firstElementChild; acc.hidden = !has; if (!has) continue;
+      const f = figure[id] ? figure[id](box) : box.dataset.sum ?? box.querySelector('.wx > h3 small')?.textContent ?? '';
+      const bare = f === null; acc.classList.toggle('bare', bare); if (bare) acc.open = true; // one-day trips: the route's buttons, with no row to open
+      acc.querySelector('.accsum').textContent = f || ''; acc.classList.toggle('first', first); first = false; } };
+  for (const [id, ic, title, open] of ACC) {
+    const box = $(id), acc = document.createElement('details'); acc.className = 'acc'; acc.dataset.k = id; acc.hidden = true; acc.open = all || (saved[id] ?? !!open);
+    acc.innerHTML = `<summary><span class="accic">${ico(ic)}</span><span>${title}</span><span class="accsum"></span>${ico('chev', 'accchev')}</summary>`;
+    box.before(acc); acc.append(box);
+    acc.addEventListener('toggle', () => { if (acc.classList.contains('bare')) return; saved[id] = acc.open ? 1 : 0; store.set('acc', JSON.stringify(saved)); if (acc.open) acc.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); });
+    new MutationObserver(sync).observe(box, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-sum'] });
+  }
+}
 // the map button for the Toyota garages (here: it needs the icons)
 {
   const GarCtl = L.Control.extend({ options: { position: 'topleft' }, onAdd() {
@@ -3701,6 +3759,8 @@ function render(i, day = null) {
       { const fb = document.createElement('button'); fb.type = 'button'; fb.className = 'fly3d'; fb.innerHTML = ico('mountain') + 'מעוף תלת-ממד'; fb.onclick = () => flyOver(r.coords.slice(d.from, d.to + 1), `יום ${k + 1}`, [{ d: 0, name: `יום ${k + 1}`, day: true, of: D.length, to: d.camp?.name || (k === D.length - 1 ? 'סיום הטיול' : '') }, ...r.pois.filter(x => !POI_TYPES[x.type]?.safety && x.type !== 'nightcamp').map(x => ({ lat: x.lat, lon: x.lon, name: x.name }))]); const gb = document.createElement('button'); gb.type = 'button'; gb.className = 'fly3d'; gb.innerHTML = ico('download') + `GPX יום ${k + 1}`; gb.title = 'הורדת היום הזה בלבד'; gb.onclick = () => { downloadFile(dayGpxFile(k)); status(`ה-GPX של יום ${k + 1} ירד.`); };
         const gm = gmapsBtn(`Google Maps יום ${k + 1}`, gmapsUrl(r.coords.slice(d.from, d.to + 1)));
         const row = night.querySelector('.plinks'); if (row) { row.prepend(gm); row.prepend(gb); row.prepend(fb); } else night.append(fb, gb, gm); }
+      // a day's links and actions show on the chosen day only: the list of days stays short enough to read
+      if (day !== k) { night.classList.add('tap'); night.onclick = () => render(i, k); }
       card.append(night);
       box.append(card);
     });
@@ -3752,7 +3812,7 @@ function renderChecklist(p, r, D) {
   items.push({ t: 'ציוד חילוץ: רצועה, שאקלים, מדחס, חלק אוויר בצמיגים בחול/בוץ' });
   const key = 'chk:' + (current.saved?.id || [p.start?.name, p.end?.name, p.days, Math.round(r.len / 1000)].join('|'));
   let done = {}; try { done = JSON.parse(localStorage.getItem(key) || '{}'); } catch {}
-  const det = document.createElement('details'); det.className = 'checklist'; det.open = (D || []).length > 1;
+  const det = document.createElement('details'); det.className = 'checklist'; det.open = true;
   const left = items.filter((_, n) => !done[n]).length;
   det.innerHTML = `<summary>לפני היציאה (${left} מתוך ${items.length})</summary><ul></ul>`;
   items.forEach((it, n) => {

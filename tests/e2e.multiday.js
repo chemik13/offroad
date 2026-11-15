@@ -23,7 +23,7 @@ await p.route(/functions\/v1\/api/,async r=>{const u=new URL(r.request().url());
  if(mm&&m==='DELETE'){DB.splice(DB.findIndex(x=>x.id===mm[1]),1);return J({ok:true});}
  return J({error:'nf'},404);});
 await p.route(/tile|arcgis/,r=>r.abort());
-await p.addInitScript(()=>{localStorage.setItem('groupCode','abc');localStorage.setItem('nick','חמי');});
+await p.addInitScript(()=>{localStorage.setItem('groupCode','abc');localStorage.setItem('accAll','1');localStorage.setItem('nick','חמי');});
 await p.goto('file://'+process.argv[2]);
 const st=async t=>console.log(t,JSON.stringify(await p.evaluate(()=>({status:$('status').textContent,results:!$('results').hidden,name:$('routeName').value,saveRowHidden:$('saveRow').hidden,savedTag:$('savedTag').hidden?null:$('savedTag').textContent,savedActions:!$('savedActions').hidden,legend:$('legend').textContent.slice(0,60)}))));
 await p.fill('#prompt','יומיים ממצפה רמון עם תצפית');await p.click('#goBtn');await p.waitForTimeout(4000);await st('multi');
