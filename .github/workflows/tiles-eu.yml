@@ -46,7 +46,7 @@ jobs:
             if [ -z "$FORCE" ] && [ "$age" -lt 25 ]; then echo "skip $name (built $age days ago)"; continue; fi
             if [ $(( $(date +%s) - start )) -gt 17400 ]; then echo "time is up; $name and the rest next run"; break; fi
             echo "::group::$name"
-            if curl -fsSL --retry 3 -o ../x.osm.pbf "https://download.geofabrik.de/$path"; then
+            if curl -fsSL --retry 6 --retry-all-errors --retry-delay 30 -o ../x.osm.pbf "https://download.geofabrik.de/$path"; then
               ls -lh ../x.osm.pbf
               # keep only what the builder reads (roads/tracks, POIs, military/reserves, lakes, campsites, trail relations):
               # big countries (France: buildings, addresses, land use) then fit in the runner's memory

@@ -22,7 +22,7 @@ jobs:
         with: { python-version: "3.12" }
       - run: pip install osmium==3.7.0
       - name: Download OSM extract (Israel and Palestine)
-        run: curl -fsSL --retry 3 -o extract.osm.pbf https://download.geofabrik.de/asia/israel-and-palestine-latest.osm.pbf && ls -lh extract.osm.pbf
+        run: curl -fsSL --retry 6 --retry-all-errors --retry-delay 30 -o extract.osm.pbf https://download.geofabrik.de/asia/israel-and-palestine-latest.osm.pbf && ls -lh extract.osm.pbf
       - name: Build tiles
         run: python tools/build_tiles.py extract.osm.pbf out --name israel
       - name: Publish to branch "tiles" (history not kept)

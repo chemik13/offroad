@@ -359,7 +359,13 @@ ul.pois li{margin-bottom:8px}
 .garhead{display:flex;align-items:center;gap:8px;cursor:pointer}.garhead input{width:18px;height:18px;margin:0;accent-color:#eb0a1e}
 .garlist{padding:0 12px 10px;font-size:13px;line-height:1.5}.garitem{padding:8px 0;border-top:1px solid var(--line)}.garitem b{font-size:14px}
 .garitem small{color:var(--muted)}.garitem .garlinks{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:3px}.garitem a{color:var(--accent,#0a58ca)}
-.gargoogle{margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}.gargoogle div{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px}.gargoogle a{border:1px solid var(--line);border-radius:999px;padding:3px 10px;text-decoration:none;color:var(--ink);background:#fff;font-size:12.5px}
+.gargoogle{margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}.gargoogle div,.p4nrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px}.gargoogle a,.p4nrow a{border:1px solid var(--line);border-radius:999px;padding:3px 10px;text-decoration:none;color:var(--ink);background:#fff;font-size:12.5px}
+.costset{display:flex;flex-wrap:wrap;gap:8px;padding:8px 12px 2px;font-size:12.5px}.costset label{display:flex;align-items:center;gap:5px;color:var(--muted)}
+.costset select,.costset input{font:inherit;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink)}.costset input{width:54px}
+.costtab{width:100%;border-collapse:collapse;font-size:13.5px}.costtab td{padding:6px 12px;border-top:1px solid var(--line);vertical-align:top}.costtab td:last-child{text-align:left;font-variant-numeric:tabular-nums;white-space:nowrap}
+.costtab small{color:var(--muted);display:block;line-height:1.4}.costtab tr.sum td{font-weight:700;font-size:15px;border-top:2px solid var(--ink)}
+.costbtn{margin:8px 12px 10px;padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:#fff;font:600 13px var(--body);cursor:pointer;color:var(--ink)}
+.costnote{padding:4px 12px 10px;font-size:12px;color:var(--muted);line-height:1.5}
 .garpop{font:13px/1.5 var(--body);min-width:190px}.garpop a{display:inline-block;margin-inline-end:10px}
 .safelist{padding:2px 12px 10px;font-size:13px;line-height:1.6;color:var(--ink2,#444)}
 .steepic{background:#fff;border:1.5px solid #d23a2a;color:#d23a2a;border-radius:4px;font:700 10px var(--body);padding:0 4px;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.25)}
@@ -541,6 +547,8 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
       <div id="stopsBox"></div>
       <div id="safe"></div>
       <div id="garages"></div>
+      <div id="p4n"></div>
+      <div id="cost"></div>
       <div id="elev"></div>
       <div id="wx"></div>
       <div id="poiList" style="margin-top:6px"></div>
@@ -2263,13 +2271,14 @@ async function renderGarages(r, dv, D) {
   if (garLayer) { garLayer.remove(); garLayer = null; }
   const head = n => `<div class="wx"><h3><label class="garhead"><input type="checkbox" id="garChk" ${garOn() ? 'checked' : ''}>מוסכי טויוטה ליד המסלול${n != null ? ` (${n})` : ''}</label><small>לפי OSM</small></h3>`;
   const wire = () => { const c = $('garChk'); if (c) c.onchange = () => setGarages(c.checked); };
-  if (!r?.coords?.length) { box.innerHTML = ''; return; }
-  if (!garOn()) { box.innerHTML = head(null) + '</div>'; wire(); return; }
-  const items = await garagesAll(); if (tok !== garTok) return;
+  if (!r?.coords?.length) { box.innerHTML = ''; $('p4n').innerHTML = ''; return; }
   const coords = dv ? r.coords.slice(dv.from, dv.to + 1) : r.coords;
   // live search in Google Maps (ratings, reviews, open now), where the map data is thin too: per day on a long trip, else start / middle / end
   const gPts = !dv && D && D.length > 1 ? D.map((d, k) => [`יום ${k + 1}`, r.coords[Math.round(((k ? D[k - 1].to : 0) + d.to) / 2)]]) : [['התחלה', coords[0]], ['אמצע', coords[coords.length >> 1]], ['סוף', coords[coords.length - 1]]];
   const gLinks = `<div class="gargoogle"><small>חיפוש חי ב-Google Maps (דירוג, ביקורות, פתוח עכשיו):</small><div>${gPts.filter(x => x[1]).map(([t, c]) => `<a href="https://www.google.com/maps/search/Toyota+service/@${c[0].toFixed(4)},${c[1].toFixed(4)},10z" target="_blank" rel="noopener">${t}</a>`).join('')}</div></div>`;
+  $('p4n').innerHTML = `<div class="wx"><h3>לינה לאורך הדרך<small>Park4night</small></h3><div class="garlist"><small>חניוני לילה, לינת שטח, מים ושירותים עם ביקורות ותמונות. נפתח באתר Park4night, סביב סוף כל יום:</small><div class="p4nrow">${(!dv && D && D.length > 1 ? D.map((d, k) => [`יום ${k + 1}`, r.coords[d.to]]) : gPts).filter(x => x[1]).map(([t, c]) => `<a href="https://park4night.com/en/search?lat=${c[0].toFixed(5)}&lng=${c[1].toFixed(5)}&z=11" target="_blank" rel="noopener">${t}</a>`).join('')}</div></div></div>`;
+  if (!garOn()) { box.innerHTML = head(null) + '</div>'; wire(); return; }
+  const items = await garagesAll(); if (tok !== garTok) return;
   if (!items) { box.innerHTML = head(null) + `<div class="garlist"><small>רשימת המוסכים לא נטענה. נסו שוב מאוחר יותר.</small>${gLinks}</div></div>`; wire(); return; }
   const near = garagesNear(items, coords, dv ? null : D, 0), multi = !dv && D && D.length > 1;
   garLayer = L.layerGroup().addTo(map);
@@ -2279,6 +2288,86 @@ async function renderGarages(r, dv, D) {
   box.innerHTML = head(near.length) + `<div class="garlist">${near.length ? (near.length > 4 ? `<details><summary>הצגת הרשימה</summary>${rows}</details>` : rows) : `<small>אין מוסך או סוכנות טויוטה מסומנים עד ${GAR_NEAR / 1000} ק"מ מהמסלול.</small>`}<small>סוכנויות ומוסכים של טויוטה כפי שמופו ב-OpenStreetMap. הרשימה לא מלאה: התקשרו לוודא שמטפלים בלנדקרוזר ושיש חלקים.</small>${gLinks}</div></div>`;
   wire();
 }
+// ---------- cost estimate: fuel, campsites, ferries, road tolls, borders ----------
+// The distances and litres are computed here; the prices (fuel per country, a campsite night, each ferry, vignettes and border fees)
+// come from one web lookup, kept with the trip for everyone. Everything is per vehicle.
+const FUELS = { diesel: 'סולר', petrol: 'בנזין', lpg: 'גז (LPG)' };
+const DIRT_FUEL = 1.35; // off-road burns more than the road figure
+const costSet = () => ({ fuel: FUELS[store.get('costFuel')] ? store.get('costFuel') : 'diesel', cons: Math.min(40, Math.max(4, +store.get('costCons') || 13)), people: Math.min(9, Math.max(1, +store.get('costPeople') || 2)) });
+// per day: road and dirt km (sailing left out) and the kind of night
+function costDays(r) {
+  const D = r.days && r.days.length > 1 ? r.days : [{ from: 0, to: r.coords.length - 1, camp: null }];
+  return D.map((d, k) => {
+    let road = 0, dirt = 0; for (const sg of (D.length > 1 ? segsInRange(r, d.from, d.to) : r.segs)) { if (sg.ferry) continue; const m = pathLen(sg.pts); if (sg.d === 0 || sg.road) road += m; else dirt += m; }
+    const c = d.camp, night = k === D.length - 1 || !c ? 'none' : c.ferry ? 'ferry' : c.wild || c.type === 'dayend' ? 'wild' : 'camp';
+    return { road: road / 1000, dirt: dirt / 1000, night, a: r.coords[d.from], b: r.coords[d.to], camp: c };
+  });
+}
+function costCalc(r, C, set) {
+  const days = costDays(r), cc = k => C.countries[C.days[k]] || Object.values(C.countries)[0] || {};
+  let litres = 0, fuel = 0, camp = 0, nights = 0, wild = 0; const perC = {};
+  days.forEach((d, k) => { const l = (d.road + d.dirt * DIRT_FUEL) * set.cons / 100, c = cc(k), pr = +c[set.fuel] || 0; litres += l; fuel += l * pr;
+    const e = perC[C.days[k]] || (perC[C.days[k]] = { km: 0, l: 0 }); e.km += d.road + d.dirt; e.l += l;
+    if (d.night === 'camp') { nights++; camp += (+c.camp || 0) * (0.5 + 0.25 * set.people); } else if (d.night === 'wild') wild++; });
+  const sum = a => (a || []).reduce((t, x) => t + (+x.eur || 0), 0);
+  const tolls = Object.values(C.countries).reduce((t, c) => t + (+c.toll_eur || 0), 0), borders = sum(C.borders), ferries = sum(C.ferries) * (C.people ? (0.6 + 0.4 * set.people / C.people) : 1);
+  return { litres, fuel, camp, nights, wild, tolls, borders, ferries, perC, total: fuel + camp + tolls + borders + ferries, missing: Object.entries(perC).filter(([k]) => !(+(C.countries[k] || {})[set.fuel])).map(([k]) => k) };
+}
+let costBusy = false;
+async function costLookup(r, p) {
+  if (costBusy) return; costBusy = true; renderCost(r, p);
+  try {
+    const set = costSet(), days = costDays(r), at = c => c ? `${(+c[0]).toFixed(2)},${(+c[1]).toFixed(2)}` : '?';
+    const ferries = []; for (const d of r.days || []) if (d.camp?.fer?.line && !ferries.some(f => f.line === d.camp.fer.line)) ferries.push({ line: String(d.camp.fer.line).replace(/[⁨⁩]/g, '').replace('←', '->'), ops: d.camp.fer.ops || '', hours: d.camp.fer.hours });
+    for (const x of r.pois || []) if (/מעבורת/.test(x.name || '') && x.fer?.line && !ferries.some(f => f.line === x.fer.line)) ferries.push({ line: String(x.fer.line).replace(/[⁨⁩]/g, '').replace('←', '->'), ops: x.fer.ops || '', hours: x.fer.hours });
+    const ask = `A 4x4 trip (Toyota Land Cruiser, about 5 m long and 2 m high, roof tent), ${set.people} people in the vehicle${p?.date ? ', starting ' + p.date : ''}.\n` +
+      days.map((d, k) => `Day ${k + 1}: ${at(d.a)} -> ${at(d.b)}, ${Math.round(d.road)} km road, ${Math.round(d.dirt)} km dirt, night: ${d.night === 'camp' ? 'campsite' + (d.camp?.name ? ' "' + String(d.camp.name).replace(/[⁨⁩"]/g, '') + '"' : '') : d.night}`).join('\n') +
+      (ferries.length ? '\nFerries (vehicle + passengers, cheapest sensible fare; a cabin on an overnight sailing):\n' + ferries.map(f => `- ${f.line}${f.ops ? ' (' + f.ops + ')' : ''}${f.hours ? ', about ' + Math.round(f.hours) + ' h' : ''}`).join('\n') : '') +
+      `\n\nSearch the web for current prices and answer with JSON only, no other text:\n{"eur_ils": number, "days": ["CC", ...one ISO country code per day, the country where most of that day's driving is, exactly ${days.length} items],` +
+      ` "countries": {"CC": {"name": "Hebrew name", "petrol": EUR per litre, "diesel": EUR per litre, "lpg": EUR per litre or 0 if not sold, "camp": EUR for one night at an ordinary campsite for a vehicle and 2 adults in season, "toll_eur": EUR of motorway tolls and vignettes for this vehicle on this route in that country (0 if none), "toll_note": "short Hebrew: vignette or toll roads, what and how to pay"}},` +
+      ` "borders": [{"name": "short Hebrew", "eur": number, "note": "short Hebrew"}], "ferries": [{"line": "as given", "eur": number, "note": "short Hebrew: what the price includes"}], "notes": "short Hebrew: what is uncertain"}\n` +
+      `"borders": only real costs when crossing between these countries with a foreign-registered car: border car insurance where the green card is not valid, entry or road taxes, environmental stickers. Empty list if none. Prices in EUR, numbers only. If a ferry price was not found give your best estimate and say so in its note.`;
+    const j = await api('/claude', { method: 'POST', body: JSON.stringify({ max_tokens: 8000, system: 'You estimate travel costs for an overland 4x4 trip from current web sources. JSON only.', messages: [{ role: 'user', content: ask }], tools: [{ type: WEB_SEARCH.type, max_uses: 5 }] }) });
+    const txt = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join(' '), a0 = txt.indexOf('{'), a1 = txt.lastIndexOf('}'); let o = null; try { o = JSON.parse(txt.slice(a0, a1 + 1)); } catch {}
+    if (!o || !o.countries || !Array.isArray(o.days) || !Object.keys(o.countries).length) throw new Error('החיפוש לא החזיר תשובה, נסו שוב');
+    const num = (x, lo, hi) => { x = +x; return x >= lo && x <= hi ? x : 0; }, tx = (t, n) => String(t || '').slice(0, n);
+    const C = { at: new Date().toISOString().slice(0, 10), people: set.people, eur_ils: num(o.eur_ils, 2, 8) || 3.9, days: days.map((_, k) => tx(o.days[k] || o.days[o.days.length - 1], 3).toUpperCase()), countries: {},
+      borders: (o.borders || []).slice(0, 12).map(b => ({ name: tx(b.name, 60), eur: num(b.eur, 0, 2000), note: tx(b.note, 140) })).filter(b => b.eur),
+      ferries: (o.ferries || []).slice(0, 12).map(f => ({ line: tx(f.line, 80), eur: num(f.eur, 0, 5000), note: tx(f.note, 140) })), notes: tx(o.notes, 300) };
+    for (const [k, c] of Object.entries(o.countries).slice(0, 30)) C.countries[tx(k, 3).toUpperCase()] = { name: tx(c.name, 30), petrol: num(c.petrol, 0.2, 5), diesel: num(c.diesel, 0.2, 5), lpg: num(c.lpg, 0.1, 4), camp: num(c.camp, 0, 300), toll_eur: num(c.toll_eur, 0, 2000), toll_note: tx(c.toll_note, 160) };
+    r.cost = C;
+    const sv = current?.saved || current?.trip;
+    if (sv?.id && current?.res?.results?.[current.sel] === r) { const b = packRoute(r); api('/routes/' + sv.id, { method: 'PATCH', body: JSON.stringify({ coords: b.coords, waypoints: b.waypoints, stats: b.stats }) }).then(() => { libCache = null; }).catch(() => {}); }
+  } catch (e) { status('אומדן העלויות לא הצליח: ' + (e.message || e), true); }
+  finally { costBusy = false; if (current?.res?.results?.[current.sel] === r) renderCost(r, p); }
+}
+function renderCost(r, p) {
+  const box = $('cost'); if (!r?.coords?.length || r.unrated && !r.days) { box.innerHTML = ''; return; }
+  const set = costSet(), C = r.cost, eur = x => '€' + Math.round(x).toLocaleString('en');
+  const settings = `<div class="costset"><label>דלק<select id="costFuel">${Object.entries(FUELS).map(([k, v]) => `<option value="${k}"${k === set.fuel ? ' selected' : ''}>${v}</option>`).join('')}</select></label>` +
+    `<label>צריכה<input id="costCons" type="number" inputmode="decimal" min="4" max="40" step="0.5" value="${set.cons}">ל׳/100 ק"מ</label><label>אנשים ברכב<input id="costPeople" type="number" inputmode="numeric" min="1" max="9" value="${set.people}"></label></div>`;
+  let body;
+  if (!C) body = hasGroup() ? `<button type="button" class="costbtn" id="costGo"${costBusy ? ' disabled' : ''}>${costBusy ? 'מחפש מחירים עדכניים… (עד דקה)' : 'חשב אומדן עלויות'}</button><div class="costnote">דלק לפי מחיר בכל מדינה, קמפינגים, מעבורות, אגרות כבישים ומעברי גבול. המחירים נבדקים ברשת ונשמרים עם הטיול.</div>` : '<div class="costnote">אומדן עלויות זמין אחרי הזנת קוד הקבוצה.</div>';
+  else {
+    const K = costCalc(r, C, set), ils = x => '₪' + Math.round(x * C.eur_ils).toLocaleString('en'), nm = k => gEsc(C.countries[k]?.name || k);
+    const fuelBy = Object.entries(K.perC).map(([k, e]) => `${nm(k)}: ${Math.round(e.km)} ק"מ, ${Math.round(e.l)} ל׳ × ${+(C.countries[k] || {})[set.fuel] ? '€' + (+(C.countries[k])[set.fuel]).toFixed(2) : 'אין מחיר'}`).join('<br>');
+    const row = (t, sub, v) => `<tr><td>${t}${sub ? `<small>${sub}</small>` : ''}</td><td>${eur(v)}</td></tr>`;
+    body = `<table class="costtab">` +
+      row(`דלק (${FUELS[set.fuel]})`, `${Math.round(K.litres)} ליטר. בשטח חושב ${Math.round((DIRT_FUEL - 1) * 100)}% יותר מבכביש.<br>${fuelBy}`, K.fuel) +
+      (K.nights || K.wild ? row('קמפינג', `${K.nights} לילות בקמפינג${K.wild ? `, ${K.wild} לילות שטח בלי עלות` : ''}`, K.camp) : '') +
+      (C.ferries.length ? row('מעבורות', C.ferries.map(f => `${gEsc(f.line)}: €${Math.round(f.eur)}${f.note ? ' · ' + gEsc(f.note) : ''}`).join('<br>'), K.ferries) : '') +
+      (K.tolls ? row('אגרות כבישים', Object.entries(C.countries).filter(([, c]) => c.toll_eur).map(([k, c]) => `${nm(k)}: €${Math.round(c.toll_eur)}${c.toll_note ? ' · ' + gEsc(c.toll_note) : ''}`).join('<br>'), K.tolls) : '') +
+      (C.borders.length ? row('מעברי גבול וביטוח', C.borders.map(b => `${gEsc(b.name)}: €${Math.round(b.eur)}${b.note ? ' · ' + gEsc(b.note) : ''}`).join('<br>'), K.borders) : '') +
+      `<tr class="sum"><td>סה"כ לרכב<small>${set.people > 1 ? `לאדם: ${eur(K.total / set.people)} · ${ils(K.total / set.people)}` : ''}</small></td><td>${eur(K.total)}<small>${ils(K.total)}</small></td></tr></table>` +
+      `<div class="costnote">${K.missing.length ? `אין מחיר ${FUELS[set.fuel]} ב: ${K.missing.map(nm).join(', ')} (לא נכלל בסכום). ` : ''}אומדן בלבד, לא כולל אוכל, כניסות לאתרים ותיקונים. מחירים נבדקו ברשת ב-${C.at.split('-').reverse().join('.')}.${C.notes ? ' ' + gEsc(C.notes) : ''}` +
+      (hasGroup() ? ` <a href="#" id="costGo">${costBusy ? 'מעדכן…' : 'עדכן מחירים'}</a>` : '') + `</div>`;
+  }
+  box.innerHTML = `<div class="wx"><h3>אומדן עלויות<small>לרכב, לכל הטיול</small></h3>${settings}${body}</div>`;
+  const on = (id, key) => { const el = $(id); if (el) el.onchange = () => { store.set(key, el.value); renderCost(r, p); }; };
+  on('costFuel', 'costFuel'); on('costCons', 'costCons'); on('costPeople', 'costPeople');
+  const go = $('costGo'); if (go) go.onclick = e => { e.preventDefault(); costLookup(r, p); };
+}
+
 // ---------- field reports ----------
 const REPORT_KINDS = { closed: 'סגור / חסום', harder: 'קשה מהצפוי', easier: 'קל מהצפוי', missing: 'הדרך לא קיימת', note: 'הערה' };
 let reports = [];
@@ -3550,6 +3639,7 @@ function render(i, day = null) {
   renderChecks(r, { ...p, date: $('pDate').value || p.date }, D);
   renderSafety(r, dv, w);
   renderGarages(r, dv, D);
+  renderCost(r, p, D);
   renderElevation(dv ? { ...r, coords: r.coords.slice(dv.from, dv.to + 1) } : r);
   $('dayPlan').innerHTML = '';
   $('gmapsMain').href = D ? gmapsUrl(r.coords, D.slice(0, -1).map(d => r.coords[d.to])) : gmapsUrl(r.coords);
@@ -3707,7 +3797,7 @@ function packRoute(r) {
     coords: r.coords.map(([a, o]) => [R5(a), R5(o)]),
     waypoints: r.pois.map(litePlace),
     stats: { len: Math.round(r.len), hrs: +r.hrs.toFixed(2), maxD: r.maxD, byD: r.byD.map(Math.round), unk: Math.round(r.unk), mil: Math.round(r.mil), aa: Math.round(r.aa), js: Math.round(r.js), reuse: Math.round(r.reuse), runs, unrated: !!r.unrated,
-      overland: !!r.overland, asph: Math.round(r.asph || 0), days: r.days && r.days.length > 1 ? r.days.map(d => ({ from: d.from, to: d.to, len: Math.round(d.len), off: d.off == null ? null : Math.round(d.off), hrs: +d.hrs.toFixed(2), camp: d.camp ? { ...litePlace(d.camp), type: d.camp.type || 'nightcamp' } : null, mid: d.mid ? { name: d.mid.name, type: d.mid.type } : null })) : null },
+      overland: !!r.overland, asph: Math.round(r.asph || 0), cost: r.cost || null, days: r.days && r.days.length > 1 ? r.days.map(d => ({ from: d.from, to: d.to, len: Math.round(d.len), off: d.off == null ? null : Math.round(d.off), hrs: +d.hrs.toFixed(2), camp: d.camp ? { ...litePlace(d.camp), type: d.camp.type || 'nightcamp' } : null, mid: d.mid ? { name: d.mid.name, type: d.mid.type } : null })) : null },
   };
 }
 function unpackRoute(row) {
@@ -3729,7 +3819,7 @@ function unpackRoute(row) {
     const via = (row.waypoints || []).find(x => x.type === 'via' && /מעבורת/.test(x.name || '') && hav(x.lat, x.lon, A[0], A[1]) < 30000);
     const hm = (via?.note || '').match(/כ-(\d+):(\d+) שעות שיט/), hours = hm ? +hm[1] + hm[2] / 60 : m / 1000 / 30;
     c.fer = { line: (via?.name || '').replace(/^⛴\s*מעבורת:?\s*/, ''), ...ferryTimes({ s: hours * 3600, depart: null }), ops: '', freq: '', url: '', from: A, to: B }; });
-  return { coords, segs, pois: row.waypoints || [], len: st.len || pathLen(coords), hrs: st.hrs || pathLen(coords) / 1000 / 15, maxD: st.maxD ?? 0, byD: st.byD || [0, 0, 0, 0, 0, 0], unk: st.unk || 0, mil: st.mil || 0, aa: st.aa || 0, js: st.js || 0, reuse: st.reuse || 0, unrated: !!st.unrated || !st.runs, days: st.days || null, overland: !!st.overland, asph: st.asph || 0 };
+  return { coords, segs, pois: row.waypoints || [], len: st.len || pathLen(coords), hrs: st.hrs || pathLen(coords) / 1000 / 15, maxD: st.maxD ?? 0, byD: st.byD || [0, 0, 0, 0, 0, 0], unk: st.unk || 0, mil: st.mil || 0, aa: st.aa || 0, js: st.js || 0, reuse: st.reuse || 0, unrated: !!st.unrated || !st.runs, days: st.days || null, overland: !!st.overland, asph: st.asph || 0, cost: st.cost || null };
 }
 function pathLen(c) { let s = 0; for (let i = 1; i < c.length; i++) s += hav(c[i - 1][0], c[i - 1][1], c[i][0], c[i][1]); return s; }
 function showSaved(row) {
