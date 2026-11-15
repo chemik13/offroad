@@ -17,13 +17,13 @@ const st=()=>p.evaluate(()=>({f:document.querySelectorAll('.safeic.fuel').length
 let t=await st();
 ok(t.d&&t.d[0]===2&&t.d[1]===2&&/2 תחנות · 2 סופרים/.test(t.sum),'beside the way only: '+t.sum+' (far one left out)');
 await p.evaluate(()=>map.setView([39.66,20.845],13,{animate:false}));await p.waitForTimeout(400);t=await st();
-ok(t.f===1&&t.l===1&&t.s===1,'close up: the markers on screen ('+[t.f,t.s]+'), LPG station ringed');
-await p.evaluate(()=>map.setView([39.6,20.6],8,{animate:false}));await p.waitForTimeout(400);t=await st();
-ok(t.f===0&&t.s===0,'far out: no markers');
+ok(t.f===1&&t.s===1&&await p.evaluate(()=>!!document.querySelector('.safeic.fuel.all3')),'close up: the markers on screen ('+[t.f,t.s]+'), all-three station highlighted');
+await p.evaluate(()=>map.setView([39.6,20.6],7,{animate:false}));await p.waitForTimeout(400);t=await st();
+ok(t.f>=1&&t.f<=2&&t.s>=1&&await p.evaluate(()=>!!document.querySelector('.safeic.fuel.all3')),'far out: thinned, the station with all three fuels kept ('+[t.f,t.s]+')');
 await p.evaluate(()=>map.setView([39.61,20.72],10,{animate:false}));await p.waitForTimeout(400);t=await st();
 ok(t.f===2&&t.s===2,'zoom 10: all four');
-await p.locator('.safeic.fuel.lpg').dispatchEvent('click');await p.waitForTimeout(300);
-ok(await p.evaluate(()=>/סולר · בנזין · גז \(LPG\)/.test(document.querySelector('.garpop')?.textContent||'')&&/24\/7/.test(document.querySelector('.garpop').textContent)),'station popup: the fuels sold and the hours');
+await p.locator('.safeic.fuel.all3').dispatchEvent('click');await p.waitForTimeout(300);
+ok(await p.evaluate(()=>document.querySelectorAll('.garpop .fl.y').length===3&&/24\/7/.test(document.querySelector('.garpop').textContent)),'station popup: the fuels sold and the hours');
 await p.evaluate(()=>map.closePopup());
 await p.click('input[data-sup=food]');await p.waitForTimeout(500);t=await st();
 ok(t.f===2&&t.s===0&&/^2 תחנות$/.test(t.sum)&&await p.evaluate(()=>document.querySelector('.garctl a.sfood').classList.contains('off')),'supermarkets off from the panel: '+t.sum);

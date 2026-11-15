@@ -353,7 +353,8 @@ ul.pois li{margin-bottom:8px}
 .repnote{width:100%;box-sizing:border-box;margin-top:6px;font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:6px}
 .elevax{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
 .safeic{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font:700 11px var(--body);color:#fff;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.35)}
-.safeic.fuel{background:#333}.safeic.food{background:#0d7a5f}.safeic.fuel.lpg{box-shadow:0 0 0 2px #f2b705,0 1px 3px rgba(0,0,0,.35)}.garctl a.sfuel .ico{stroke:#333}.garctl a.sfood .ico{stroke:#0d7a5f}
+.safeic.fuel{background:#333}.safeic.food{background:#0d7a5f}.safeic.fuel.lpg{box-shadow:0 0 0 2px #f2b705,0 1px 3px rgba(0,0,0,.35)}.safeic.fuel.all3{background:#f2b705;color:#1d2320;width:24px;height:24px}
+.fuels{display:flex;gap:6px;margin:4px 0 2px;font-weight:600}.fuels .fl{padding:1px 7px;border-radius:999px;border:1px solid var(--line);white-space:nowrap}.fuels .y{background:#e6f4ea;border-color:#9fd3ae;color:#17642d}.fuels .n{color:#a33;text-decoration:line-through}.fuels .u{color:var(--muted);font-weight:500}.garctl a.sfuel .ico{stroke:#333}.garctl a.sfood .ico{stroke:#0d7a5f}
 .suprow{display:flex;flex-direction:column;gap:2px}.suprow .garhead{padding:4px 0}.suprow small{color:var(--muted);line-height:1.5}.safeic.water{background:#1f6fd6}
 .safeic.gar{background:#eb0a1e;width:24px;height:24px}.safeic.gar .ico{width:14px;height:14px}
 .garctl a.off{opacity:.45}.garctl a .ico{width:18px;height:18px;margin:0;vertical-align:-4px;stroke:#eb0a1e}
@@ -676,7 +677,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.114 · 15.11.2026 14:31</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.115 · 15.11.2026 14:39</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2326,7 +2327,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.114 · 15.11.2026 14:31']],
+    ['גרסת האפליקציה', async () => ['ok', '1.115 · 15.11.2026 14:39']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -3690,25 +3691,30 @@ async function renderGarages(r, dv, D) {
 }
 // ---------- fuel stations and supermarkets along the way (from the trail tiles): two layers, each can be turned off ----------
 const SUP = { fuel: { he: 'תחנות דלק', icon: 'fuel', key: 'supFuel' }, food: { he: 'סופרים להצטיידות', icon: 'cart', key: 'supFood' } };
-const SUP_NEAR = 2000, SUP_ZOOM = 10, SUP_MAX = 350;
+const SUP_NEAR = 2000, SUP_MAX = 350;
 const supOn = k => store.get(SUP[k].key) !== '0';
 let supLayer = null, supData = null, supTok = 0, supLast = null;
 function setSupply(k, on) { store.set(SUP[k].key, on ? '1' : '0'); const a = document.querySelector('.garctl a.s' + k); if (a) a.classList.toggle('off', !on); if (supLast) renderSupply(...supLast); }
 function supplyHtml(x) {
-  const ll = `${x.lat},${x.lon}`, yes = v => v === 'yes', fuels = [yes(x.diesel) && 'סולר', yes(x.petrol) && 'בנזין', yes(x.lpg) && 'גז (LPG)'].filter(Boolean);
+  const ll = `${x.lat},${x.lon}`, known = x.diesel || x.petrol || x.lpg, mark = (v, t) => `<span class="fl ${v === 'yes' ? 'y' : v === 'no' ? 'n' : 'u'}">${v === 'yes' ? '✓' : v === 'no' ? '✗' : '?'} ${t}</span>`;
   return `<b>${gEsc(x.name)}</b> <small>${x.kind === 'fuel' ? 'תחנת דלק' : x.small ? 'מכולת / מינימרקט' : 'סופרמרקט'}</small>` +
-    (x.kind === 'fuel' ? `<br>${fuels.length ? fuels.join(' · ') + (x.lpg === 'no' ? ' · בלי גז' : '') : '<small>סוגי הדלק לא מסומנים במפה</small>'}` : '') +
+    (x.kind === 'fuel' ? `<div class="fuels">${mark(x.petrol, 'בנזין')}${mark(x.diesel, 'סולר')}${mark(x.lpg, 'גז')}</div>${known ? '' : '<small>סוגי הדלק של התחנה הזו לא מופו</small>'}` : '') +
     (x.hours ? `<br><small dir="ltr">${gEsc(x.hours)}</small>` : '') +
     `<div class="garlinks"><a href="https://www.google.com/maps/search/?api=1&query=${ll}" target="_blank" rel="noopener">Google Maps</a><a href="https://waze.com/ul?ll=${ll}&navigate=yes" target="_blank" rel="noopener">Waze</a></div>`;
 }
-// markers only for what is on screen, from a zoom where they can be told apart: a long trip passes thousands of them
+// What is on screen is drawn. From afar one marker per small patch of the screen, the best station first
+// (all three fuels, then LPG, then any station whose fuels are known), so the map stays readable and something always shows.
+const supRank = x => x.kind === 'fuel' ? (x.diesel === 'yes' && x.petrol === 'yes' && x.lpg === 'yes' ? 3 : x.lpg === 'yes' ? 2 : x.diesel || x.petrol || x.lpg ? 1 : 0) : x.small ? 0 : 1;
 function drawSupply() {
   if (supLayer) { supLayer.remove(); supLayer = null; }
-  if (!supData || map.getZoom() < SUP_ZOOM) return;
-  const b = map.getBounds().pad(0.1); supLayer = L.layerGroup().addTo(map); let n = 0;
+  if (!supData) return;
+  const b = map.getBounds().pad(0.1), thin = map.getZoom() < 12 ? 34 : 0; supLayer = L.layerGroup().addTo(map); let n = 0;
   for (const k of ['fuel', 'food']) { if (!supOn(k)) continue;
-    for (const x of supData[k]) { if (!b.contains([x.lat, x.lon])) continue; if (++n > SUP_MAX) return;
-      L.marker([x.lat, x.lon], { icon: L.divIcon({ className: '', html: `<div class="safeic ${k}${x.lpg === 'yes' ? ' lpg' : ''}">${ico(SUP[k].icon)}</div>`, iconSize: [20, 20], iconAnchor: [10, 10] }) }).addTo(supLayer).bindPopup(`<div class="garpop">${supplyHtml(x)}</div>`); } }
+    let list = supData[k].filter(x => b.contains([x.lat, x.lon]));
+    if (thin) { const best = new Map(); for (const x of list) { const pt = map.latLngToContainerPoint([x.lat, x.lon]), c = Math.floor(pt.x / thin) + ',' + Math.floor(pt.y / thin), o = best.get(c); if (!o || supRank(x) > supRank(o)) best.set(c, x); } list = [...best.values()]; }
+    list.sort((x, y) => supRank(y) - supRank(x));
+    for (const x of list) { if (++n > SUP_MAX) return;
+      L.marker([x.lat, x.lon], { zIndexOffset: supRank(x) * 100, icon: L.divIcon({ className: '', html: `<div class="safeic ${k}${k === 'fuel' && supRank(x) === 3 ? ' all3' : x.lpg === 'yes' ? ' lpg' : ''}">${ico(SUP[k].icon)}</div>`, iconSize: [20, 20], iconAnchor: [10, 10] }) }).addTo(supLayer).bindPopup(`<div class="garpop">${supplyHtml(x)}</div>`); } }
 }
 map.on('moveend zoomend', drawSupply);
 async function renderSupply(r, dv) {
@@ -3718,8 +3724,9 @@ async function renderSupply(r, dv) {
     const n = k => supData ? supData[k].length : null, row = (k, extra) => `<label class="garhead"><input type="checkbox" data-sup="${k}" ${supOn(k) ? 'checked' : ''}>${SUP[k].he}${supOn(k) && n(k) != null ? ` (${n(k)})` : ''}</label>${extra || ''}`;
     const lpg = supData ? supData.fuel.filter(x => x.lpg === 'yes').length : 0, typed = supData ? supData.fuel.filter(x => x.diesel || x.lpg || x.petrol).length : 0;
     box.dataset.sum = state === 'load' ? 'טוען…' : state === 'none' ? 'אין נתונים לאזור' : !supOn('fuel') && !supOn('food') ? 'כבוי' : [supOn('fuel') && `${n('fuel')} תחנות`, supOn('food') && `${n('food')} סופרים`].filter(Boolean).join(' · ');
-    box.innerHTML = `<div class="wx"><h3>דלק והצטיידות</h3><div class="suprow">${row('fuel', supOn('fuel') && supData ? `<small>${typed ? `עם גז (LPG): ${lpg}, מסומנות במפה בטבעת צהובה. בלחיצה על תחנה: סולר, בנזין, גז ושעות, אם מופו.` : 'סוגי הדלק (סולר, בנזין, גז) יופיעו בלחיצה על תחנה אחרי עדכון נתוני המפה הקרוב.'}</small>` : '')}${row('food')}` +
-      `<small>${state === 'none' ? 'אין נתוני מפה מוכנים לאזור הזה.' : `עד ${SUP_NEAR / 1000} ק"מ מהמסלול, לפי OpenStreetMap. הסימונים מופיעים כשמתקרבים במפה.`}</small></div></div>`;
+    const all3 = supData ? supData.fuel.filter(x => supRank(x) === 3).length : 0;
+    box.innerHTML = `<div class="wx"><h3>דלק והצטיידות</h3><div class="suprow">${row('fuel', supOn('fuel') && supData ? `<small>${typed ? `עם בנזין, סולר וגז: ${all3} (מודגשות בצהוב ומוצגות ראשונות). עם גז: ${lpg} (טבעת צהובה). סוגי הדלק ידועים ב-${typed} תחנות.` : 'בלחיצה על תחנה: בנזין, סולר, גז. הנתון הזה יתחיל להופיע אחרי עדכון נתוני המפה הקרוב.'}</small>` : '')}${row('food')}` +
+      `<small>${state === 'none' ? 'אין נתוני מפה מוכנים לאזור הזה.' : `עד ${SUP_NEAR / 1000} ק"מ מהמסלול, לפי OpenStreetMap. במבט רחוק מוצג חלק מהמקומות; התקרבו במפה כדי לראות את כולם.`}</small></div></div>`;
     for (const c of box.querySelectorAll('input[data-sup]')) c.onchange = () => setSupply(c.dataset.sup, c.checked);
   };
   if (!supOn('fuel') && !supOn('food')) { supData = null; drawSupply(); paint(); return; }
@@ -5426,7 +5433,7 @@ async function thCommit(save) {
 }
 $('thInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); thCommit(true); } else if (e.key === 'Escape') thCommit(false); });
 $('thInput').addEventListener('blur', () => thCommit(true));
-$('verChip').textContent = 'v' + '1.114 · 15.11.2026 14:31'.split(' ')[0]; // so everyone can tell which version they are on
+$('verChip').textContent = 'v' + '1.115 · 15.11.2026 14:39'.split(' ')[0]; // so everyone can tell which version they are on
 // naming: type a name and press Enter (or just leave the field); it is saved for every version of the trip
 $('routeName').addEventListener('focus', e => setTimeout(() => e.target.select(), 0));
 $('routeName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
