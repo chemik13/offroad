@@ -32,4 +32,5 @@ ok(t.f===0&&t.s===0&&t.sum==='כבוי','fuel off from the map button: '+t.sum);
 await p.click('.garctl a.sfood');await p.waitForTimeout(600);t=await st();
 ok(t.s===2&&t.f===0&&/2 סופרים/.test(t.sum),'supermarkets back on');
 ok(await p.evaluate(()=>document.querySelector('#supply').innerHTML.indexOf('<x>')<0),'names escaped');
+ok(await p.evaluate(()=>[readName({name:'НИС Петрол'},'תחנת דלק'),readName({name:'ΕΚΟ','name:en':'EKO'},'x'),readName({name:'محطة وقود',brand:'Total'},'x'),readName({name:'محطة'},'תחנת דלק'),readName({name:'פז'},'x')].join('|'))==='NIS Petrol|EKO|Total|תחנת דלק|פז','names in Hebrew or English only');
 console.log(errs.join('\n')||'no page errors');if(errs.length)process.exitCode=1;await b.close();})();

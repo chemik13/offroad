@@ -1760,7 +1760,7 @@ async function poisFromTiles(points, radius) {
         camps.push({ id: tp + id, type: 'nightcamp', name, lat: la, lon: lo, auth: lk ? `${auth} · על שפת ${lk}` : auth, ...campInfo(t), lake: !!lk || LAKE.test(name) });
       } else if (t.amenity === 'fuel' || t.shop === 'supermarket' || t.shop === 'convenience') {
         seen.add(tp + id);
-        supply.push({ kind: t.amenity === 'fuel' ? 'fuel' : 'food', name: t.name || t.brand || (t.amenity === 'fuel' ? 'תחנת דלק' : 'סופרמרקט'), lat: la, lon: lo, brand: t.brand || '', hours: t.opening_hours || '',
+        supply.push({ kind: t.amenity === 'fuel' ? 'fuel' : 'food', name: readName(t, t.amenity === 'fuel' ? 'תחנת דלק' : 'סופרמרקט'), lat: la, lon: lo, brand: t.brand || '', hours: t.opening_hours || '',
           diesel: t['fuel:diesel'] || '', lpg: t['fuel:lpg'] || '', petrol: t['fuel:octane_95'] || t['fuel:octane_98'] || '', small: t.shop === 'convenience' });
       }
     }
@@ -1828,7 +1828,7 @@ async function nightCandidates(points, wantLake) {
       const la = el.lat ?? el.center?.lat, lo = el.lon ?? el.center?.lon, t = el.tags;
       if (!t) { lakeIds.add(el.type + el.id); continue; }
       if (t.tourism) { const auth = campAuth(t, la, lo); if (auth) camps.push({ id: el.type + el.id, type: 'nightcamp', name: t['name:he'] || t.name || (t.tourism === 'caravan_site' ? 'חניון קרוואנים' : 'קמפינג'), lat: la, lon: lo, auth, fee: t.fee, water: t.drinking_water, toilets: t.toilets, wd: t.wikidata, img: t.image, commons: t.wikimedia_commons }); }
-      else supply.push({ kind: t.amenity === 'fuel' ? 'fuel' : 'food', name: t.name || t.brand || (t.amenity === 'fuel' ? 'תחנת דלק' : 'סופרמרקט'), lat: la, lon: lo });
+      else supply.push({ kind: t.amenity === 'fuel' ? 'fuel' : 'food', name: readName(t, t.amenity === 'fuel' ? 'תחנת דלק' : 'סופרמרקט'), lat: la, lon: lo });
     }
   }
   for (const c of camps) c.lake = lakeIds.has(c.id);
@@ -2282,7 +2282,7 @@ function garagesNear(items, coords, D, off = 0) {
 const gEsc = t => String(t || '').replace(/[<&>"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
 function garageHtml(g, multi) {
   const ll = `${g.lat},${g.lon}`, web = g.website && /^https?:\/\//i.test(g.website) ? g.website : g.website ? 'https://' + g.website : '';
-  const where = [g.addr, g.city].filter(Boolean).join(', ');
+  const where = [g.addr, g.city].filter(Boolean).map(latinName).join(', '); g = { ...g, name: readName({ name: g.name }, 'Toyota') };
   const links = [g.phone && `<a href="tel:${gEsc(g.phone.split(/[;,]/)[0].replace(/[^+\d]/g, ''))}" dir="ltr">${gEsc(g.phone.split(';')[0])}</a>`,
     web && `<a href="${gEsc(web)}" target="_blank" rel="noopener">אתר</a>`, g.email && `<a href="mailto:${gEsc(g.email)}">מייל</a>`,
     `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(g.name)}%20${ll}" target="_blank" rel="noopener">Google Maps</a>`,
@@ -2898,6 +2898,12 @@ function latinName(nm) {
   t = t.replace(/ου/gi, 'ou').replace(/Ου/g, 'Ou').replace(/αι/g, 'ai').replace(/ει/g, 'ei').replace(/ντ/g, 'nt').replace(/^μπ|(\s)μπ/g, '$1b');
   t = [...t].map(ch => { const lo = ch.toLowerCase(), r = TR[lo]; if (r == null) return ch; const o = r === '_' ? '' : r; return ch !== lo ? o.charAt(0).toUpperCase() + o.slice(1) : o; }).join('');
   return t.replace(/\b([a-z])/g, (x, c, i, all) => (i === 0 || all[i - 1] === ' ') ? c.toUpperCase() : c);
+}
+// A name the group can read: Hebrew or English only. The English name if the map has one, else the local name in Latin letters,
+// else the brand; a name still in another script (Arabic, Armenian…) gives way to the plain word for the place.
+function readName(t, plain) {
+  for (const n of [t['name:he'], t['name:en'], t.int_name, t.name, t.brand, t.operator]) { const x = latinName(n).trim(); if (x && !/[^\u0000-\u024f\u0590-\u05ff\u2000-\u206f]/.test(x)) return x; }
+  return plain;
 }
 // ---------- trip checks: the clock and sunset, seasons, fuel, the group's field reports ----------
 // sunrise / sunset (sunrise equation, ±2 min) in UTC ms

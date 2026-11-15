@@ -38,7 +38,7 @@ def item(e):
     if any(s in label for s in SKIP): return None
     repair = t.get("shop") == "car_repair" or t.get("service:vehicle:car_repair") == "yes" or t.get("car_repair") == "yes"
     street = " ".join(x for x in (first(t, "addr:street"), first(t, "addr:housenumber")) if x)
-    o = {"name": first(t, "name", "brand", "operator") or "Toyota", "kind": "repair" if repair else "dealer",
+    o = {"name": first(t, "name:en", "int_name", "name", "brand", "operator") or "Toyota", "kind": "repair" if repair else "dealer",
          "addr": street or first(t, "addr:full"), "city": first(t, "addr:city", "addr:town", "addr:village", "addr:place"), "country": first(t, "addr:country"),
          "phone": first(t, "phone", "contact:phone", "contact:mobile"), "website": first(t, "website", "contact:website", "url"),
          "email": first(t, "email", "contact:email"), "hours": first(t, "opening_hours:workshop", "opening_hours:repair", "opening_hours")}

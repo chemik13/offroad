@@ -21,7 +21,7 @@ BBOX = (29.3, 34.1, 33.5, 36.0)  # s, w, n, e: Israel incl. Golan, Judea & Samar
 MAIN_HW = {"track", "unclassified", "tertiary", "secondary", "primary", "trunk", "tertiary_link", "secondary_link", "primary_link", "trunk_link"}
 UNPAVED = {"unpaved", "gravel", "fine_gravel", "dirt", "ground", "sand", "compacted", "rock", "pebblestone", "earth", "mud"}
 WAY_TAGS = ["highway", "tracktype", "surface", "smoothness", "4wd_only", "access", "motor_vehicle", "motorcar", "vehicle", "oneway", "name", "name:he", "ref"]
-POI_TAGS = ["shop", "amenity", "brand", "backcountry", "group_only", "website", "access", "tourism", "natural", "historic", "name", "name:he", "image", "wikimedia_commons", "wikidata", "operator", "owner", "operator:he", "operator:en", "fee", "drinking_water", "toilets"]
+POI_TAGS = ["shop", "amenity", "brand", "name:en", "int_name", "backcountry", "group_only", "website", "access", "tourism", "natural", "historic", "name", "name:he", "image", "wikimedia_commons", "wikidata", "operator", "owner", "operator:he", "operator:en", "fee", "drinking_water", "toilets"]
 # a place to sleep needs more: how to reach and book it, when it is open, what it has (kept for campsites only, so tiles stay small)
 CAMP_TAGS = ["contact:website", "url", "contact:url", "phone", "contact:phone", "contact:mobile", "email", "contact:email", "reservation", "opening_hours", "seasonal",
              "capacity", "stars", "tents", "caravans", "motorhome", "dog", "shower", "power_supply", "internet_access", "sanitary_dump_station", "charge", "swimming_pool", "openfire", "addr:city"]
