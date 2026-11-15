@@ -30,6 +30,7 @@ await p.fill('#prompt','יומיים ממצפה רמון עם תצפית');await
 console.log('chips',await p.$$eval('#dayChips button',x=>x.map(e=>e.textContent)));
 console.log('dayplan',await p.$$eval('.dayrow',x=>x.map(e=>e.textContent)));
 const ch=await p.$$('#dayChips button'); if(ch[2]){await ch[2].click();await p.waitForTimeout(300);console.log('daymode fly',await p.$$eval('.fly3d',x=>x.filter(e=>e.offsetParent).map(e=>e.textContent)));console.log('day2 stats',await p.$eval('#stats',e=>e.textContent.replace(/\s+/g,' ')));}
+await p.locator('.dayrow').first().click();await p.waitForTimeout(300); // a day's buttons show on the chosen day
 for(const lab of ['GPX יום 1','GPX כל הטיול']){const btn=p.locator('button.fly3d',{hasText:lab}).first();const [dl]=await Promise.all([p.waitForEvent('download'),btn.click()]);const f=await dl.path();const x=require('fs').readFileSync(f,'utf8');console.log('dl',await p.evaluate(()=>dayGpxFile(0).name),'trk',(x.match(/<trk>/g)||[]).length,'pts',(x.match(/<trkpt/g)||[]).length,'wpt',(x.match(/<wpt/g)||[]).length);}
 console.log('main',await p.getAttribute('#gmapsMain','href'),await p.isVisible('#gmapsMain'));console.log('gmaps',await p.$$eval('a.fly3d',x=>x.map(e=>e.textContent+' | '+decodeURIComponent(e.href).slice(0,140))));
 const before=DB.length;await p.fill('#routeName','הנגב של חמי');await p.press('#routeName','Enter');await p.waitForTimeout(800);
