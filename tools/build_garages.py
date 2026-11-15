@@ -9,8 +9,8 @@ MIRRORS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.
 # (south, west, north, east): Europe in four, then the rest of the world
 # smaller boxes where shops are dense (Europe, east Asia, north America): a heavy query times out on a busy server
 def grid(s, w, n, e, rows, cols): return [(s + (n - s) * i / rows, w + (e - w) * j / cols, s + (n - s) * (i + 1) / rows, w + (e - w) * (j + 1) / cols) for i in range(rows) for j in range(cols)]
-BOXES = (grid(34, -25, 72, 45, 3, 4) + [(-36, -25, 34, 65)] + grid(34, 45, 72, 180, 1, 2) + grid(-12, 65, 34, 180, 2, 2)
-         + [(-60, 65, -12, 180), (-60, -180, 15, -25)] + grid(15, -180, 72, -25, 2, 3))
+BOXES = (grid(34, -25, 72, 45, 3, 4) + [(-36, -25, 34, 65)] + grid(34, 45, 72, 180, 1, 2) + grid(-12, 65, 34, 180, 4, 4)
+         + grid(-60, 65, -12, 180, 2, 2) + grid(-60, -180, 15, -25, 2, 3) + grid(15, -180, 72, -25, 4, 6))
 SKIP = ("material handling", "forklift", "gabelstapler", "chariot", "carretilla", "rent a car", "rental", "tsusho")
 
 VER = 2            # bump when item() changes what it keeps: parts built by an older version are asked again
