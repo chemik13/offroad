@@ -25,8 +25,13 @@ POI_TAGS = ["shop", "amenity", "brand", "backcountry", "group_only", "website", 
 # a place to sleep needs more: how to reach and book it, when it is open, what it has (kept for campsites only, so tiles stay small)
 CAMP_TAGS = ["contact:website", "url", "contact:url", "phone", "contact:phone", "contact:mobile", "email", "contact:email", "reservation", "opening_hours", "seasonal",
              "capacity", "stars", "tents", "caravans", "motorhome", "dog", "shower", "power_supply", "internet_access", "sanitary_dump_station", "charge", "swimming_pool", "openfire", "addr:city"]
-POI_SCHEMA = 2  # raised when the kept tags change: the EU workflow rebuilds countries built with an older one
-def poi_tags(t): return pick(t, POI_TAGS + CAMP_TAGS) if t.get("tourism") in ("camp_site", "caravan_site") else pick(t, POI_TAGS)
+# fuel stations and shops: which fuels are sold (diesel, petrol, LPG) and when they are open
+SUPPLY_TAGS = ["opening_hours", "fuel:diesel", "fuel:lpg", "fuel:octane_95", "fuel:octane_98", "self_service", "payment:credit_cards"]
+POI_SCHEMA = 3  # raised when the kept tags change: the EU workflow rebuilds countries built with an older one
+def poi_tags(t):
+    if t.get("tourism") in ("camp_site", "caravan_site"): return pick(t, POI_TAGS + CAMP_TAGS)
+    if t.get("amenity") == "fuel" or t.get("shop") in ("supermarket", "convenience"): return pick(t, POI_TAGS + SUPPLY_TAGS)
+    return pick(t, POI_TAGS)
 MIL_TAGS = ["landuse", "military", "leisure", "boundary", "protect_class", "name", "name:he", "name:en"]
 MIL_KINDS = {"danger_area", "training_area", "range"}
 
