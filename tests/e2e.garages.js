@@ -21,6 +21,7 @@ let t=await st();
 ok(t.n===2&&t.items.length===2,'two garages near the way, the far one left out ('+t.n+')');
 ok(/Toyota Ioannina/.test(t.items[0])&&/מוסך/.test(t.items[0])&&/Dodonis 5, Ioannina/.test(t.items[0])&&/Mo-Fr/.test(t.items[0])&&/tel:\+302651000000/.test(t.html)&&/https:\/\/www\.toyota-ioannina\.gr/.test(t.html),'details: '+t.items[0].slice(0,90));
 ok(/Toyota &lt;West&gt;/.test(t.html)&&/waze\.com/.test(t.html),'names escaped, navigation links');
+ok(/maps\/search\/Toyota\+service\/@39\.66/.test(t.html)&&(t.html.match(/gargoogle/g)||[]).length===1,'live Google Maps search links');
 await p.click('#garChk');await p.waitForTimeout(300);t=await st();
 ok(t.n===0&&t.items.length===0&&t.chk===false&&t.off,'checkbox takes them off the map and the list');
 await p.click('.garctl a');await p.waitForTimeout(300);t=await st();

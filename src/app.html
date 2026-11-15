@@ -359,6 +359,7 @@ ul.pois li{margin-bottom:8px}
 .garhead{display:flex;align-items:center;gap:8px;cursor:pointer}.garhead input{width:18px;height:18px;margin:0;accent-color:#eb0a1e}
 .garlist{padding:0 12px 10px;font-size:13px;line-height:1.5}.garitem{padding:8px 0;border-top:1px solid var(--line)}.garitem b{font-size:14px}
 .garitem small{color:var(--muted)}.garitem .garlinks{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:3px}.garitem a{color:var(--accent,#0a58ca)}
+.gargoogle{margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}.gargoogle div{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px}.gargoogle a{border:1px solid var(--line);border-radius:999px;padding:3px 10px;text-decoration:none;color:var(--ink);background:#fff;font-size:12.5px}
 .garpop{font:13px/1.5 var(--body);min-width:190px}.garpop a{display:inline-block;margin-inline-end:10px}
 .safelist{padding:2px 12px 10px;font-size:13px;line-height:1.6;color:var(--ink2,#444)}
 .steepic{background:#fff;border:1.5px solid #d23a2a;color:#d23a2a;border-radius:4px;font:700 10px var(--body);padding:0 4px;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.25)}
@@ -2265,14 +2266,17 @@ async function renderGarages(r, dv, D) {
   if (!r?.coords?.length) { box.innerHTML = ''; return; }
   if (!garOn()) { box.innerHTML = head(null) + '</div>'; wire(); return; }
   const items = await garagesAll(); if (tok !== garTok) return;
-  if (!items) { box.innerHTML = head(null) + '<div class="garlist"><small>רשימת המוסכים לא נטענה. נסו שוב מאוחר יותר.</small></div></div>'; wire(); return; }
   const coords = dv ? r.coords.slice(dv.from, dv.to + 1) : r.coords;
+  // live search in Google Maps (ratings, reviews, open now), where the map data is thin too: per day on a long trip, else start / middle / end
+  const gPts = !dv && D && D.length > 1 ? D.map((d, k) => [`יום ${k + 1}`, r.coords[Math.round(((k ? D[k - 1].to : 0) + d.to) / 2)]]) : [['התחלה', coords[0]], ['אמצע', coords[coords.length >> 1]], ['סוף', coords[coords.length - 1]]];
+  const gLinks = `<div class="gargoogle"><small>חיפוש חי ב-Google Maps (דירוג, ביקורות, פתוח עכשיו):</small><div>${gPts.filter(x => x[1]).map(([t, c]) => `<a href="https://www.google.com/maps/search/Toyota+service/@${c[0].toFixed(4)},${c[1].toFixed(4)},10z" target="_blank" rel="noopener">${t}</a>`).join('')}</div></div>`;
+  if (!items) { box.innerHTML = head(null) + `<div class="garlist"><small>רשימת המוסכים לא נטענה. נסו שוב מאוחר יותר.</small>${gLinks}</div></div>`; wire(); return; }
   const near = garagesNear(items, coords, dv ? null : D, 0), multi = !dv && D && D.length > 1;
   garLayer = L.layerGroup().addTo(map);
   const icon = L.divIcon({ className: '', html: `<div class="safeic gar">${ico('wrench')}</div>`, iconSize: [24, 24], iconAnchor: [12, 12] });
   for (const g of near) L.marker([g.lat, g.lon], { icon }).addTo(garLayer).bindPopup(`<div class="garpop">${garageHtml(g, multi)}</div>`);
   const rows = near.map(g => `<div class="garitem">${garageHtml(g, multi)}</div>`).join('');
-  box.innerHTML = head(near.length) + `<div class="garlist">${near.length ? (near.length > 4 ? `<details><summary>הצגת הרשימה</summary>${rows}</details>` : rows) : `<small>אין מוסך או סוכנות טויוטה מסומנים עד ${GAR_NEAR / 1000} ק"מ מהמסלול.</small>`}<small>סוכנויות ומוסכים של טויוטה כפי שמופו ב-OpenStreetMap. הרשימה לא מלאה: התקשרו לוודא שמטפלים בלנדקרוזר ושיש חלקים.</small></div></div>`;
+  box.innerHTML = head(near.length) + `<div class="garlist">${near.length ? (near.length > 4 ? `<details><summary>הצגת הרשימה</summary>${rows}</details>` : rows) : `<small>אין מוסך או סוכנות טויוטה מסומנים עד ${GAR_NEAR / 1000} ק"מ מהמסלול.</small>`}<small>סוכנויות ומוסכים של טויוטה כפי שמופו ב-OpenStreetMap. הרשימה לא מלאה: התקשרו לוודא שמטפלים בלנדקרוזר ושיש חלקים.</small>${gLinks}</div></div>`;
   wire();
 }
 // ---------- field reports ----------
