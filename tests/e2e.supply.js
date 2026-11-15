@@ -8,7 +8,7 @@ await p.addInitScript(()=>{localStorage.setItem('groupCode','abc');localStorage.
 await p.goto('file://'+process.argv[2]);await p.waitForTimeout(500);
 const ok=(c,t)=>{console.log((c?'PASS ':'FAIL ')+t);if(!c)process.exitCode=1;};
 await p.evaluate(()=>{window.asked=0;poisFromTiles=async(pts,rad)=>{window.asked++;return{camps:[],miss:[],supply:[
-  {kind:'fuel',name:'Eni',lat:39.661,lon:20.84,diesel:'yes',petrol:'yes',lpg:'yes',hours:'24/7'},{kind:'fuel',name:'Shell <x>',lat:39.60,lon:20.601,diesel:'',lpg:'',petrol:''},
+  {kind:'fuel',name:'Eni',lat:39.661,lon:20.84,diesel:'yes',petrol:'yes',lpg:'yes',hours:'24/7'},{kind:'fuel',name:'Shell <x>',lat:39.60,lon:20.601,diesel:'',lpg:'',petrol:'',osm:'n123'},
   {kind:'fuel',name:'Far fuel',lat:39.9,lon:20.6},{kind:'food',name:'Lidl',lat:39.659,lon:20.851,hours:'Mo-Sa 08:00-21:00'},{kind:'food',name:'Mini',lat:39.58,lon:20.5,small:true}]};};
  const line=(a,b,n)=>Array.from({length:n+1},(_,i)=>[a[0]+(b[0]-a[0])*i/n,a[1]+(b[1]-a[1])*i/n]);const coords=line([39.66,20.85],[39.55,20.3],60);
  showSaved({id:'t1',trip_id:'t1',version:1,name:'בדיקה',params:{start:{name:'Ioannina',lat:39.66,lon:20.85},end:{name:'West',lat:39.55,lon:20.3},days:1,loop:false},coords,waypoints:[],stats:{len:50000,hrs:2,maxD:1,byD:[50000,0,0,0,0,0],runs:[[0,61]],asph:50000}});});
@@ -24,6 +24,10 @@ await p.evaluate(()=>map.setView([39.61,20.72],10,{animate:false}));await p.wait
 ok(t.f===2&&t.s===2,'zoom 10: all four');
 await p.locator('.safeic.fuel.all3').dispatchEvent('click');await p.waitForTimeout(300);
 ok(await p.evaluate(()=>document.querySelectorAll('.garpop .fl.y').length===3&&/24\/7/.test(document.querySelector('.garpop').textContent)),'station popup: the fuels sold and the hours');
+await p.evaluate(()=>map.closePopup());
+await p.evaluate(()=>{window.oq='';overpassRaw=async q=>{window.oq=q;return[{tags:{'fuel:diesel':'yes','fuel:octane_95':'yes','fuel:lpg':'no'}}];};});
+await p.locator('.safeic.fuel:not(.all3)').first().dispatchEvent('click');await p.waitForTimeout(500);
+ok(await p.evaluate(()=>/node\(123\)/.test(window.oq)&&document.querySelectorAll('.garpop .fl.y').length===2&&document.querySelectorAll('.garpop .fl.n').length===1),'a station with unknown fuels asks the map when opened');
 await p.evaluate(()=>map.closePopup());
 await p.click('input[data-sup=food]');await p.waitForTimeout(500);t=await st();
 ok(t.f===2&&t.s===0&&/^2 תחנות$/.test(t.sum)&&await p.evaluate(()=>document.querySelector('.garctl a.sfood').classList.contains('off')),'supermarkets off from the panel: '+t.sum);

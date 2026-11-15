@@ -2,6 +2,7 @@
 # Incremental: a country is rebuilt when its tiles are older than 25 days, or were built before the kept tags changed (POI_SCHEMA), (index.json "countries"), so adding a
 # country builds only that one, and a long list is spread over several runs instead of hitting the job time limit.
 # Same format as the Israel tiles; border tiles shared by two countries are merged (the newer build wins).
+# (2026-11-15: rebuild now for POI schema 3: fuel types, opening hours, English names)
 name: Build trail tiles (Europe)
 on:
   schedule:
