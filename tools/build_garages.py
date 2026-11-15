@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
-"""Toyota dealers and workshops from OpenStreetMap, worldwide, as one small file for the app:
+"""Toyota dealers and workshops from OpenStreetMap, in Europe and Israel, as one small file for the app:
 {"built": iso, "items": [[lat, lon, {name, kind, addr, city, country, phone, website, email, hours}], ...]}
 Asked from the public Overpass servers in regional boxes, with retries across mirrors.
 Each box's answer is kept beside the file, so a run that the servers cut short is continued by the next one."""
 import json, os, sys, time, urllib.parse, urllib.request, datetime
 
 MIRRORS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://overpass.kumi.systems/api/interpreter"]
-# (south, west, north, east): Europe in four, then the rest of the world
-# smaller boxes where shops are dense (Europe, east Asia, north America): a heavy query times out on a busy server
+# (south, west, north, east): Europe (to the Urals and the Caucasus) in twelve boxes, and Israel
 def grid(s, w, n, e, rows, cols): return [(s + (n - s) * i / rows, w + (e - w) * j / cols, s + (n - s) * (i + 1) / rows, w + (e - w) * (j + 1) / cols) for i in range(rows) for j in range(cols)]
-BOXES = (grid(34, -25, 72, 45, 3, 4) + [(-36, -25, 34, 65)] + grid(34, 45, 72, 180, 1, 2) + grid(-12, 65, 34, 180, 4, 4)
-         + grid(-60, 65, -12, 180, 2, 2) + grid(-60, -180, 15, -25, 2, 3) + grid(15, -180, 72, -25, 4, 6))
+BOXES = grid(34, -25, 72, 45, 3, 4) + [(29, 34, 34, 36.5)]
 SKIP = ("material handling", "forklift", "gabelstapler", "chariot", "carretilla", "rent a car", "rental", "tsusho")
 
 VER = 2            # bump when item() changes what it keeps: parts built by an older version are asked again
@@ -59,6 +57,9 @@ def main(out):
     parts = os.path.join(out, "parts"); os.makedirs(parts, exist_ok=True)
     deadline, now, have, changed = time.time() + BUDGET, time.time(), {}, False
     def path(b): return os.path.join(parts, "_".join(str(round(x, 2)) for x in b) + ".json")
+    keep = {os.path.basename(path(b)) for b in BOXES}
+    for f in os.listdir(parts):
+        if f not in keep: os.remove(os.path.join(parts, f)); changed = True   # a region no longer asked for
     todo = []
     for b in BOXES:
         try: p = json.load(open(path(b), encoding="utf-8"))

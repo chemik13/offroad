@@ -1,4 +1,4 @@
-# Toyota dealers and workshops from OpenStreetMap (worldwide) as one file on the orphan branch "data"
+# Toyota dealers and workshops from OpenStreetMap (Europe and Israel) as one file on the orphan branch "data"
 # (toyota.json, served by raw.githubusercontent.com). The app shows the ones near a route.
 # Runs nightly but asks only for regions whose answer is missing or older than 25 days (kept in parts/ on the same branch),
 # so a build the busy public servers cut short carries on the next night instead of starting over.
