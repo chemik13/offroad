@@ -2342,7 +2342,8 @@ async function costLookup(r, p) {
   finally { costBusy = false; if (current?.res?.results?.[current.sel] === r) renderCost(r, p); }
 }
 function renderCost(r, p) {
-  const box = $('cost'); if (!r?.coords?.length || r.unrated && !r.days) { box.innerHTML = ''; return; }
+  // abroad only: at home the prices are known and there are no borders, ferries or vignettes
+  const box = $('cost'); if (!r?.coords?.length || r.unrated && !r.days || [r.coords[0], r.coords[r.coords.length >> 1], r.coords[r.coords.length - 1]].every(c => inIsrael(c[0], c[1]))) { box.innerHTML = ''; return; }
   const set = costSet(), C = r.cost, eur = x => '€' + Math.round(x).toLocaleString('en');
   const settings = `<div class="costset"><label>דלק<select id="costFuel">${Object.entries(FUELS).map(([k, v]) => `<option value="${k}"${k === set.fuel ? ' selected' : ''}>${v}</option>`).join('')}</select></label>` +
     `<label>צריכה<input id="costCons" type="number" inputmode="decimal" min="4" max="40" step="0.5" value="${set.cons}">ל׳/100 ק"מ</label><label>אנשים ברכב<input id="costPeople" type="number" inputmode="numeric" min="1" max="9" value="${set.people}"></label></div>`;

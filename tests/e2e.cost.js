@@ -32,4 +32,6 @@ ok(claude===1&&Math.abs(t.k.fuel-(d0.road*0.2*2+d1.road*0.2*1.9))<0.01,'fuel typ
 await p.selectOption('#costFuel','lpg');await p.waitForTimeout(300);t=await st();
 ok(/אין מחיר גז/.test(t.txt)&&/איטליה/.test(t.txt),'a country with no price for that fuel is said');
 ok(await p.evaluate(()=>[...document.querySelectorAll('#p4n a')].some(a=>/park4night\.com\/en\/search\?lat=/.test(a.href))&&document.querySelectorAll('#p4n a').length===2),'Park4night search per day');
+await p.evaluate(()=>{const coords=[[31.25,34.79],[31.0,34.8],[30.61,34.8]];showSaved({id:'t2',trip_id:'t2',version:1,name:'נגב',params:{start:{name:'באר שבע',lat:31.25,lon:34.79},loop:false},coords,waypoints:[],stats:{len:70000,hrs:3,maxD:1,byD:[70000,0,0,0,0,0],runs:[[1,3]],asph:0}});});await p.waitForTimeout(600);
+ok(await p.evaluate(()=>document.querySelector('#cost').innerHTML===''),'no cost box for a trip in Israel');
 console.log(errs.join('\n')||'no page errors');if(errs.length)process.exitCode=1;await b.close();})();
