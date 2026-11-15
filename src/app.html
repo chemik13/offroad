@@ -2318,8 +2318,9 @@ async function costLookup(r, p) {
   if (costBusy) return; costBusy = true; renderCost(r, p);
   try {
     const set = costSet(), days = costDays(r), at = c => c ? `${(+c[0]).toFixed(2)},${(+c[1]).toFixed(2)}` : '?';
-    const ferries = []; for (const d of r.days || []) if (d.camp?.fer?.line && !ferries.some(f => f.line === d.camp.fer.line)) ferries.push({ line: String(d.camp.fer.line).replace(/[⁨⁩]/g, '').replace('←', '->'), ops: d.camp.fer.ops || '', hours: d.camp.fer.hours });
-    for (const x of r.pois || []) if (/מעבורת/.test(x.name || '') && x.fer?.line && !ferries.some(f => f.line === x.fer.line)) ferries.push({ line: String(x.fer.line).replace(/[⁨⁩]/g, '').replace('←', '->'), ops: x.fer.ops || '', hours: x.fer.hours });
+    // each line once: the same sailing is on the night's card and on its waypoints
+    const ferries = [], fl = x => String(x || '').replace(/[\u2068\u2069]/g, '').replace('←', '->').trim();
+    for (const x of [...(r.days || []).map(d => d.camp), ...(r.pois || [])]) { const ln = fl(x?.fer?.line); if (ln && !ferries.some(f => f.line === ln)) ferries.push({ line: ln, ops: x.fer.ops || '', hours: x.fer.hours }); }
     const ask = `A 4x4 trip (Toyota Land Cruiser, about 5 m long and 2 m high, roof tent), ${set.people} people in the vehicle${p?.date ? ', starting ' + p.date : ''}.\n` +
       days.map((d, k) => `Day ${k + 1}: ${at(d.a)} -> ${at(d.b)}, ${Math.round(d.road)} km road, ${Math.round(d.dirt)} km dirt, night: ${d.night === 'camp' ? 'campsite' + (d.camp?.name ? ' "' + String(d.camp.name).replace(/[⁨⁩"]/g, '') + '"' : '') : d.night}`).join('\n') +
       (ferries.length ? '\nFerries (vehicle + passengers, cheapest sensible fare; a cabin on an overnight sailing):\n' + ferries.map(f => `- ${f.line}${f.ops ? ' (' + f.ops + ')' : ''}${f.hours ? ', about ' + Math.round(f.hours) + ' h' : ''}`).join('\n') : '') +
@@ -2333,7 +2334,7 @@ async function costLookup(r, p) {
     const num = (x, lo, hi) => { x = +x; return x >= lo && x <= hi ? x : 0; }, tx = (t, n) => String(t || '').slice(0, n);
     const C = { at: new Date().toISOString().slice(0, 10), people: set.people, eur_ils: num(o.eur_ils, 2, 8) || 3.9, days: days.map((_, k) => tx(o.days[k] || o.days[o.days.length - 1], 3).toUpperCase()), countries: {},
       borders: (o.borders || []).slice(0, 12).map(b => ({ name: tx(b.name, 60), eur: num(b.eur, 0, 2000), note: tx(b.note, 140) })).filter(b => b.eur),
-      ferries: (o.ferries || []).slice(0, 12).map(f => ({ line: tx(f.line, 80), eur: num(f.eur, 0, 5000), note: tx(f.note, 140) })), notes: tx(o.notes, 300) };
+      ferries: (o.ferries || []).slice(0, 12).map(f => ({ line: tx(f.line, 80), eur: num(f.eur, 0, 5000), note: tx(f.note, 140) })).filter((f, i, l) => l.findIndex(g => g.line === f.line) === i), notes: tx(o.notes, 300) };
     for (const [k, c] of Object.entries(o.countries).slice(0, 30)) C.countries[tx(k, 3).toUpperCase()] = { name: tx(c.name, 30), petrol: num(c.petrol, 0.2, 5), diesel: num(c.diesel, 0.2, 5), lpg: num(c.lpg, 0.1, 4), camp: num(c.camp, 0, 300), toll_eur: num(c.toll_eur, 0, 2000), toll_note: tx(c.toll_note, 160) };
     r.cost = C;
     const sv = current?.saved || current?.trip;
