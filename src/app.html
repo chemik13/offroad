@@ -3903,7 +3903,7 @@ function render(i, day = null) {
     const pp = placePopup(c, c.name, campSub(c));
     const html = `<div class="nightpin" style="--c:${DAYC[k % DAYC.length]}">${ico(c.hotel ? 'bed' : c.wild ? 'moon' : 'tent')}<b>לילה ${k + 1}</b><span></span></div>`;
     const m = L.marker([c.lat, c.lon], { icon: L.divIcon({ className: '', html, iconSize: null, iconAnchor: [14, 30] }), zIndexOffset: 1200 }).addTo(markLayer).bindPopup(pp.div, { maxWidth: 320, minWidth: 220 }).on('popupopen', pp.load);
-    const sp = m.getElement()?.querySelector('.nightpin span'); if (sp) sp.textContent = (c.name || '').replace(/^🌲\s*/, '').replace(/^לינת שטח:\s*/, '').slice(0, 26);
+    const sp = m.getElement()?.querySelector('.nightpin span'); if (sp) sp.textContent = latinName((c.name || '').replace(/^🌲\s*/, '').replace(/^לינת שטח:\s*/, '')).slice(0, 26);
   });
   for (const pt of r.pois.filter(x => x.supply)) {
     const html = `<div class="supplypin">${ico(pt.supply === 'fuel' ? 'fuel' : 'cart')}<b>${pt.supply === 'fuel' ? 'דלק' : 'הצטיידות'}</b></div>`;
