@@ -1,0 +1,31 @@
+# Monthly: Toyota dealers and workshops from OpenStreetMap (worldwide) as one file on the orphan branch "data"
+# (toyota.json, served by raw.githubusercontent.com). The app shows the ones near a route.
+name: Build Toyota garages list
+on:
+  schedule:
+    - cron: "23 4 3 * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["tools/build_garages.py", ".github/workflows/garages.yml"]
+permissions:
+  contents: write
+concurrency: { group: garages, cancel-in-progress: true }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: mkdir out && python tools/build_garages.py out/toyota.json
+      - name: Publish to branch "data" (history not kept)
+        run: |
+          cd out
+          git init -q -b data
+          git config user.name "tiles-bot"
+          git config user.email "tiles-bot@users.noreply.github.com"
+          git add -A
+          git commit -qm "Toyota garages $(date -u +%Y-%m-%d)"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" data

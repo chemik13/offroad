@@ -354,6 +354,12 @@ ul.pois li{margin-bottom:8px}
 .elevax{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
 .safeic{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font:700 11px var(--body);color:#fff;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.35)}
 .safeic.fuel{background:#333}.safeic.water{background:#1f6fd6}
+.safeic.gar{background:#eb0a1e;width:24px;height:24px}.safeic.gar .ico{width:14px;height:14px}
+.garctl a.off{opacity:.45}.garctl a .ico{width:18px;height:18px;margin:0;vertical-align:-4px;stroke:#eb0a1e}
+.garhead{display:flex;align-items:center;gap:8px;cursor:pointer}.garhead input{width:18px;height:18px;margin:0;accent-color:#eb0a1e}
+.garlist{padding:0 12px 10px;font-size:13px;line-height:1.5}.garitem{padding:8px 0;border-top:1px solid var(--line)}.garitem b{font-size:14px}
+.garitem small{color:var(--muted)}.garitem .garlinks{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:3px}.garitem a{color:var(--accent,#0a58ca)}
+.garpop{font:13px/1.5 var(--body);min-width:190px}.garpop a{display:inline-block;margin-inline-end:10px}
 .safelist{padding:2px 12px 10px;font-size:13px;line-height:1.6;color:var(--ink2,#444)}
 .steepic{background:#fff;border:1.5px solid #d23a2a;color:#d23a2a;border-radius:4px;font:700 10px var(--body);padding:0 4px;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.25)}
 .daychips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-top:8px}
@@ -533,6 +539,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
       <div id="dayPlan"></div>
       <div id="stopsBox"></div>
       <div id="safe"></div>
+      <div id="garages"></div>
       <div id="elev"></div>
       <div id="wx"></div>
       <div id="poiList" style="margin-top:6px"></div>
@@ -635,7 +642,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.105 · 14.11.2026 12:39</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.107 · 15.11.2026 10:26</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2285,7 +2292,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.105 · 14.11.2026 12:39']],
+    ['גרסת האפליקציה', async () => ['ok', '1.107 · 15.11.2026 10:26']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -3581,6 +3588,66 @@ function renderSafety(r, dv) {
     <div class="safelist">${ico('fuel')}${fuelTxt}<br>${ico('water')}${waterTxt}</div></div>`;
 }
 
+// ---------- Toyota dealers and workshops near the route (OpenStreetMap, built monthly into one file) ----------
+const GARAGES_URL = 'https://raw.githubusercontent.com/chemik13/offroad/data/toyota.json';
+const GAR_NEAR = 30000;
+let garLayer = null, garAll = null, garTok = 0, garLast = null;
+const garOn = () => store.get('garages') !== '0';
+function garagesAll() {
+  if (!garAll) garAll = fetch(GARAGES_URL).then(x => x.ok ? x.json() : Promise.reject()).then(j => j.items).catch(() => { garAll = null; return null; });
+  return garAll;
+}
+// the ones within GAR_NEAR of the way, in the order the route passes them
+function garagesNear(items, coords, D, off = 0) {
+  const smp = []; let cum = 0, next = 0;
+  for (let i = 0; i < coords.length; i++) {
+    if (i) cum += hav(coords[i - 1][0], coords[i - 1][1], coords[i][0], coords[i][1]);
+    if (cum >= next || i === coords.length - 1) { smp.push([coords[i][0], coords[i][1], cum, i + off]); next = cum + 1500; }
+  }
+  const cells = new Map(), key = (a, b) => a * 1000 + b;
+  for (const q of smp) { const a = Math.floor(q[0] * 2), b = Math.floor(q[1] * 2); for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) { const k = key(a + x, b + y); let l = cells.get(k); if (!l) cells.set(k, l = []); l.push(q); } }
+  const out = [];
+  for (const [la, lo, t] of items) {
+    const l = cells.get(key(Math.floor(la * 2), Math.floor(lo * 2))); if (!l) continue;
+    let bd = Infinity, at = null; for (const q of l) { const d = hav(la, lo, q[0], q[1]); if (d < bd) { bd = d; at = q; } }
+    if (bd > GAR_NEAR) continue;
+    const day = D ? D.findIndex(d => at[3] <= d.to) + 1 || D.length : 0;
+    out.push({ ...t, lat: la, lon: lo, off: bd, km: at[2] / 1000, day });
+  }
+  return out.sort((a, b) => a.km - b.km || a.off - b.off);
+}
+const gEsc = t => String(t || '').replace(/[<&>"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+function garageHtml(g, multi) {
+  const ll = `${g.lat},${g.lon}`, web = g.website && /^https?:\/\//i.test(g.website) ? g.website : g.website ? 'https://' + g.website : '';
+  const where = [g.addr, g.city].filter(Boolean).join(', ');
+  const links = [g.phone && `<a href="tel:${gEsc(g.phone.split(/[;,]/)[0].replace(/[^+\d]/g, ''))}" dir="ltr">${gEsc(g.phone.split(';')[0])}</a>`,
+    web && `<a href="${gEsc(web)}" target="_blank" rel="noopener">אתר</a>`, g.email && `<a href="mailto:${gEsc(g.email)}">מייל</a>`,
+    `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(g.name)}%20${ll}" target="_blank" rel="noopener">Google Maps</a>`,
+    `<a href="https://waze.com/ul?ll=${ll}&navigate=yes" target="_blank" rel="noopener">Waze</a>`].filter(Boolean).join('');
+  return `<b>${gEsc(g.name)}</b> <small>${g.kind === 'repair' ? 'מוסך' : 'סוכנות'}</small><br>` +
+    `<small>${g.off < 1000 ? 'על המסלול' : (g.off / 1000).toFixed(0) + ' ק"מ מהמסלול'}, ליד ק"מ ${g.km.toFixed(0)}${multi && g.day ? ` (יום ${g.day})` : ''}</small>` +
+    (where ? `<br>${gEsc(where)}` : '') + (g.hours ? `<br><small dir="ltr">${gEsc(g.hours)}</small>` : '') + `<div class="garlinks">${links}</div>`;
+}
+function setGarages(on) { store.set('garages', on ? '1' : '0'); if (garLast) renderGarages(...garLast); syncGarCtl(); }
+function syncGarCtl() { const a = document.querySelector('.garctl a'); if (a) a.classList.toggle('off', !garOn()); }
+async function renderGarages(r, dv, D) {
+  garLast = [r, dv, D]; const tok = ++garTok, box = $('garages');
+  if (garLayer) { garLayer.remove(); garLayer = null; }
+  const head = n => `<div class="wx"><h3><label class="garhead"><input type="checkbox" id="garChk" ${garOn() ? 'checked' : ''}>מוסכי טויוטה ליד המסלול${n != null ? ` (${n})` : ''}</label><small>לפי OSM</small></h3>`;
+  const wire = () => { const c = $('garChk'); if (c) c.onchange = () => setGarages(c.checked); };
+  if (!r?.coords?.length) { box.innerHTML = ''; return; }
+  if (!garOn()) { box.innerHTML = head(null) + '</div>'; wire(); return; }
+  const items = await garagesAll(); if (tok !== garTok) return;
+  if (!items) { box.innerHTML = head(null) + '<div class="garlist"><small>רשימת המוסכים לא נטענה. נסו שוב מאוחר יותר.</small></div></div>'; wire(); return; }
+  const coords = dv ? r.coords.slice(dv.from, dv.to + 1) : r.coords;
+  const near = garagesNear(items, coords, dv ? null : D, 0), multi = !dv && D && D.length > 1;
+  garLayer = L.layerGroup().addTo(map);
+  const icon = L.divIcon({ className: '', html: `<div class="safeic gar">${ico('wrench')}</div>`, iconSize: [24, 24], iconAnchor: [12, 12] });
+  for (const g of near) L.marker([g.lat, g.lon], { icon }).addTo(garLayer).bindPopup(`<div class="garpop">${garageHtml(g, multi)}</div>`);
+  const rows = near.map(g => `<div class="garitem">${garageHtml(g, multi)}</div>`).join('');
+  box.innerHTML = head(near.length) + `<div class="garlist">${near.length ? (near.length > 4 ? `<details><summary>הצגת הרשימה</summary>${rows}</details>` : rows) : `<small>אין מוסך או סוכנות טויוטה מסומנים עד ${GAR_NEAR / 1000} ק"מ מהמסלול.</small>`}<small>סוכנויות ומוסכים של טויוטה כפי שמופו ב-OpenStreetMap. הרשימה לא מלאה: התקשרו לוודא שמטפלים בלנדקרוזר ושיש חלקים.</small></div></div>`;
+  wire();
+}
 // ---------- field reports ----------
 const REPORT_KINDS = { closed: 'סגור / חסום', harder: 'קשה מהצפוי', easier: 'קל מהצפוי', missing: 'הדרך לא קיימת', note: 'הערה' };
 let reports = [];
@@ -3937,6 +4004,7 @@ const ICON = {
   tent: '<path d="M3 20h18M12 4 3.5 20M12 4l8.5 16M12 4v16m-3.5 0L12 13l3.5 7"/>',
   tree: '<path d="M12 3 6 11h3l-4 6h14l-4-6h3z"/><path d="M12 17v4"/>',
   download: '<path d="M12 4v11M7 10l5 5 5-5M5 19h14"/>',
+  wrench: '<path d="M14.5 6.5a4 4 0 0 0 5 5L11 20a2.1 2.1 0 0 1-3-3l8.5-8.5a4 4 0 0 0-2-2z"/><path d="M14.5 6.5 17 4a4 4 0 0 0-5 5"/>',
   cart: '<path d="M3 4h2.5l2.2 10.5h10.6L20.5 7H7"/><circle cx="9.5" cy="19" r="1.6"/><circle cx="17" cy="19" r="1.6"/>',
   ferry: '<path d="M3 15l1.6 4.2h14.8L21 15H3z"/><path d="M6 15V10h12v5M9 10V6h6v4M12 6V3.5"/><path d="M2.5 21.5c1.5 0 1.5-.8 3-.8s1.5.8 3 .8 1.5-.8 3-.8 1.5.8 3 .8 1.5-.8 3-.8 1.5.8 3 .8" opacity=".6"/>',
   moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
@@ -3954,6 +4022,15 @@ const ICON = {
   mountain: '<path d="M2.5 19.5 9 8l4 6.5 2.5-3.5 6 8.5z"/>',
 };
 const ico = (k, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON[k] || ''}</svg>`;
+// the map button for the Toyota garages (here: it needs the icons)
+{
+  const GarCtl = L.Control.extend({ options: { position: 'topleft' }, onAdd() {
+    const box = L.DomUtil.create('div', 'leaflet-bar garctl'); L.DomEvent.disableClickPropagation(box);
+    const a = L.DomUtil.create('a', garOn() ? '' : 'off', box); a.href = '#'; a.role = 'button'; a.title = 'מוסכי טויוטה: הצגה / הסתרה'; a.setAttribute('aria-label', a.title); a.innerHTML = ico('wrench');
+    L.DomEvent.on(a, 'click', e => { L.DomEvent.preventDefault(e); setGarages(!garOn()); });
+    return box; } });
+  new GarCtl().addTo(map);
+}
 // a place name with its kind drawn as an icon instead of the emoji kept in the data
 function nameKind(name, pt = {}) {
   const n = String(name || '');
@@ -4841,6 +4918,7 @@ function render(i, day = null) {
   renderWeather(r, { ...p, date: $('pDate').value || p.date }, D);
   renderChecks(r, { ...p, date: $('pDate').value || p.date }, D);
   renderSafety(r, dv, w);
+  renderGarages(r, dv, D);
   renderElevation(dv ? { ...r, coords: r.coords.slice(dv.from, dv.to + 1) } : r);
   $('dayPlan').innerHTML = '';
   $('gmapsMain').href = D ? gmapsUrl(r.coords, D.slice(0, -1).map(d => r.coords[d.to])) : gmapsUrl(r.coords);
@@ -5138,7 +5216,7 @@ async function thCommit(save) {
 }
 $('thInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); thCommit(true); } else if (e.key === 'Escape') thCommit(false); });
 $('thInput').addEventListener('blur', () => thCommit(true));
-$('verChip').textContent = 'v' + '1.105 · 14.11.2026 12:39'.split(' ')[0]; // so everyone can tell which version they are on
+$('verChip').textContent = 'v' + '1.107 · 15.11.2026 10:26'.split(' ')[0]; // so everyone can tell which version they are on
 // naming: type a name and press Enter (or just leave the field); it is saved for every version of the trip
 $('routeName').addEventListener('focus', e => setTimeout(() => e.target.select(), 0));
 $('routeName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
