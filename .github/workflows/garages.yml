@@ -1,9 +1,11 @@
-# Monthly: Toyota dealers and workshops from OpenStreetMap (worldwide) as one file on the orphan branch "data"
+# Toyota dealers and workshops from OpenStreetMap (worldwide) as one file on the orphan branch "data"
 # (toyota.json, served by raw.githubusercontent.com). The app shows the ones near a route.
+# Runs nightly but asks only for regions whose answer is missing or older than 25 days (kept in parts/ on the same branch),
+# so a build the busy public servers cut short carries on the next night instead of starting over.
 name: Build Toyota garages list
 on:
   schedule:
-    - cron: "23 4 3 * *"
+    - cron: "23 4 * * *"
   workflow_dispatch:
   push:
     branches: [main]
@@ -19,8 +21,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: mkdir out && python tools/build_garages.py out/toyota.json
+      - name: Last build (the list and the per-region parts)
+        run: |
+          git clone -q --depth 1 -b data "https://github.com/${{ github.repository }}.git" out || mkdir out
+          rm -rf out/.git
+      - id: build
+        run: python tools/build_garages.py out
       - name: Publish to branch "data" (history not kept)
+        if: always() && steps.build.outputs.changed == '1'
         run: |
           cd out
           git init -q -b data
