@@ -6,22 +6,24 @@ import json, sys, time, urllib.parse, urllib.request, datetime
 
 MIRRORS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://overpass.kumi.systems/api/interpreter"]
 # (south, west, north, east): Europe in four, then the rest of the world
-BOXES = [(34, -25, 47, 10), (34, 10, 47, 45), (47, -25, 72, 10), (47, 10, 72, 45),
-         (-36, -25, 34, 65), (34, 45, 72, 180), (-12, 65, 34, 180), (-60, 65, -12, 180), (-60, -180, 15, -25), (15, -180, 72, -25)]
+# smaller boxes where shops are dense (Europe, east Asia, north America): a heavy query times out on a busy server
+def grid(s, w, n, e, rows, cols): return [(s + (n - s) * i / rows, w + (e - w) * j / cols, s + (n - s) * (i + 1) / rows, w + (e - w) * (j + 1) / cols) for i in range(rows) for j in range(cols)]
+BOXES = (grid(34, -25, 72, 45, 3, 4) + [(-36, -25, 34, 65)] + grid(34, 45, 72, 180, 1, 2) + grid(-12, 65, 34, 180, 2, 2)
+         + [(-60, 65, -12, 180), (-60, -180, 15, -25)] + grid(15, -180, 72, -25, 2, 3))
 SKIP = ("material handling", "forklift", "gabelstapler", "chariot", "carretilla", "rent a car", "rental", "tsusho")
 
 def ask(q):
     last = None
-    for attempt in range(6):
+    for attempt in range(12):
         url = MIRRORS[attempt % len(MIRRORS)]
         try:
             req = urllib.request.Request(url, data=urllib.parse.urlencode({"data": q}).encode(), headers={"User-Agent": "offroad-planner garages build (github.com/chemik13/offroad)"})
-            with urllib.request.urlopen(req, timeout=400) as r:
+            with urllib.request.urlopen(req, timeout=240) as r:
                 j = json.loads(r.read().decode())
             if "elements" in j and not (j.get("remark") or "").startswith("runtime error"): return j["elements"]
             last = j.get("remark")
         except Exception as e: last = e
-        print(f"  retry ({last})", file=sys.stderr); time.sleep(20 + 20 * attempt)
+        print(f"  retry ({last})", file=sys.stderr); time.sleep(min(180, 20 + 20 * attempt))
     raise SystemExit(f"Overpass failed: {last}")
 
 def first(t, *keys):
@@ -48,7 +50,7 @@ def main(out):
     seen, items = set(), []
     for s, w, n, e in BOXES:
         b = f"({s},{w},{n},{e})"
-        q = ('[out:json][timeout:300];(' + "".join(f'nwr["shop"~"^(car|car_repair)$"]{f}{b};' for f in ('["brand"~"toyota",i]', '["name"~"toyota",i]', '["operator"~"toyota",i]', '["brand:wikidata"="Q53268"]')) + ');out center tags;')
+        q = ('[out:json][timeout:180];(' + "".join(f'nwr["shop"~"^(car|car_repair)$"]{f}{b};' for f in ('["brand"~"toyota",i]', '["name"~"toyota",i]', '["operator"~"toyota",i]', '["brand:wikidata"="Q53268"]')) + ');out center tags;')
         els = ask(q); kept = 0
         for el in els:
             key = (el["type"], el["id"])
