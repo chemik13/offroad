@@ -147,13 +147,13 @@ function openOn(hours, iso) {
 // Build graph from Overpass elements
 // the work is cut into steps so the page can stay alive while a big area is processed:
 // buildGraph() runs them all at once (tests, small areas); the app runs them in short slices
-function buildGraph(elements) { const g = buildGraphSteps(elements); let r; do r = g.next(); while (!r.done); return r.value; }
-function* buildGraphSteps(elements) {
+function buildGraph(elements, opt) { const g = buildGraphSteps(elements, opt); let r; do r = g.next(); while (!r.done); return r.value; }
+// opt.simplify (metres): shape points that are no junction and lie within that distance of the straight line are dropped;
+// an edge keeps its true driven length. Used for the big area graphs of long trips (3-5 times fewer nodes).
+function* buildGraphSteps(elements, opt = {}) {
   let tick = 0;
-  const idx = new Map();
-  const lat = [], lon = [];
-  const eA = [], eB = [], eLen = [], eD = [], eAsph = [], eMil = [], eAA = [], eJS = [], eUnk = [], eOne = [], eName = [], eMark = [];
-  const mil = [], res = [], eRes = [];
+  const tol = opt.simplify > 0 ? opt.simplify : 0;
+  const mil = [], res = [];
   const pois = [];
   const ways = [];
   for (const el of elements) {
@@ -191,41 +191,83 @@ function* buildGraphSteps(elements) {
       }
     }
   }
-  if (ways.length) {
-    let s = 90, n = -90, w = 180, ee = -180;
-    for (const wy of ways) for (const g of wy.geometry || []) { if (g.lat < s) s = g.lat; if (g.lat > n) n = g.lat; if (g.lon < w) w = g.lon; if (g.lon > ee) ee = g.lon; }
-    for (const [nm, la, lo, op] of KNOWN_CAMPS) {
-      if (la < s || la > n || lo < w || lo > ee) continue;
-      const dup = pois.find(p => p.type === 'nightcamp' && hav(p.lat, p.lon, la, lo) < 1200);
-      if (dup) { dup.auth = dup.auth || op; if (!/חניון/.test(dup.name)) dup.name = nm; }
-      else pois.push({ type: 'nightcamp', lat: la, lon: lo, name: nm, auth: op });
-    }
+  // the ways that can be driven, each with its points as one flat list (lat, lon, lat, lon…; NaN where a point is missing)
+  const W = [], WI = [], WF = []; let cap = 0, bs = 90, bn = -90, bw = 180, be = -180;
+  for (const w of ways) {
+    if ((++tick & 1023) === 0) yield;
+    const info = wayInfo(w.tags);
+    if (!info || !w.nodes || !(w.f || w.geometry)) continue;
+    let f = w.f;
+    if (!f) { const g = w.geometry; f = new Array(g.length * 2); for (let i = 0; i < g.length; i++) { f[2 * i] = g[i] ? g[i].lat : NaN; f[2 * i + 1] = g[i] ? g[i].lon : NaN; } }
+    const n = Math.min(w.nodes.length, f.length >> 1); if (n < 2) continue;
+    for (let i = 0; i < n; i++) { const la = f[2 * i], lo = f[2 * i + 1]; if (la < bs) bs = la; if (la > bn) bn = la; if (lo < bw) bw = lo; if (lo > be) be = lo; }
+    W.push(w); WI.push(info); WF.push(f); cap += n;
+  }
+  if (W.length) for (const [nm, la, lo, op] of KNOWN_CAMPS) {
+    if (la < bs || la > bn || lo < bw || lo > be) continue;
+    const dup = pois.find(p => p.type === 'nightcamp' && hav(p.lat, p.lon, la, lo) < 1200);
+    if (dup) { dup.auth = dup.auth || op; if (!/חניון/.test(dup.name)) dup.name = nm; }
+    else pois.push({ type: 'nightcamp', lat: la, lon: lo, name: nm, auth: op });
   }
   const inRes = (a, o) => { for (const m of res) if (a >= m.s && a <= m.n && o >= m.w && o <= m.e && ringHas(m, a, o)) return 1; return 0; };
   const inMil = (a, o) => { let k = 0; for (const m of mil) if (a >= m.s && a <= m.n && o >= m.w && o <= m.e && ringHas(m, a, o)) k = Math.max(k, m.kind); return k; };
-  const nid = (id, g) => {
-    let i = idx.get(id);
-    if (i === undefined) { i = lat.length; idx.set(id, i); lat.push(g.lat); lon.push(g.lon); }
-    return i;
-  };
-  for (const w of ways) {
+  // node id -> index: an open-addressing table over typed arrays (several times faster than a Map for millions of nodes)
+  let hcap = 16; while (hcap < cap * 2) hcap <<= 1;
+  const mask = hcap - 1, hk = new Float64Array(hcap).fill(-1), hv = new Int32Array(hcap).fill(-1), hc = tol ? new Uint8Array(hcap) : null;
+  const odd = new Map(); // ids that are not plain non-negative numbers (hand-made data)
+  const num = id => typeof id === 'number' && id >= 0 ? id : (odd.has(id) ? odd.get(id) : (odd.set(id, 9e15 - odd.size), odd.get(id)));
+  const slot = id => { let h = (Math.imul(id | 0, 0x9E3779B1) ^ Math.imul((id / 4294967296) | 0, 0x85EBCA6B)) & mask; while (hk[h] !== -1 && hk[h] !== id) h = (h + 1) & mask; return h; };
+  if (tol) for (let q = 0; q < W.length; q++) { // how many ways use each node: a node of two ways is a junction and always stays
+    if ((++tick & 1023) === 0) yield;
+    const nodes = W[q].nodes, f = WF[q], n = Math.min(nodes.length, f.length >> 1);
+    for (let i = 0; i < n; i++) { if (f[2 * i] !== f[2 * i]) continue; const h = slot(num(nodes[i])); hk[h] = num(nodes[i]); if (hc[h] < 3) hc[h] += (i === 0 || i === n - 1) ? 2 : 1; }
+  }
+  const lat = new Float64Array(cap), lon = new Float64Array(cap); let N = 0;
+  const eA = new Int32Array(cap), eB = new Int32Array(cap), eLen = new Float64Array(cap);
+  const eD = new Uint8Array(cap), eAsph = new Uint8Array(cap), eMil = new Uint8Array(cap), eAA = new Uint8Array(cap), eJS = new Uint8Array(cap), eUnk = new Uint8Array(cap), eRes = new Uint8Array(cap), eOne = new Uint8Array(cap), eMark = new Uint8Array(cap);
+  let E = 0;
+  const nid = (id, la, lo) => { id = num(id); const h = slot(id); let i = hv[h]; if (i < 0) { i = N++; hk[h] = id; hv[h] = i; lat[i] = la; lon[i] = lo; } return i; };
+  let keep = new Uint8Array(256); const stack = [];
+  const il = bn > 29.4 && bs < 33.4 && be > 34.2 && bw < 35.95; // only there do Area A and Judea & Samaria matter
+  for (let q = 0; q < W.length; q++) {
     if ((++tick & 511) === 0) yield;
-    const info = wayInfo(w.tags);
-    if (!info || !w.geometry || !w.nodes) continue;
-    const one = !info.asph ? false : (w.tags.oneway === 'yes');
-    const name = w.tags['name:he'] || w.tags.name || w.tags.ref || '';
-    const g = w.geometry;
-    const mid = g[g.length >> 1];
-    const m = mil.length ? inMil(mid.lat, mid.lon) : 0;
-    const rv = res.length ? inRes(mid.lat, mid.lon) : 0;
-    for (let i = 0; i + 1 < w.nodes.length; i++) {
-      if (!g[i] || !g[i + 1]) continue;
-      const a = nid(w.nodes[i], g[i]), b = nid(w.nodes[i + 1], g[i + 1]);
-      eA.push(a); eB.push(b); eLen.push(hav(g[i].lat, g[i].lon, g[i + 1].lat, g[i + 1].lon));
-      eD.push(info.d); eAsph.push(info.asph ? 1 : 0); eMil.push(m); { const ma = (g[i].lat + g[i + 1].lat) / 2, mo = (g[i].lon + g[i + 1].lon) / 2; eAA.push(inAreaA(ma, mo) ? 1 : 0); eJS.push(ma > 31.3 && ma < 32.6 && mo > 34.85 && pointInRing(ma, mo, JS_RING) ? 1 : 0); } eUnk.push(info.unk ? 1 : 0); eRes.push(rv); eOne.push(one ? 1 : 0); eName.push(name); eMark.push(!info.asph && w.tags.mark ? 1 : 0);
+    const w = W[q], info = WI[q], f = WF[q], nodes = w.nodes, n = Math.min(nodes.length, f.length >> 1);
+    const one = !info.asph ? 0 : (w.tags.oneway === 'yes' ? 1 : 0);
+    const mi = (n >> 1), m = mil.length ? inMil(f[2 * mi], f[2 * mi + 1]) : 0, rv = res.length ? inRes(f[2 * mi], f[2 * mi + 1]) : 0; // as before: by the way's middle point
+    const d = info.d, asph = info.asph ? 1 : 0, unk = info.unk ? 1 : 0, mark = !info.asph && w.tags.mark ? 1 : 0;
+    if (tol) { // which points stay: ends, junctions, and what the line needs to keep its shape
+      if (keep.length < n) keep = new Uint8Array(n * 2);
+      const kx = Math.cos(f[0] * Math.PI / 180) * 111320, ky = 110540, t2 = tol * tol;
+      let a = -1;
+      for (let i = 0; i < n; i++) {
+        const ok = f[2 * i] === f[2 * i];
+        const anchor = ok && (i === 0 || i === n - 1 || f[2 * (i - 1)] !== f[2 * (i - 1)] || f[2 * (i + 1)] !== f[2 * (i + 1)] || hc[slot(num(nodes[i]))] > 1);
+        keep[i] = anchor ? 1 : 0;
+        if (!ok) { a = -1; continue; }
+        if (!anchor) continue;
+        if (a >= 0 && i - a > 1) { stack.length = 0; stack.push(a, i);
+          while (stack.length) { const hi = stack.pop(), lo2 = stack.pop(); if (hi - lo2 < 2) continue;
+            const ax = f[2 * lo2 + 1] * kx, ay = f[2 * lo2] * ky, dx = f[2 * hi + 1] * kx - ax, dy = f[2 * hi] * ky - ay, L = dx * dx + dy * dy; let best = 0, bi = -1;
+            for (let j = lo2 + 1; j < hi; j++) { const px = f[2 * j + 1] * kx - ax, py = f[2 * j] * ky - ay; let dd; if (L === 0) dd = px * px + py * py; else { const t = Math.max(0, Math.min(1, (px * dx + py * dy) / L)), ex = px - t * dx, ey = py - t * dy; dd = ex * ex + ey * ey; } if (dd > best) { best = dd; bi = j; } }
+            if (best > t2) { keep[bi] = 1; stack.push(lo2, bi, bi, hi); } } }
+        a = i;
+      }
+    }
+    let pa = -1, pi = -1, run = 0; // previous kept point (graph node, index in the way), and the metres driven since it
+    for (let i = 0; i < n; i++) {
+      const la = f[2 * i], lo = f[2 * i + 1];
+      if (la !== la) { pa = -1; pi = -1; run = 0; continue; }
+      if (pi >= 0 && i > 0 && f[2 * (i - 1)] === f[2 * (i - 1)]) run += hav(f[2 * (i - 1)], f[2 * i - 1], la, lo);
+      if (tol && !keep[i]) continue;
+      const b = nid(nodes[i], la, lo);
+      if (pa >= 0) {
+        eA[E] = pa; eB[E] = b; eLen[E] = run; eD[E] = d; eAsph[E] = asph; eMil[E] = m; eUnk[E] = unk; eRes[E] = rv; eOne[E] = one; eMark[E] = mark;
+        if (il) { const ma = (f[2 * pi] + la) / 2, mo = (f[2 * pi + 1] + lo) / 2; eAA[E] = inAreaA(ma, mo) ? 1 : 0; eJS[E] = ma > 31.3 && ma < 32.6 && mo > 34.85 && pointInRing(ma, mo, JS_RING) ? 1 : 0; }
+        E++;
+      }
+      pa = b; pi = i; run = 0;
     }
   }
-  const N = lat.length, E = eA.length;
   const deg = new Int32Array(N + 1);
   for (let e = 0; e < E; e++) { deg[eA[e]]++; deg[eB[e]]++; }
   const start = new Int32Array(N + 1);
@@ -234,10 +276,10 @@ function* buildGraphSteps(elements) {
   const adj = new Int32Array(start[N]);
   for (let e = 0; e < E; e++) { adj[fill[eA[e]]++] = e; adj[fill[eB[e]]++] = e; }
   return {
-    N, E, lat: Float64Array.from(lat), lon: Float64Array.from(lon), start, adj,
-    eA: Int32Array.from(eA), eB: Int32Array.from(eB), eLen: Float64Array.from(eLen),
-    eD: Uint8Array.from(eD), eAsph: Uint8Array.from(eAsph), eMil: Uint8Array.from(eMil), eAA: Uint8Array.from(eAA), eJS: Uint8Array.from(eJS), eRes: Uint8Array.from(eRes), res,
-    eUnk: Uint8Array.from(eUnk), eOne: Uint8Array.from(eOne), eMark: Uint8Array.from(eMark), eName, pois, mil,
+    N, E, lat: lat.slice(0, N), lon: lon.slice(0, N), start, adj,
+    eA: eA.slice(0, E), eB: eB.slice(0, E), eLen: eLen.slice(0, E),
+    eD: eD.slice(0, E), eAsph: eAsph.slice(0, E), eMil: eMil.slice(0, E), eAA: eAA.slice(0, E), eJS: eJS.slice(0, E), eRes: eRes.slice(0, E), res,
+    eUnk: eUnk.slice(0, E), eOne: eOne.slice(0, E), eMark: eMark.slice(0, E), pois, mil,
   };
 }
 
@@ -940,11 +982,13 @@ function splitToTiles(elements, keys) {
   }
   return out;
 }
+// a way out of a tile: its points stay one flat list (f), which is what buildGraph reads; geometry is made only if asked for
+class TileWay { constructor(id, nodes, f, tags) { this.type = 'way'; this.id = id; this.nodes = nodes; this.f = f; this.tags = tags; } get geometry() { return unflat(this.f); } }
 // merge compact tiles back into Overpass-shaped elements (deduped) for buildGraph
 function tilesToElements(tiles) {
   const seenW = new Set(), seenP = new Set(), seenM = new Set(), els = [];
   for (const tl of tiles) {
-    for (const [id, nodes, f, tags] of tl.w) { if (seenW.has(id)) continue; seenW.add(id); els.push({ type: 'way', id, nodes, geometry: unflat(f), tags }); }
+    for (const [id, nodes, f, tags] of tl.w) { if (seenW.has(id)) continue; seenW.add(id); els.push(new TileWay(id, nodes, f, tags)); }
     for (const [ty, id, lat, lon, tags] of tl.p) { const k = ty + id; if (seenP.has(k)) continue; seenP.add(k); els.push(ty === 'n' ? { type: 'node', id, lat, lon, tags } : { type: ty === 'w' ? 'way' : 'relation', id, center: { lat, lon }, tags }); }
     for (const [id, rings, tags] of tl.m) { if (seenM.has(id)) continue; seenM.add(id); els.push({ type: 'relation', id, members: rings.map(r => ({ role: 'outer', geometry: unflat(r) })), tags }); }
   }

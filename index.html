@@ -61,6 +61,16 @@ header button{pointer-events:auto;margin-inline-start:auto}
   box-shadow:0 -4px 20px rgba(20,30,25,.14);border-top:1px solid var(--line);max-height:72vh;max-height:72dvh;display:flex;flex-direction:column;
   padding:6px max(14px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 12px) max(14px,env(safe-area-inset-left,0px))}
 #sheet.min #body{display:none}
+#sheet{transition:transform .22s ease}
+body.drawer-off #sheet{transform:translateY(110%);pointer-events:none}
+body.drawer-off header{display:none}
+body.drawer-off .leaflet-top{top:calc(env(safe-area-inset-top,0px) + 10px)}
+body.drawer-off .leaflet-top.leaflet-right,body.drawer-off .leaflet-bottom.leaflet-right{right:0!important}
+@media (min-width:760px),(orientation:landscape) and (max-height:540px){body.drawer-off #sheet{transform:translateX(115%)}}
+.drawerback{position:fixed;z-index:7;inset-inline:0;margin-inline:auto;width:max-content;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);background:var(--ink);color:#fff;border:0;border-radius:999px;padding:11px 18px;font:600 15px var(--body);box-shadow:0 4px 16px rgba(20,30,25,.3);cursor:pointer;display:none;align-items:center;gap:8px}
+.drawerback .ico{width:18px;height:18px}
+body.drawer-off .drawerback{display:inline-flex}
+.fullctl a .ico{width:18px;height:18px;margin:0;vertical-align:-4px}
 #sheet.has-results{max-height:52vh;max-height:52dvh}
 #sheet.full{max-height:calc(100vh - 70px);max-height:calc(100dvh - 70px - env(safe-area-inset-top,0px))}
 .fly{position:fixed;inset:0;z-index:60;background:#0b0f0d}
@@ -119,7 +129,12 @@ a.fly3d{text-decoration:none}
 .pc-steps li.ok::before{background:var(--accent);border-color:var(--accent)}
 .pc-steps li small{color:var(--muted);font-weight:400}
 .pc-time{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
-#sheet.has-results .plancard{display:none}
+#sheet.has-results .plancard{position:sticky;top:0;z-index:4;box-shadow:0 6px 18px rgba(20,30,25,.14);border-color:var(--go);margin-bottom:8px}
+.pc-now{font-size:13px;color:var(--ink);background:var(--stone);border-radius:8px;padding:6px 9px;line-height:1.35}
+.pc-now:empty{display:none}
+.pc-head{font:600 14px var(--body);display:flex;gap:8px;align-items:baseline;justify-content:space-between}
+.pc-head:empty{display:none}
+.pc-head q{quotes:none;font-weight:400;color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #results.working{opacity:.45;pointer-events:none;transition:opacity .2s}
 #sheet:not(.has-results) #composer,#sheet:not(.has-results) #params{display:none}
 #compose{display:flex;flex-direction:column;gap:12px}
@@ -131,6 +146,8 @@ a.fly3d{text-decoration:none}
 .seg button[aria-checked=true]{background:#fff;box-shadow:0 1px 3px rgba(20,30,25,.18);font-weight:600}
 .quick{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
 .qrow{display:grid;grid-template-columns:42px 1fr;align-items:center;gap:8px}
+#hpdRow,#lodgeRow{grid-template-columns:1fr}
+#hpdRow .vlab,#lodgeRow .vlab{margin-bottom:-4px}
 #tripHead{display:flex;align-items:flex-start;gap:10px}
 #tripHead[hidden]{display:none}
 #tripHead .th{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
@@ -266,6 +283,13 @@ ul.pois li{margin-bottom:8px}
 .fly3d .ico{margin-inline-end:6px}
 .dsched{padding:2px 12px 8px;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
 .dsched.late{color:#b4401a;font-weight:600}
+.dcross{padding:0 12px 8px;font-size:12.5px;color:#86198f;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.dcross .ico{width:15px;height:15px;flex:none}
+.dcross small{color:var(--muted)}
+.borderpin{display:inline-flex;align-items:center;gap:4px;padding:2px 8px 2px 6px;border-radius:6px;background:#86198f;color:#fff;font:700 12px var(--body);white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.35);border:2px solid #fff;direction:ltr}
+.borderpin .ico{width:14px;height:14px;stroke:#fff}
+.rarrow{width:16px;height:16px;display:block;pointer-events:none}
+.rarrow svg{width:16px;height:16px;display:block;filter:drop-shadow(0 0 1.5px rgba(0,0,0,.7))}
 .hardlinks{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:8px 0 2px;font-size:13px}
 .hardlinks .hl-lab{color:var(--muted)}
 .flybtn .ico{width:20px;height:20px;margin:0}
@@ -493,14 +517,6 @@ body{font-family:var(--body);font-size:16px}
 #sheet.dragging{transition:none!important}
 @media (max-width:759px){.grip::after{inset:-16px -80px}}
 textarea,#composer input{font-family:var(--body);font-size:17px}
-.recent{display:flex;flex-direction:column;gap:8px}
-.recent[hidden]{display:none}
-.rtitle{font:600 14px var(--body);color:var(--muted)}
-.rlist{display:flex;flex-direction:column;gap:6px}
-.rlist button{display:flex;justify-content:space-between;gap:10px;align-items:center;text-align:start;border:1px solid var(--line);background:#fff;border-radius:12px;padding:10px 12px;font:inherit;color:var(--ink);cursor:pointer}
-.rlist button:hover{border-color:var(--accent)}
-.rlist b{font-weight:600;font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rlist small{color:var(--muted);font-size:12px;white-space:nowrap}
 /* phones: a little more room and bigger targets */
 @media (max-width:759px){
   #sheet{padding-inline:16px}
@@ -533,6 +549,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
   <div class="hbtns"><button class="textbtn" id="libBtn">שמורים</button><span class="verchip" id="verChip" title="גרסת האפליקציה"></span><button class="iconbtn" id="settingsBtn" title="הגדרות" aria-label="הגדרות"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button></div>
 </header>
 
+<button class="drawerback" id="drawerBack" type="button"></button>
 <section id="sheet">
   <button class="grip" id="grip" aria-label="כווץ / הרחב"></button>
   <div id="body">
@@ -543,7 +560,6 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
       <div style="display:flex;flex-direction:column;gap:6px"><button class="go" id="goBtn">בנה מסלול</button><button class="ghost" id="talkBtn" title="מצב שיחה: מדברים והאפליקציה עונה בקול" style="padding:7px 8px;font-size:13px">שיחה</button></div>
     </div>
       <div class="examples" id="examples"></div>
-      <div id="recent" class="recent" hidden><div class="rtitle">הטיולים האחרונים של החבורה</div><div class="rlist"></div></div>
     </div>
     <div id="tripHead" hidden>
       <div class="th"><div class="throw"><b id="thTitle"></b><button type="button" class="thedit" id="thEdit" title="שינוי שם הטיול" aria-label="שינוי שם הטיול"></button></div><input type="text" id="thInput" class="thinput" hidden enterkeyhint="done" aria-label="שם הטיול"><small id="thSub"></small></div>
@@ -552,13 +568,15 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     </div>
     <div id="verList" class="verlist" hidden></div>
     <div id="status" role="status"></div>
-    <div id="planCard" class="plancard" hidden><div class="pc-sum"></div><ol class="pc-steps"></ol><div class="pc-time"></div></div>
+    <div id="planCard" class="plancard" hidden><div class="pc-head"></div><div class="pc-sum"></div><ol class="pc-steps"></ol><div class="pc-now" aria-live="polite"></div><div class="pc-time"></div></div>
     <div id="understood" class="understood" hidden></div>
 
 
     <div id="results" hidden>
       <div class="quick">
         <div class="qrow"><span class="vlab">קושי</span><div class="seg" id="diffSeg" role="radiogroup" aria-label="קושי"></div></div>
+        <div class="qrow" id="hpdRow" hidden><span class="vlab">שעות נהיגה ביום</span><div class="seg" id="hpdSeg" role="radiogroup" aria-label="שעות נהיגה ביום"></div></div>
+        <div class="qrow" id="lodgeRow" hidden><span class="vlab">לינה</span><div class="seg" id="lodgeSeg" role="radiogroup" aria-label="לינה"></div></div>
       </div>
       <div class="tabs" id="tabs"></div>
       <div class="daychips" id="dayChips" hidden></div>
@@ -677,7 +695,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.118 · 15.11.2026 14:52</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.123 · 16.11.2026 00:47</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -866,13 +884,13 @@ function openOn(hours, iso) {
 // Build graph from Overpass elements
 // the work is cut into steps so the page can stay alive while a big area is processed:
 // buildGraph() runs them all at once (tests, small areas); the app runs them in short slices
-function buildGraph(elements) { const g = buildGraphSteps(elements); let r; do r = g.next(); while (!r.done); return r.value; }
-function* buildGraphSteps(elements) {
+function buildGraph(elements, opt) { const g = buildGraphSteps(elements, opt); let r; do r = g.next(); while (!r.done); return r.value; }
+// opt.simplify (metres): shape points that are no junction and lie within that distance of the straight line are dropped;
+// an edge keeps its true driven length. Used for the big area graphs of long trips (3-5 times fewer nodes).
+function* buildGraphSteps(elements, opt = {}) {
   let tick = 0;
-  const idx = new Map();
-  const lat = [], lon = [];
-  const eA = [], eB = [], eLen = [], eD = [], eAsph = [], eMil = [], eAA = [], eJS = [], eUnk = [], eOne = [], eName = [], eMark = [];
-  const mil = [], res = [], eRes = [];
+  const tol = opt.simplify > 0 ? opt.simplify : 0;
+  const mil = [], res = [];
   const pois = [];
   const ways = [];
   for (const el of elements) {
@@ -910,41 +928,83 @@ function* buildGraphSteps(elements) {
       }
     }
   }
-  if (ways.length) {
-    let s = 90, n = -90, w = 180, ee = -180;
-    for (const wy of ways) for (const g of wy.geometry || []) { if (g.lat < s) s = g.lat; if (g.lat > n) n = g.lat; if (g.lon < w) w = g.lon; if (g.lon > ee) ee = g.lon; }
-    for (const [nm, la, lo, op] of KNOWN_CAMPS) {
-      if (la < s || la > n || lo < w || lo > ee) continue;
-      const dup = pois.find(p => p.type === 'nightcamp' && hav(p.lat, p.lon, la, lo) < 1200);
-      if (dup) { dup.auth = dup.auth || op; if (!/חניון/.test(dup.name)) dup.name = nm; }
-      else pois.push({ type: 'nightcamp', lat: la, lon: lo, name: nm, auth: op });
-    }
+  // the ways that can be driven, each with its points as one flat list (lat, lon, lat, lon…; NaN where a point is missing)
+  const W = [], WI = [], WF = []; let cap = 0, bs = 90, bn = -90, bw = 180, be = -180;
+  for (const w of ways) {
+    if ((++tick & 1023) === 0) yield;
+    const info = wayInfo(w.tags);
+    if (!info || !w.nodes || !(w.f || w.geometry)) continue;
+    let f = w.f;
+    if (!f) { const g = w.geometry; f = new Array(g.length * 2); for (let i = 0; i < g.length; i++) { f[2 * i] = g[i] ? g[i].lat : NaN; f[2 * i + 1] = g[i] ? g[i].lon : NaN; } }
+    const n = Math.min(w.nodes.length, f.length >> 1); if (n < 2) continue;
+    for (let i = 0; i < n; i++) { const la = f[2 * i], lo = f[2 * i + 1]; if (la < bs) bs = la; if (la > bn) bn = la; if (lo < bw) bw = lo; if (lo > be) be = lo; }
+    W.push(w); WI.push(info); WF.push(f); cap += n;
+  }
+  if (W.length) for (const [nm, la, lo, op] of KNOWN_CAMPS) {
+    if (la < bs || la > bn || lo < bw || lo > be) continue;
+    const dup = pois.find(p => p.type === 'nightcamp' && hav(p.lat, p.lon, la, lo) < 1200);
+    if (dup) { dup.auth = dup.auth || op; if (!/חניון/.test(dup.name)) dup.name = nm; }
+    else pois.push({ type: 'nightcamp', lat: la, lon: lo, name: nm, auth: op });
   }
   const inRes = (a, o) => { for (const m of res) if (a >= m.s && a <= m.n && o >= m.w && o <= m.e && ringHas(m, a, o)) return 1; return 0; };
   const inMil = (a, o) => { let k = 0; for (const m of mil) if (a >= m.s && a <= m.n && o >= m.w && o <= m.e && ringHas(m, a, o)) k = Math.max(k, m.kind); return k; };
-  const nid = (id, g) => {
-    let i = idx.get(id);
-    if (i === undefined) { i = lat.length; idx.set(id, i); lat.push(g.lat); lon.push(g.lon); }
-    return i;
-  };
-  for (const w of ways) {
+  // node id -> index: an open-addressing table over typed arrays (several times faster than a Map for millions of nodes)
+  let hcap = 16; while (hcap < cap * 2) hcap <<= 1;
+  const mask = hcap - 1, hk = new Float64Array(hcap).fill(-1), hv = new Int32Array(hcap).fill(-1), hc = tol ? new Uint8Array(hcap) : null;
+  const odd = new Map(); // ids that are not plain non-negative numbers (hand-made data)
+  const num = id => typeof id === 'number' && id >= 0 ? id : (odd.has(id) ? odd.get(id) : (odd.set(id, 9e15 - odd.size), odd.get(id)));
+  const slot = id => { let h = (Math.imul(id | 0, 0x9E3779B1) ^ Math.imul((id / 4294967296) | 0, 0x85EBCA6B)) & mask; while (hk[h] !== -1 && hk[h] !== id) h = (h + 1) & mask; return h; };
+  if (tol) for (let q = 0; q < W.length; q++) { // how many ways use each node: a node of two ways is a junction and always stays
+    if ((++tick & 1023) === 0) yield;
+    const nodes = W[q].nodes, f = WF[q], n = Math.min(nodes.length, f.length >> 1);
+    for (let i = 0; i < n; i++) { if (f[2 * i] !== f[2 * i]) continue; const h = slot(num(nodes[i])); hk[h] = num(nodes[i]); if (hc[h] < 3) hc[h] += (i === 0 || i === n - 1) ? 2 : 1; }
+  }
+  const lat = new Float64Array(cap), lon = new Float64Array(cap); let N = 0;
+  const eA = new Int32Array(cap), eB = new Int32Array(cap), eLen = new Float64Array(cap);
+  const eD = new Uint8Array(cap), eAsph = new Uint8Array(cap), eMil = new Uint8Array(cap), eAA = new Uint8Array(cap), eJS = new Uint8Array(cap), eUnk = new Uint8Array(cap), eRes = new Uint8Array(cap), eOne = new Uint8Array(cap), eMark = new Uint8Array(cap);
+  let E = 0;
+  const nid = (id, la, lo) => { id = num(id); const h = slot(id); let i = hv[h]; if (i < 0) { i = N++; hk[h] = id; hv[h] = i; lat[i] = la; lon[i] = lo; } return i; };
+  let keep = new Uint8Array(256); const stack = [];
+  const il = bn > 29.4 && bs < 33.4 && be > 34.2 && bw < 35.95; // only there do Area A and Judea & Samaria matter
+  for (let q = 0; q < W.length; q++) {
     if ((++tick & 511) === 0) yield;
-    const info = wayInfo(w.tags);
-    if (!info || !w.geometry || !w.nodes) continue;
-    const one = !info.asph ? false : (w.tags.oneway === 'yes');
-    const name = w.tags['name:he'] || w.tags.name || w.tags.ref || '';
-    const g = w.geometry;
-    const mid = g[g.length >> 1];
-    const m = mil.length ? inMil(mid.lat, mid.lon) : 0;
-    const rv = res.length ? inRes(mid.lat, mid.lon) : 0;
-    for (let i = 0; i + 1 < w.nodes.length; i++) {
-      if (!g[i] || !g[i + 1]) continue;
-      const a = nid(w.nodes[i], g[i]), b = nid(w.nodes[i + 1], g[i + 1]);
-      eA.push(a); eB.push(b); eLen.push(hav(g[i].lat, g[i].lon, g[i + 1].lat, g[i + 1].lon));
-      eD.push(info.d); eAsph.push(info.asph ? 1 : 0); eMil.push(m); { const ma = (g[i].lat + g[i + 1].lat) / 2, mo = (g[i].lon + g[i + 1].lon) / 2; eAA.push(inAreaA(ma, mo) ? 1 : 0); eJS.push(ma > 31.3 && ma < 32.6 && mo > 34.85 && pointInRing(ma, mo, JS_RING) ? 1 : 0); } eUnk.push(info.unk ? 1 : 0); eRes.push(rv); eOne.push(one ? 1 : 0); eName.push(name); eMark.push(!info.asph && w.tags.mark ? 1 : 0);
+    const w = W[q], info = WI[q], f = WF[q], nodes = w.nodes, n = Math.min(nodes.length, f.length >> 1);
+    const one = !info.asph ? 0 : (w.tags.oneway === 'yes' ? 1 : 0);
+    const mi = (n >> 1), m = mil.length ? inMil(f[2 * mi], f[2 * mi + 1]) : 0, rv = res.length ? inRes(f[2 * mi], f[2 * mi + 1]) : 0; // as before: by the way's middle point
+    const d = info.d, asph = info.asph ? 1 : 0, unk = info.unk ? 1 : 0, mark = !info.asph && w.tags.mark ? 1 : 0;
+    if (tol) { // which points stay: ends, junctions, and what the line needs to keep its shape
+      if (keep.length < n) keep = new Uint8Array(n * 2);
+      const kx = Math.cos(f[0] * Math.PI / 180) * 111320, ky = 110540, t2 = tol * tol;
+      let a = -1;
+      for (let i = 0; i < n; i++) {
+        const ok = f[2 * i] === f[2 * i];
+        const anchor = ok && (i === 0 || i === n - 1 || f[2 * (i - 1)] !== f[2 * (i - 1)] || f[2 * (i + 1)] !== f[2 * (i + 1)] || hc[slot(num(nodes[i]))] > 1);
+        keep[i] = anchor ? 1 : 0;
+        if (!ok) { a = -1; continue; }
+        if (!anchor) continue;
+        if (a >= 0 && i - a > 1) { stack.length = 0; stack.push(a, i);
+          while (stack.length) { const hi = stack.pop(), lo2 = stack.pop(); if (hi - lo2 < 2) continue;
+            const ax = f[2 * lo2 + 1] * kx, ay = f[2 * lo2] * ky, dx = f[2 * hi + 1] * kx - ax, dy = f[2 * hi] * ky - ay, L = dx * dx + dy * dy; let best = 0, bi = -1;
+            for (let j = lo2 + 1; j < hi; j++) { const px = f[2 * j + 1] * kx - ax, py = f[2 * j] * ky - ay; let dd; if (L === 0) dd = px * px + py * py; else { const t = Math.max(0, Math.min(1, (px * dx + py * dy) / L)), ex = px - t * dx, ey = py - t * dy; dd = ex * ex + ey * ey; } if (dd > best) { best = dd; bi = j; } }
+            if (best > t2) { keep[bi] = 1; stack.push(lo2, bi, bi, hi); } } }
+        a = i;
+      }
+    }
+    let pa = -1, pi = -1, run = 0; // previous kept point (graph node, index in the way), and the metres driven since it
+    for (let i = 0; i < n; i++) {
+      const la = f[2 * i], lo = f[2 * i + 1];
+      if (la !== la) { pa = -1; pi = -1; run = 0; continue; }
+      if (pi >= 0 && i > 0 && f[2 * (i - 1)] === f[2 * (i - 1)]) run += hav(f[2 * (i - 1)], f[2 * i - 1], la, lo);
+      if (tol && !keep[i]) continue;
+      const b = nid(nodes[i], la, lo);
+      if (pa >= 0) {
+        eA[E] = pa; eB[E] = b; eLen[E] = run; eD[E] = d; eAsph[E] = asph; eMil[E] = m; eUnk[E] = unk; eRes[E] = rv; eOne[E] = one; eMark[E] = mark;
+        if (il) { const ma = (f[2 * pi] + la) / 2, mo = (f[2 * pi + 1] + lo) / 2; eAA[E] = inAreaA(ma, mo) ? 1 : 0; eJS[E] = ma > 31.3 && ma < 32.6 && mo > 34.85 && pointInRing(ma, mo, JS_RING) ? 1 : 0; }
+        E++;
+      }
+      pa = b; pi = i; run = 0;
     }
   }
-  const N = lat.length, E = eA.length;
   const deg = new Int32Array(N + 1);
   for (let e = 0; e < E; e++) { deg[eA[e]]++; deg[eB[e]]++; }
   const start = new Int32Array(N + 1);
@@ -953,10 +1013,10 @@ function* buildGraphSteps(elements) {
   const adj = new Int32Array(start[N]);
   for (let e = 0; e < E; e++) { adj[fill[eA[e]]++] = e; adj[fill[eB[e]]++] = e; }
   return {
-    N, E, lat: Float64Array.from(lat), lon: Float64Array.from(lon), start, adj,
-    eA: Int32Array.from(eA), eB: Int32Array.from(eB), eLen: Float64Array.from(eLen),
-    eD: Uint8Array.from(eD), eAsph: Uint8Array.from(eAsph), eMil: Uint8Array.from(eMil), eAA: Uint8Array.from(eAA), eJS: Uint8Array.from(eJS), eRes: Uint8Array.from(eRes), res,
-    eUnk: Uint8Array.from(eUnk), eOne: Uint8Array.from(eOne), eMark: Uint8Array.from(eMark), eName, pois, mil,
+    N, E, lat: lat.slice(0, N), lon: lon.slice(0, N), start, adj,
+    eA: eA.slice(0, E), eB: eB.slice(0, E), eLen: eLen.slice(0, E),
+    eD: eD.slice(0, E), eAsph: eAsph.slice(0, E), eMil: eMil.slice(0, E), eAA: eAA.slice(0, E), eJS: eJS.slice(0, E), eRes: eRes.slice(0, E), res,
+    eUnk: eUnk.slice(0, E), eOne: eOne.slice(0, E), eMark: eMark.slice(0, E), pois, mil,
   };
 }
 
@@ -1659,11 +1719,13 @@ function splitToTiles(elements, keys) {
   }
   return out;
 }
+// a way out of a tile: its points stay one flat list (f), which is what buildGraph reads; geometry is made only if asked for
+class TileWay { constructor(id, nodes, f, tags) { this.type = 'way'; this.id = id; this.nodes = nodes; this.f = f; this.tags = tags; } get geometry() { return unflat(this.f); } }
 // merge compact tiles back into Overpass-shaped elements (deduped) for buildGraph
 function tilesToElements(tiles) {
   const seenW = new Set(), seenP = new Set(), seenM = new Set(), els = [];
   for (const tl of tiles) {
-    for (const [id, nodes, f, tags] of tl.w) { if (seenW.has(id)) continue; seenW.add(id); els.push({ type: 'way', id, nodes, geometry: unflat(f), tags }); }
+    for (const [id, nodes, f, tags] of tl.w) { if (seenW.has(id)) continue; seenW.add(id); els.push(new TileWay(id, nodes, f, tags)); }
     for (const [ty, id, lat, lon, tags] of tl.p) { const k = ty + id; if (seenP.has(k)) continue; seenP.add(k); els.push(ty === 'n' ? { type: 'node', id, lat, lon, tags } : { type: ty === 'w' ? 'way' : 'relation', id, center: { lat, lon }, tags }); }
     for (const [id, rings, tags] of tl.m) { if (seenM.has(id)) continue; seenM.add(id); els.push({ type: 'relation', id, members: rings.map(r => ({ role: 'outer', geometry: unflat(r) })), tags }); }
   }
@@ -2108,7 +2170,9 @@ const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Wo
 const ihm = L.tileLayer('https://israelhiking.osm.org.il/Hebrew/Tiles/{z}/{x}/{y}.png', { maxZoom: 18, maxNativeZoom: 16, attribution: '<a href="https://israelhiking.osm.org.il" target="_blank" rel="noopener">Israel Hiking Map</a> · © OpenStreetMap' });
 // abroad the OSM maps show local scripts (Greek, Georgian, Cyrillic): there the default is a topo map with English names
 const topoEn = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Esri, HERE, Garmin, © OpenStreetMap' });
-L.control.layers({ 'מפת טיולים (ישראל): שבילים מסומנים ומספרי כבישים': ihm, 'טופוגרפית': topo, 'טופוגרפית, שמות באנגלית': topoEn, 'רגילה': osm, 'לוויין': sat }, null, { position: 'topleft' }).addTo(map);
+map.createPane('borders').style.zIndex = 350; map.getPane('borders').style.pointerEvents = 'none';
+const borderLayer = L.layerGroup(); // countries tinted, land borders in purple; filled when first shown
+L.control.layers({ 'מפת טיולים (ישראל): שבילים מסומנים ומספרי כבישים': ihm, 'טופוגרפית': topo, 'טופוגרפית, שמות באנגלית': topoEn, 'רגילה': osm, 'לוויין': sat }, { 'מדינות וגבולות': borderLayer }, { position: 'topleft' }).addTo(map);
 { // which map: the one you picked, else by where the map is (Israel: Hebrew topo; abroad: English names)
   const LAYERS = { ihm, topo, topoEn, osm, sat }; let auto = true, switching = false;
   try { const k = localStorage.getItem('baseLayer'); if (k && LAYERS[k]) { auto = false; if (k !== 'topo') { map.removeLayer(topo); LAYERS[k].addTo(map); } } } catch {}
@@ -2139,7 +2203,109 @@ for (const [la, lo, r, n] of AREA_A) L.circle([la, lo], { radius: r * 1000, colo
 const aaToggle = () => { if (map.getZoom() >= 9) aaLayer.addTo(map); else aaLayer.remove(); };
 map.on('zoomend', aaToggle); aaToggle();
 const routeLayer = L.layerGroup().addTo(map);
+const arrowLayer = L.layerGroup().addTo(map); // which way the route is driven
 const markLayer = L.layerGroup().addTo(map);
+
+// ---------- countries: shapes and land borders (Europe and the Near East; Natural Earth), fetched once when first needed ----------
+let bordersP = null;
+const unpackLine = a => { const o = []; let la = 0, lo = 0; for (let i = 0; i + 1 < a.length; i += 2) { la += a[i]; lo += a[i + 1]; o.push([la / 1e4, lo / 1e4]); } return o; };
+function borders() {
+  return bordersP ||= fetch(location.protocol === 'file:' ? 'https://chemik13.github.io/offroad/borders.json' : 'borders.json').then(r => { if (!r.ok) throw 0; return r.json(); }).then(j => ({
+    lines: j.l.map(unpackLine),
+    countries: j.c.map(([cc, en, he, col, rings]) => ({ cc, en, he, col, rings: rings.map(a => { const pts = unpackLine(a); let s = 90, n = -90, w = 180, e = -180; for (const [la, lo] of pts) { if (la < s) s = la; if (la > n) n = la; if (lo < w) w = lo; if (lo > e) e = lo; } return { pts, s, n, w, e }; }) })),
+  })).catch(() => { bordersP = null; return null; });
+}
+const inRing = (pts, la, lo) => { let c = false; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) { const a = pts[i], b = pts[j]; if ((a[1] > lo) !== (b[1] > lo) && la < (b[0] - a[0]) * (lo - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; };
+// the country at a point; null at sea, on an islet, or outside the area the file covers
+function ccAt(B, la, lo) {
+  if (inIsrael(la, lo)) return 'IL';
+  for (const c of B.countries) for (const r of c.rings) if (la >= r.s && la <= r.n && lo >= r.w && lo <= r.e && inRing(r.pts, la, lo)) return c.cc;
+  return null;
+}
+const SCHENGEN = new Set('AT BE BG HR CZ DK EE FI FR DE GR HU IS IT LV LI LT LU MT NL NO PL PT RO SK SI ES SE CH'.split(' '));
+const ccName = (B, cc) => { const c = B.countries.find(x => x.cc === cc); return c ? (c.he || c.en) : cc; };
+// where the route passes from one country to the next: [{ lat, lon, from, to, i (coord index), sea, open }]
+function crossingsOf(B, r) {
+  if (r._bx) return r._bx;
+  const out = [], C = r.coords; let prev = null, pi = 0, acc = 0, seaSince = false;
+  const seaAt = new Uint8Array(C.length); { let idx = 0; for (const sg of r.segs || []) { const b = idx + sg.pts.length - 1; if (sg.ferry) seaAt.fill(1, idx, b + 1); idx = b; } }
+  for (let i = 0; i < C.length; i++) {
+    if (i) acc += hav(C[i - 1][0], C[i - 1][1], C[i][0], C[i][1]);
+    if (seaAt[i]) { seaSince = true; continue; }
+    if (i && acc < 400 && i < C.length - 1) continue; acc = 0;
+    const cc = ccAt(B, C[i][0], C[i][1]); if (!cc) continue;
+    if (prev && cc !== prev) {
+      let a = pi, b = i; // the first point of the new country, to the nearest route point
+      if (!seaSince) while (b - a > 1) { const m = (a + b) >> 1, cm = ccAt(B, C[m][0], C[m][1]); if (cm === prev || (cm == null && m - a < b - m)) a = m; else b = m; }
+      const back = out[out.length - 1];
+      if (back && back.from === cc && back.to === prev && b - back.i < 40 && !seaSince) out.pop(); // the road only touches the border and comes back
+      else out.push({ lat: C[b][0], lon: C[b][1], from: prev, to: cc, i: b, sea: seaSince, open: SCHENGEN.has(prev) && SCHENGEN.has(cc) });
+    }
+    prev = cc; pi = i; seaSince = false;
+  }
+  return (r._bx = out);
+}
+const crossNote = x => x.open ? 'גבול פתוח (שנגן): בדרך כלל בלי עצירה, דרכון ברכב' : 'ביקורת גבולות: דרכון, רישיון רכב וביטוח ירוק (Green Card) לרכב; קחו בחשבון תור';
+function fillBorderLayer(B) {
+  if (!B || borderLayer.getLayers().length) return;
+  const TINT = ['#e4572e', '#17bebb', '#f2b705', '#5a9e2f', '#8f5fd7', '#e85d9f', '#3f88c5'];
+  for (const c of B.countries) L.polygon(c.rings.map(r => r.pts), { pane: 'borders', stroke: false, fillColor: TINT[c.col % 7], fillOpacity: .13, interactive: false, smoothFactor: 2 }).addTo(borderLayer);
+  L.polyline(B.lines, { pane: 'borders', color: '#fff', weight: 5.5, opacity: .75, interactive: false, smoothFactor: 1.5 }).addTo(borderLayer);
+  L.polyline(B.lines, { pane: 'borders', color: '#a21caf', weight: 2.5, opacity: .95, dashArray: '10 4 2 4', interactive: false, smoothFactor: 1.5 }).addTo(borderLayer);
+}
+map.on('overlayadd', e => { if (e.layer === borderLayer) { store.set('borders', '1'); borders().then(fillBorderLayer); } });
+map.on('overlayremove', e => { if (e.layer === borderLayer) store.set('borders', '0'); });
+if (store.get('borders') === '1') borderLayer.addTo(map), borders().then(fillBorderLayer);
+// a trip abroad: the countries and their borders show by themselves (unless switched off), each crossing gets a sign on the map and a line in its day
+function drawBorders(r, D, dv) {
+  if (isIL(r)) return;
+  const mine = r;
+  borders().then(B => {
+    if (!B || current?.res?.results?.[current.sel] !== mine) return;
+    const X = crossingsOf(B, r); if (!X.length) return;
+    if (store.get('borders') !== '0' && !map.hasLayer(borderLayer)) { borderLayer.addTo(map); fillBorderLayer(B); }
+    const dayOf = i => D ? Math.max(0, D.findIndex(d => i <= d.to)) : 0;
+    for (const x of X) {
+      if (dv && (x.i < dv.from || x.i > dv.to)) continue;
+      const div = document.createElement('div'); div.className = 'ppop';
+      const h = document.createElement('b'); h.textContent = `${x.sea ? 'כניסה במעבורת' : 'מעבר גבול'}: ${ccName(B, x.from)} ← ${ccName(B, x.to)}`; const sub = document.createElement('div'); sub.style.cssText = 'margin-top:4px;font-size:13px'; sub.textContent = (D ? `יום ${dayOf(x.i) + 1}. ` : '') + crossNote(x) + '.';
+      div.append(h, sub);
+      L.marker([x.lat, x.lon], { icon: L.divIcon({ className: '', html: `<div class="borderpin">${ico('border')}${x.from} › ${x.to}</div>`, iconSize: null, iconAnchor: [30, 12] }), zIndexOffset: 900 }).addTo(markLayer).bindPopup(div, { maxWidth: 280 });
+    }
+    if (D) { const cards = [...document.querySelectorAll('#dayPlan .daycard')]; cards.forEach(c => c.querySelectorAll('.dcross').forEach(e => e.remove()));
+      for (const x of X) { const card = cards[dayOf(x.i)]; if (!card) continue;
+        const el = document.createElement('div'); el.className = 'dcross'; el.innerHTML = ico('border') + '<span></span><small></small>'; el.querySelector('span').textContent = `${x.sea ? 'כניסה במעבורת' : 'מעבר גבול'}: ${ccName(B, x.from)} ← ${ccName(B, x.to)}`; el.querySelector('small').textContent = x.open ? 'פתוח (שנגן)' : 'ביקורת גבולות';
+        (card.querySelector('.dsched') || card.querySelector('.dayrow')).after(el); }
+      const n = X.filter(x => !x.open).length; $('dayPlan').dataset.cross = String(X.length);
+      if (n && !$('warns').querySelector('.xwarn')) { const w = document.createElement('div'); w.className = 'warn xwarn'; w.textContent = `${X.length} מעברי גבול בטיול, מתוכם ${n} עם ביקורת גבולות (מחוץ לשנגן): ${X.filter(x => !x.open).map(x => `${ccName(B, x.from)} ← ${ccName(B, x.to)}`).join(', ')}. דרכון בתוקף, רישיון רכב וביטוח ירוק.`; $('warns').append(w); }
+    }
+  });
+}
+
+// ---------- arrows along the route: which way it is driven ----------
+let arrowSrc = null; // { pts, cum }
+function setArrows(pts) {
+  if (!pts || pts.length < 2) { arrowSrc = null; arrowLayer.clearLayers(); return; }
+  const cum = new Float64Array(pts.length); for (let i = 1; i < pts.length; i++) cum[i] = cum[i - 1] + hav(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]);
+  arrowSrc = { pts, cum }; drawArrows();
+}
+function drawArrows() {
+  arrowLayer.clearLayers(); if (!arrowSrc) return;
+  const { pts, cum } = arrowSrc, c = map.getCenter(), mpp = 40075016 * Math.cos(c.lat * Math.PI / 180) / (256 * 2 ** map.getZoom());
+  const step = Math.max(40, 120 * mpp), box = map.getBounds().pad(0.3); let n = 0;
+  for (let d = step / 2, i = 1; d < cum[cum.length - 1] && n < 300; d += step) {
+    while (i < pts.length - 1 && cum[i] < d) i++;
+    const a = pts[i - 1], b = pts[i]; if (!box.contains(b)) continue;
+    const seg = cum[i] - cum[i - 1]; if (seg < 1) continue;
+    const t = (d - cum[i - 1]) / seg, la = a[0] + (b[0] - a[0]) * t, lo = a[1] + (b[1] - a[1]) * t;
+    const pa = map.latLngToContainerPoint(a), pb = map.latLngToContainerPoint(b); if (pa.x === pb.x && pa.y === pb.y) continue;
+    const brg = Math.atan2(pb.x - pa.x, pa.y - pb.y) * 180 / Math.PI; // as it runs on the screen, so a turned map is right too
+    L.marker([la, lo], { interactive: false, keyboard: false, zIndexOffset: -200, icon: L.divIcon({ className: '', iconSize: [16, 16], iconAnchor: [8, 8],
+      html: `<span class="rarrow" style="transform:rotate(${brg.toFixed(0)}deg)"><svg viewBox="0 0 16 16"><path d="M8 2.2 13.4 12.6 8 10 2.6 12.6z" fill="#fff" stroke="#111" stroke-width="1.3" stroke-linejoin="round"/></svg></span>` }) }).addTo(arrowLayer);
+    n++;
+  }
+}
+map.on('zoomend moveend rotate', () => { clearTimeout(drawArrows.t); drawArrows.t = setTimeout(drawArrows, 80); });
 // live drawing while a long trip is planned: road skeleton, day ends, dirt stretches and nights appear as they are found
 const liveLayer = L.layerGroup().addTo(map);
 let liveOn = false;
@@ -2208,6 +2374,9 @@ function seg(el, opts, val, onPick) {
   el.dataset.v = val;
 }
 function drawPickers() {
+  const cp = (() => { try { return current?.p; } catch { return null; } })(); // the long-trip controls: hours at the wheel a day, and where to sleep
+  seg($('hpdSeg'), [['', 'לפי התכנון'], ...[4, 5, 6, 7, 8, 9].map(h => [String(h), String(h)])], String($('pHpd').value || ''), k => { $('pHpd').value = k; drawPickers(); pendingChange = k ? `עד ${k} שעות נהיגה ביום` : 'שעות נהיגה ביום: לפי התכנון'; rebuildWith(); });
+  seg($('lodgeSeg'), [['camp', 'קמפינג'], ['mix', 'קמפינג + מלון'], ['hotel', 'מלון / מוטל']], cp?.lodging || 'camp', k => { if (!current?.p) return; current.p.lodging = k; drawPickers(); pendingChange = 'לינה: ' + ({ camp: 'קמפינג', mix: 'קמפינג, ומלון כל כמה לילות', hotel: 'מלונות ומוטלים' })[k]; rebuildWith(); });
   seg($('diffSeg'), DIFFS, $('pDiff').value || 'medium', k => { $('pDiff').value = k; drawPickers(); pendingChange = 'קושי: ' + (DIFFS.find(d => d[0] === k)?.[1] || k); rebuildWith(); });
 }
 function rebuildWith() { if (!busy && current?.p) run(false); }
@@ -2264,7 +2433,7 @@ setTimeout(function gate() { // after the rest of the script has set up
       const r = await fetch(API + '/routes', { headers: { 'x-group-code': code } });
       if (r.status === 401) throw Object.assign(new Error('bad'), { bad: true });
       store.set('groupCode', code); if ($('gateNick').value.trim()) store.set('nick', $('gateNick').value.trim());
-      $('gate').hidden = true; checkSharedLink(); loadRecent();
+      $('gate').hidden = true; checkSharedLink();
     } catch (e) { $('gateMsg').className = 'gatemsg err'; $('gateMsg').textContent = e.bad ? 'הקוד לא נכון. בדקו אותו מול מי ששלח לכם.' : 'אין חיבור לאינטרנט כרגע. נסו שוב.'; }
     finally { $('gateGo').disabled = false; }
   };
@@ -2327,7 +2496,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.118 · 15.11.2026 14:52']],
+    ['גרסת האפליקציה', async () => ['ok', '1.123 · 16.11.2026 00:47']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -2380,17 +2549,22 @@ function milNote() {
 }
 $('pMil') && document.addEventListener('change', ev => { if (ev.target.id === 'pMil' || ev.target.id === 'pDate') milNote(); });
 function myVehicle() { return 'lockers'; } // the group's car: lifted Land Cruiser with diff lockers
-function status(t, err) { if (t && !err && !$('planCard').hidden) { for (const [k, rx] of STAGE_RX) if (rx.test(t)) { stageSet(k, /\d+\/\d+|\d+ מתוך \d+/.test(t) ? (t.match(/\d+\/\d+|\d+ מתוך \d+/) || [''])[0] : ''); break; } } $('status').textContent = t; $('status').classList.toggle('err', !!err); const bl = $('busyLine'); if (bl) { bl.textContent = t; bl.classList.toggle('err', !!err); bl.hidden = !t || !$('sheet').classList.contains('has-results') || (!isBusy() && !err); } }
+function status(t, err) { if (t && !err && !$('planCard').hidden) { for (const [k, rx] of STAGE_RX) if (rx.test(t)) { stageSet(k, /\d+\/\d+|\d+ מתוך \d+/.test(t) ? (t.match(/\d+\/\d+|\d+ מתוך \d+/) || [''])[0] : ''); break; } } $('status').textContent = t; $('status').classList.toggle('err', !!err); const card = !$('planCard').hidden; if (card && !err) document.querySelector('#planCard .pc-now').textContent = t || ''; const bl = $('busyLine'); if (bl) { bl.textContent = t; bl.classList.toggle('err', !!err); bl.hidden = !t || !$('sheet').classList.contains('has-results') || (card && !err) || (!isBusy() && !err); } }
 function isBusy() { try { return busy; } catch { return false; } }
 // ---------- live progress: what is happening now, step by step ----------
 const STAGES = [['parse', 'מבין את הבקשה'], ['geo', 'מאתר את המקומות במפה'], ['data', 'טוען שבילים וכבישים'], ['plan', 'מתכנן ימים, קטעי שטח ולינות'], ['done', 'מצייר את המסלול']];
 const STAGE_RX = [['parse', /מבין את הבקשה|מעדכן את הטיול/], ['geo', /מאתר/], ['data', /מוריד|טוען|מחשב את קטעי הכביש|קטעי שטח באזורים|מעבד את רשת|במטמון/], ['plan', /קטעי שטח לכל יום|חניוני לילה|לינה|מחלק לימים|מתכנן|מחשב|מרכיב|בודק|מאריך|מקצר|מחפש/]];
 let stageT0 = 0, stageTimer = null, stageNow = -1;
-function stageStart(withParse) {
+// change: the words of the change being made (a change of the trip on screen), so the card says what it is working on
+function stageStart(withParse, change = null) {
+  const hd = document.querySelector('#planCard .pc-head'); hd.innerHTML = '';
+  if (change != null) { hd.append('משנה את הטיול'); if (change) { const q = document.createElement('q'); q.textContent = change; hd.append(q); } }
+  document.querySelector('#planCard .pc-now').textContent = '';
   const ol = document.querySelector('#planCard .pc-steps'); ol.innerHTML = '';
   for (const [k, he] of STAGES) { if (k === 'parse' && !withParse) continue; const li = document.createElement('li'); li.dataset.k = k; li.textContent = he; ol.append(li); }
   document.querySelector('#planCard .pc-sum').innerHTML = ''; stageNow = -1; stageT0 = Date.now(); $('planCard').hidden = false; $('status').style.display = 'none';
-  clearInterval(stageTimer); stageTimer = setInterval(() => { document.querySelector('#planCard .pc-time').textContent = `${Math.round((Date.now() - stageT0) / 1000)} שניות`; }, 500);
+  clearInterval(stageTimer); stageTimer = setInterval(() => { document.querySelector('#planCard .pc-time').textContent = `${Math.round((Date.now() - stageT0) / 1000)} שניות` + (change != null ? ' · הטיול הנוכחי נשאר על המסך עד שהחדש מוכן' : ''); }, 500);
+  if (change != null) $('body').scrollTop = 0;
 }
 function stageSet(k, detail) {
   const lis = [...document.querySelectorAll('#planCard .pc-steps li')], i = lis.findIndex(li => li.dataset.k === k); if (i < 0) return;
@@ -2399,6 +2573,7 @@ function stageSet(k, detail) {
   if (detail) { let sm = lis[i].querySelector('small'); if (!sm) { sm = document.createElement('small'); lis[i].append(sm); } sm.textContent = ' · ' + detail; }
 }
 function stageEnd() { clearInterval(stageTimer); $('planCard').hidden = true; $('status').style.display = ''; }
+const stageLive = () => !$('planCard').hidden;
 function stageSummary(p) {
   const box = document.querySelector('#planCard .pc-sum'); box.innerHTML = '';
   if (!p) return; const t = document.createElement('div'); t.textContent = p.summary_he ? 'הבנתי: ' + p.summary_he : ''; box.append(t);
@@ -2406,6 +2581,8 @@ function stageSummary(p) {
   if (nm(p.start)) chips.push(p.loop ? `לופ מ${nm(p.start)}` : `מ${nm(p.start)}${nm(p.end) ? ' ל' + nm(p.end) : ''}`);
   if (p.days > 1) chips.push(`${p.days} ימים`); else if (p.duration_hours) chips.push(`${p.duration_hours} שעות`);
   if (p.max_km_per_day) chips.push(`עד ${p.max_km_per_day} ק"מ ביום`);
+  if (p.hours_per_day && p.days > 1) chips.push(`עד ${p.hours_per_day} שעות נהיגה ביום`);
+  if (p.lodging === 'hotel') chips.push('לינה במלונות / מוטלים'); else if (p.lodging === 'mix') chips.push(`קמפינג, ומלון כל ${Math.round(p.hotel_every_days || 3)} לילות`);
   if (p.stay_within_km) chips.push(`באזור (עד ${p.stay_within_km} ק"מ מההתחלה)`);
   const fer = (p.via || []).filter(v => v.ferry_to_next).length; if (fer) chips.push(`⛴ ${fer === 1 ? 'מעבורת' : fer + ' מעבורות'}`);
   if ((p.via || []).length) chips.push(`${p.via.length} עצירות`);
@@ -2462,7 +2639,7 @@ const TOOL = {
       loop: { type: 'boolean', description: 'True ONLY if the user asks for a loop / circular route / to return to the start. Default false (point-to-point). If no destination is given, leave end empty and the planner picks one.' },
       duration_hours: { type: 'number', description: 'Total trip duration in hours, if stated (single-day trips only)' },
       days: { type: 'integer', description: 'Number of trip days for multi-day trips (2-30; for long journeys = total km / max_km_per_day). סופ"ש / weekend = 2. Omit for a single day.' },
-      hours_per_day: { type: 'number', description: 'Driving hours per day for multi-day trips, if stated' },
+      hours_per_day: { type: 'number', description: 'Hours at the wheel per day on multi-day trips, if stated ("6 שעות נהיגה ביום", "לא יותר מ-5 שעות נסיעה ביום" = 5). The planner sets the number of days and the amount of off-road per day by it.' },
       max_km_per_day: { type: 'number', description: 'Maximum driving distance per day in km, if stated (use the upper bound of a range)' },
       stay_within_km: { type: 'number', description: 'When the user asks for a trip in or around one area ("באיזור ירושלים", "סביב הכנרת", "בגליל העליון") and not a journey between places: how far from the start the trip may go, in km (usually 20–30; a big region like הנגב 60). Leave out for journeys.' },
       offroad_share: { type: 'number', description: 'Wanted off-road share of the driving, 0-1 ("30-40% שטח" = 0.35). Omit if not stated (the default is mostly off-road).' },
@@ -2470,6 +2647,8 @@ const TOOL = {
       wild_camping: { type: 'boolean', description: 'User is fine sleeping outside campsites (in nature, by a lake, in a forest)' },
       camp_every_days: { type: 'number', description: 'If wild nights are fine: an official campsite every N nights' },
       night_near_water: { type: 'boolean', description: 'User wants to sleep by lakes / water' },
+      lodging: { type: 'string', enum: ['camp', 'hotel', 'mix'], description: 'Where to sleep on multi-day trips abroad. camp (default): campsites. hotel: hotels / motels / guest houses every night ("לינה במלונות", "מוטלים", "בלי קמפינג, במלון"). mix: mostly camping with a hotel or motel every few nights ("מלון כל כמה לילות", "גם מוטלים"). Omit if not stated.' },
+      hotel_every_days: { type: 'number', description: 'With lodging=mix: a hotel / motel every N nights ("מלון כל 3 לילות" = 3)' },
       resupply_every_days: { type: 'number', description: 'Plan fuel + food stops every N days, if asked' },
       distance_km: { type: 'number', description: 'Total distance in km, if stated' },
       difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'] },
@@ -2497,6 +2676,7 @@ const SYSTEM = () => `Today is ${new Date().toISOString().slice(0, 10)} (${new D
 - Start and end are exactly the places the user named, in that order ("מטירנה לקוטור" = start Tirana, end Kotor; "מסלוניקי" = start Thessaloniki). Never replace a named place with another. When the user pastes coordinates, use them exactly for lat/lon and name the place "נקודה ליד <nearest village>". A finish place given together with a duration ("3 שעות מרעננה ומסיימים באגמון חפר") is still end, with its name; never write in summary_he that there is no destination when one was named. A wish like "פיקניק באמצע" goes in poi_types (camp), not in end.
 - Always set start. If the user did not say where to start, choose it yourself: a town or trailhead at the edge of the area the trip is about (for themed trips the theme's natural starting point), with lat/lon. Only if they say "from my location", set from_my_location instead.
 - "יום כולל לילה" / a day and a night = days 2.
+- Daily driving time ("6 שעות נהיגה ביום") goes in hours_per_day. Hotels, motels or guest houses instead of (or mixed with) camping go in lodging (and hotel_every_days).
 - The group always drives a lifted Land Cruiser with diff lockers. Defaults: difficulty medium, point-to-point (loop=false). For several days set days, and include nightcamp in poi_types.`;
 const VOICE_SYSTEM = `
 VOICE CONVERSATION MODE: the user is talking and hears your text read aloud in Hebrew.
@@ -2800,26 +2980,27 @@ async function ensureTiles(keys, { bg = false, say = () => {}, noOsm = false } =
 }
 // a real pause for the page (taps, the progress line, no "page unresponsive"); not slowed down in a background tab like timers are
 const breathe = () => new Promise(r => { const c = new MessageChannel(); c.port1.onmessage = () => { c.port1.close(); r(); }; c.port2.postMessage(0); });
-async function buildGraphSliced(els) { // the same graph, built in ~40 ms slices
-  const g = buildGraphSteps(els);
+async function buildGraphSliced(els, opt) { // the same graph, built in ~40 ms slices
+  const g = buildGraphSteps(els, opt);
   for (;;) { const t = performance.now(); let r; do r = g.next(); while (!r.done && performance.now() - t < 40); if (r.done) return r.value; await breathe(); }
 }
-async function loadGraph(bboxOrKeys, { quiet = false, noOsm = false } = {}) {
+// simplify (metres): long trips look for trails in many large areas; their graphs drop shape points on straight stretches (see buildGraphSteps)
+async function loadGraph(bboxOrKeys, { quiet = false, noOsm = false, simplify = 0 } = {}) {
   const keys = typeof bboxOrKeys[0] === 'string' ? bboxOrKeys : tilesFor(bboxOrKeys);
   if (gcache && keys.every(k => gcache.keys.has(k))) return gcache.G;
   // long trips ask for many small areas along the way: a graph that already covers the area is reused (a few are kept)
-  if (quiet) { const hit = gq.find(c => keys.every(k => c.keys.has(k))); if (hit) { gq.splice(gq.indexOf(hit), 1); gq.unshift(hit); return hit.G; } }
+  if (quiet) { const hit = gq.find(c => c.simp === simplify && keys.every(k => c.keys.has(k))); if (hit) { gq.splice(gq.indexOf(hit), 1); gq.unshift(hit); return hit.G; } }
   const { tiles, stat } = await ensureTiles(keys, { say: quiet ? () => {} : status, noOsm });
   { const ix = await euKeys(); for (const k of keys) if (!tiles[k]) { const b = tileBBox(k), il = inIsrael((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) || inIsrael(b[0], b[1]) || inIsrael(b[2], b[3]); if ((!il && !(ix.size && ix.has(k)) && keys.some(q => tiles[q])) || keys.filter(q => !tiles[q]).length <= Math.max(1, keys.length * 0.08)) tiles[k] = { w: [], p: [], m: [], at: Date.now(), key: k }; } }
   const miss = keys.filter(k => !tiles[k]).length;
   if (miss) throw new Error(`שרתי OpenStreetMap עמוסים: ירדו ${keys.length - miss} מתוך ${keys.length} אזורים. מה שירד נשמר. לחצו שוב "בנה מסלול" בעוד דקה, וזה ימשיך מאיפה שנעצר.`);
   if (!quiet) status('מעבד את רשת השבילים…');
   await breathe();
-  const G = await buildGraphSliced(tilesToElements(keys.map(k => tiles[k])));
+  const G = await buildGraphSliced(tilesToElements(keys.map(k => tiles[k])), { simplify });
   G.cacheStat = stat; await tetMarkGraph(G);
   await loadReports(G);
   await breathe();
-  if (!quiet) gcache = { keys: new Set(keys), G }; else { gq.unshift({ keys: new Set(keys), G }); gq.length = Math.min(gq.length, 5); }
+  if (!quiet) gcache = { keys: new Set(keys), G }; else { gq.unshift({ keys: new Set(keys), G, simp: simplify }); gq.length = Math.min(gq.length, simplify ? 10 : 5); }
   return G;
 }
 
@@ -3101,10 +3282,22 @@ function selfRevisit(c) {
   return cum ? side / cum : 0;
 }
 // camps, fuel and food near points, straight from the prebuilt tiles (no slow server queries); null = no tiles there
-async function poisFromTiles(points, radius) {
+const LODGE_HE = { hotel: 'מלון', motel: 'מוטל', guest_house: 'בית הארחה', hostel: 'הוסטל' };
+const LODGE_TILES = 4; // tiles built from this POI schema on carry hotels, motels and guest houses
+function lodgeOf(id, t, la, lo) {
+  const kind = t.tourism, first = (...ks) => { for (const k of ks) { const v = (t[k] || '').split(';')[0].trim(); if (v) return v; } return ''; };
+  let web = first('website', 'contact:website', 'url'); if (web && !/^https?:\/\//i.test(web)) web = /^[\w-]+(\.[\w-]+)+(\/|$)/.test(web) ? 'https://' + web : '';
+  const stars = parseInt(t.stars) || 0, ph = first('phone', 'contact:phone');
+  const o = { id, type: 'nightcamp', hotel: kind, name: readName(t, LODGE_HE[kind] || 'מלון'), lat: la, lon: lo, auth: (LODGE_HE[kind] || 'מלון') + (stars ? ` · ${stars}★` : '') };
+  if (web) o.website = web; if (/\d{6,}/.test(ph.replace(/[^\d]/g, ''))) o.phone = ph; if (stars) o.stars = stars;
+  return o;
+}
+// need.lodging: the trip sleeps under a roof, so tiles kept on this device from before hotels were added are fetched again
+async function poisFromTiles(points, radius, need = {}) {
   const keysBy = points.map(q => tilesFor(bboxFor([q], radius)));
   const { tiles } = await ensureTiles([...new Set(keysBy.flat())], { bg: true, noOsm: true });
-  const camps = [], supply = [], seen = new Set(), miss = [], lakes = new Map();
+  if (need.lodging) await Promise.all(Object.keys(tiles).map(async k => { if ((tiles[k].ps || 0) >= LODGE_TILES || !tiles[k].w?.length && !tiles[k].p?.length) return; const t = await staticTile(k); if (t && (t.ps || 0) >= LODGE_TILES) { tiles[k] = t; memTiles.set(k, t); idb.set(k, t); } }));
+  const camps = [], supply = [], hotels = [], seen = new Set(), miss = [], lakes = new Map();
   const NOT_LAKE = /darsena|bacino|vasca|\bcava\b|laghett|stagno|\bpond\b|basin|dock|marina|porto|peschier|fishpond|klärteich|depurat/i;
   const ringArea = ring => { let a = 0; const la0 = ring[0], kx = Math.cos(la0 * Math.PI / 180) * 111320, ky = 110540; for (let i = 0; i + 3 < ring.length; i += 2) a += (ring[i + 1] * kx) * (ring[i + 2] * ky) - (ring[i + 3] * kx) * (ring[i] * ky); return Math.abs(a) / 2; };
   for (const t of Object.values(tiles)) for (const [id, nm, ring] of t.lk || []) { if ((nm && NOT_LAKE.test(nm)) || ringArea(ring) < 150000) continue; lakes.set(id, { nm, ring }); } // a lake to sleep by: 15 ha and up
@@ -3131,6 +3324,9 @@ async function poisFromTiles(points, radius) {
         const name = t['name:he'] || t.name || (t.tourism === 'caravan_site' ? 'חניון קרוואנים' : 'קמפינג');
         const lk = byLake(la, lo);
         camps.push({ id: tp + id, type: 'nightcamp', name, lat: la, lon: lo, auth: lk ? `${auth} · על שפת ${lk}` : auth, ...campInfo(t), lake: !!lk || LAKE.test(name) });
+      } else if (LODGE_HE[t.tourism]) {
+        if (t.access === 'private' || t.access === 'no' || !t.name) continue; seen.add(tp + id);
+        hotels.push(lodgeOf(tp + id, t, la, lo));
       } else if (t.amenity === 'fuel' || t.shop === 'supermarket' || t.shop === 'convenience') {
         seen.add(tp + id);
         supply.push({ kind: t.amenity === 'fuel' ? 'fuel' : 'food', name: readName(t, t.amenity === 'fuel' ? 'תחנת דלק' : 'סופרמרקט'), lat: la, lon: lo, osm: tp + id, brand: t.brand || '', hours: t.opening_hours || '',
@@ -3155,7 +3351,17 @@ async function poisFromTiles(points, radius) {
       const c = onTrack(la, lo); if (c) wild.push({ kind: t.tourism === 'viewpoint' ? 'view' : 'picnic', name: (t.tourism === 'viewpoint' ? 'תצפית' : 'חניון יום') + (t.name ? ' ' + t.name : ''), lat: c[0], lon: c[1] });
     }
   });
-  return { camps, supply, miss, wild };
+  const noLodge = points.map((q, n) => (miss.includes(n) || keysBy[n].some(k => (tiles[k].ps || 0) < LODGE_TILES) ? n : -1)).filter(n => n >= 0); // points whose tiles are from before hotels were added
+  return { camps, supply, hotels, miss, wild, noLodge };
+}
+// hotels, motels and guest houses around points, straight from the OSM servers: for areas whose prebuilt tiles do not have them yet
+async function hotelCandidates(points) {
+  const out = [];
+  for (let k = 0; k < points.length; k += 8) {
+    const q = `[out:json][timeout:25];(${points.slice(k, k + 8).map(c => `nwr["tourism"~"^(hotel|motel|guest_house)$"]["name"](around:12000,${c[0].toFixed(4)},${c[1].toFixed(4)});`).join('')});out center tags qt 400;`;
+    for (const el of await overpassRaw(q)) { const la = el.lat ?? el.center?.lat, lo = el.lon ?? el.center?.lon, t = el.tags; if (t && la != null && t.access !== 'private') out.push(lodgeOf(el.type[0] + el.id, t, la, lo)); }
+  }
+  return out;
 }
 // a day that ends with no campsite on the trail network: suggest the nearest campsite, or a spot in nature when that is fine
 async function fillDayEnds(p, r) {
@@ -3213,11 +3419,16 @@ async function planOverland(p, sLL, eLL, viaLL) {
   const end = eLL || (p.loop ? sLL : viaLL.length ? viaLL[viaLL.length - 1].ll : null);
   if (!end) throw new Error('לטיול ארוך צריך יעד או לפחות אזור אחד בדרך.');
   const vias = eLL || p.loop ? viaLL : viaLL.slice(0, -1);
+  // driving hours a day: the days are counted by it, and no day gets more trail than its hours have room for (trails are ~5 times slower than road)
+  const hardH = p.hours_per_day ? p.hours_per_day * 1.08 : 9.5, DIRT_H = 1 / 14 - 1 / 70; // extra hours per km of road swapped for trail
   const maxH = p.hours_per_day || 7, maxKm = p.max_km_per_day || (p.distance_km && p.days ? p.distance_km / p.days : null);
   const share = Math.min(0.9, Math.max(0.1, p.offroad_share || 0.6)); // wanted off-road part of the driving: by default most of it (a jeep trip, not a road trip)
   const moreDays = new Set((p.more_offroad_days || []).map(Number));
   const places = [p.start, p.end, ...(p.via || [])].filter(x => x && x.country && x.lat);
-  const countryAt = ll => { let b = null, bd = Infinity; for (const x of places) { const d = hav(ll[0], ll[1], x.lat, x.lon); if (d < bd) { bd = d; b = x.country; } } return b || p.country; };
+  const BR = await borders();
+  { const all = [sLL, ...(eLL ? [eLL] : []), ...viaLL.map(v => v.ll)], la = all.map(x => x[0]), lo = all.map(x => x[1]); // the group's field reports for the whole trip in one request
+    if (hasGroup()) reportsIn(Math.min(...la), Math.min(...lo), Math.max(...la), Math.max(...lo), 0.8).catch(() => {}); }
+  const countryAt = ll => { const here = BR && ccAt(BR, ll[0], ll[1]); if (here) return here; let b = null, bd = Infinity; for (const x of places) { const d = hav(ll[0], ll[1], x.lat, x.lon); if (d < bd) { bd = d; b = x.country; } } return b || p.country; };
   // where dirt roads are open to cars: spare days go there (Alpine countries close most forest roads)
   const DIRT = { IT: 0.25, AT: 0.2, CH: 0.2, SI: 0.3, DE: 0.2, HR: 0.6, FR: 0.6 };
   // 1. off-road pieces at each highlight (small trail download each), in parallel pairs
@@ -3230,7 +3441,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
     try {
       if (vias[i].port) return; // ferry ports are not highlights
       if (Date.now() - T0 > 60000) throw new Error('timeout');
-      const G = await Promise.race([loadGraph(tilesFor(bboxFor([vias[i].ll], 15000)), { quiet: true, noOsm: 'outside' }), new Promise((_, rj) => setTimeout(() => rj(new Error('timeout')), Math.max(5000, 60000 - (Date.now() - T0))))]);
+      const G = await Promise.race([loadGraph(tilesFor(bboxFor([vias[i].ll], 15000)), { quiet: true, noOsm: 'outside', simplify: 5 }), new Promise((_, rj) => setTimeout(() => rj(new Error('timeout')), Math.max(5000, 60000 - (Date.now() - T0))))]);
       const fac = dirtFac(G);
       // a stop is often a whole range ("Prenj", "Zagori"): start the loop where a road meets it, closest to its centre, so the drive goes in
       const [vla, vlo] = vias[i].ll;
@@ -3258,26 +3469,28 @@ async function planOverland(p, sLL, eLL, viaLL) {
     if (liveOn) map.fitBounds(L.latLngBounds(sk.coords).pad(0.1), mapPad()); }
   const legIdx0 = legSplit(sk.coords, wp0);
   const timeline = []; // cumulative [km, h] per road coord, with off-road loops added at their highlight
-  let km = 0, h = 0;
+  let km = 0, h = 0, sh = 0; // sh: the hours at sea within h
+  const driveH = (a, b) => (b.h - b.sh) - (a.h - a.sh); // hours at the wheel between two points of the timeline
   for (let l = 0; l < sk.legs.length; l++) {
     const sp = sk.legs[l].s / Math.max(1, sk.legs[l].m); // s per m
     for (let i = legIdx0[l]; i < legIdx0[l + 1]; i++) {
       const f = sk.ferry[i] && sk.ferry[i + 1] ? sk.ferry[i] : null;
-      timeline.push({ i, km, h, c: sk.coords[i], sea: !!f, night: !!f && f.s > 6 * 3600, fer: f });
+      timeline.push({ i, km, h, sh, c: sk.coords[i], sea: !!f, night: !!f && f.s > 6 * 3600, fer: f });
       const d = hav(sk.coords[i][0], sk.coords[i][1], sk.coords[i + 1][0], sk.coords[i + 1][1]);
-      if (f) h += d / Math.max(1, f.m) * f.s / 3600; // on the boat: hours pass, no driving km
+      if (f) { const x = d / Math.max(1, f.m) * f.s / 3600; h += x; sh += x; } // on the boat: hours pass, no driving km
       else { km += d / 1000; h += d * sp / 3600 * 1.15; } // + breaks
     }
     const pc = pieces[l]; if (pc) { km += pc.len / 1000; h += pc.hrs; }
   }
-  timeline.push({ i: sk.coords.length - 1, km, h, c: sk.coords[sk.coords.length - 1] });
+  timeline.push({ i: sk.coords.length - 1, km, h, sh, c: sk.coords[sk.coords.length - 1] });
   // 2a. days. Overnight ferries end a day at the port; the rest of the days are spread by driving km.
   // Asked total days win (holidays are fixed); km/day is kept when it fits, otherwise we say by how much it is exceeded.
   const askedDays = p.days > 1 ? p.days : null;
   const parts = []; { let a = 0;
     for (let n = 1; n < timeline.length; n++) if (timeline[n].night && !timeline[n - 1].night) { parts.push([a, n]); a = timeline.findIndex((t, q) => q > n && !t.sea); if (a < 0) a = timeline.length - 1; }
     parts.push([a, timeline.length - 1]); }
-  const pKm = parts.map(([a, b]) => timeline[b].km - timeline[a].km), pH = parts.map(([a, b]) => timeline[b].h - timeline[a].h - (timeline[b].sea ? 0 : 0));
+  // hours of each part: at the wheel on the road, plus what the day's trails are expected to add
+  const pKm = parts.map(([a, b]) => timeline[b].km - timeline[a].km), pH = parts.map(([a, b], q) => driveH(timeline[a], timeline[b]) + pKm[q] * share * 0.6 * DIRT_H);
   // the day you board and the day you land are not full driving days: be at the port 2 h before sailing, drive on only after landing
   const ferOf = q => timeline[parts[q][1]]?.fer, DAY0 = 8, DAY1 = 19;
   const landW = q => { if (q === 0) return 1; const t = ferryTimes(ferOf(q - 1)); return Math.max(0.12, Math.min(1, (DAY1 - (t.arrive + 0.75)) / (DAY1 - DAY0))); };
@@ -3295,7 +3508,9 @@ async function planOverland(p, sLL, eLL, viaLL) {
     left -= add.reduce((a, b) => a + b, 0);
     want.map((w, q) => [w - add[q], q]).sort((x, y) => y[0] - x[0]).slice(0, left).forEach(([, q]) => add[q]++);
     per = base.map((b, q) => b + add[q]);
-    if (needDays > N) notes.push(`⚠ ${Math.round(km)} ק"מ נהיגה ב-${N} ימים זה כ-${Math.round(km / N)} ק"מ ליום, יותר ממה שביקשתם${maxKm ? ` (${maxKm})` : ''}. שמרתי על ${N} ימים. כדי לחזור למגבלה: פחות עצירות, יעד קרוב יותר, או מעבורת שחוסכת נסיעה.`);
+    if (needDays > N) notes.push(maxKm && km / N > maxKm * 1.05
+      ? `⚠ ${Math.round(km)} ק"מ נהיגה ב-${N} ימים זה כ-${Math.round(km / N)} ק"מ ליום, יותר ממה שביקשתם (${maxKm}). שמרתי על ${N} ימים. כדי לחזור למגבלה: פחות עצירות, יעד קרוב יותר, או מעבורת שחוסכת נסיעה.`
+      : `⚠ ${Math.round(km)} ק"מ ב-${N} ימים, עם ${Math.round(share * 100)}% שטח, דורשים יותר מ-${maxH} שעות נהיגה ביום (היו נדרשים כ-${needDays} ימים). שמרתי על ${N} ימים ועל שעות הנהיגה, אז יש פחות שטח בימים הארוכים.`);
   }
   if (per.reduce((a, b) => a + b, 0) > 30) { notes.push('הטיול יצא ארוך מ-30 ימים; קיצרתי ל-30. שקלו יעד קרוב יותר או יותר ק"מ ליום.'); while (per.reduce((a, b) => a + b, 0) > 30) per[per.indexOf(Math.max(...per))]--; }
   const cuts = [];
@@ -3308,7 +3523,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
   p.days = cuts.length + 1; if ($('pDays')) $('pDays').value = p.days;
   cuts.forEach((c, k) => live.dot(c.c, `<div class="daydot" style="--c:${LIVEC[(k + 1) % LIVEC.length]}">${k + 2}</div>`));
   // 2b. an off-road stretch every day: replace part of the day's road with trails between two road points
-  const dayOff = [], dayLoop = [], gotDay = new Set();
+  const dayOff = [], dayLoop = [], gotDay = new Set(), tight = [], trimmed = new Set(); // tight: the road alone fills the day; trimmed: trails cut to fit the hours
   {
     const bounds = [timeline[0], ...cuts, timeline[timeline.length - 1]];
     const jobs = [];
@@ -3317,7 +3532,9 @@ async function planOverland(p, sLL, eLL, viaLL) {
       const pieceOff = vias.reduce((t, _, l) => t + (pieces[l] && legIdx0[l + 1] > st.i && legIdx0[l + 1] <= en.i ? (pieces[l].len - pieces[l].asph) / 1000 : 0), 0); // a highlight loop already on this day
       const more = moreDays.has(d + 1), sh = more ? Math.max(0.85, share + 0.25) : share;
       if (spanKm < 25 || spanKm * sh - pieceOff < 6) continue;
-      const want = Math.min(spanKm * 0.96, Math.max(10, spanKm * sh * 1.7)); // road km to swap for trails (a stretch is ~70% trail)
+      const budgetH = hardH - driveH(st, en); // hours left in the day for trails, after its road
+      if (budgetH < 0.5) { tight.push(d + 1); continue; }
+      const want = Math.min(spanKm * 0.96, Math.max(10, spanKm * sh * 1.7), Math.max(10, budgetH / DIRT_H * 1.25)); // road km to swap for trails (a stretch is ~70% trail)
       const n = Math.max(1, Math.min(4, Math.ceil(want / 45))), seg = want / n; // most of the day: several stretches one after another, each ~45 km of road or less
       const tries = [];
       const add = (from, len) => { const A = timeline.find(t => t.km >= st.km + from && !t.sea), B = A && timeline.find(t => t.km >= A.km + Math.max(8, len) && !t.sea);
@@ -3327,7 +3544,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
       for (let q = 0; q < n; q++) add(spanKm * 0.02 + gap * (q + 1) + seg * q + seg * 0.25, seg * 0.5); // shorter ones in the same places, if a long one finds no trail
       const w0 = Math.min(90, want, spanKm * 0.8); for (const [at, w] of [[0.1, 1], [0.45, 1], [0.25, 0.7], [0.6, 0.6], [0.02, 0.5], [0.75, 0.4], [0.35, 0.4]]) add(spanKm * at, w0 * w); // the classic windows too
       const M = timeline.find(t => t.km >= st.km + spanKm * 0.5 && !t.sea && t.i < en.i);
-      if (tries.length || M) jobs.push({ d, more, st, span: spanKm, tries, M, target: spanKm * sh - pieceOff, room: Math.max(10, (maxKm || spanKm * 1.3) - spanKm + 15) + (more ? 40 : 0), loopKm: Math.max(8, Math.min(40, want, (maxKm || want * 2) - spanKm + 10)) });
+      if (tries.length || M) jobs.push({ d, more, st, span: spanKm, tries, M, budgetH, target: spanKm * sh - pieceOff, room: Math.max(10, (maxKm || spanKm * 1.3) - spanKm + 15) + (more ? 40 : 0), loopKm: Math.max(8, Math.min(40, want, (maxKm || want * 2) - spanKm + 10)) });
     }
     let done = 0; const deadline = Date.now() + 95000;
     // a day whose road has no trail beside it: try a way through the nearby area with the most trails (left or right of the road), road ends kept
@@ -3337,7 +3554,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
       const a = A.c, b = B.c, kx = Math.cos(a[0] * Math.PI / 180) * 111320, ky = 110540;
       const vx = (b[1] - a[1]) * kx, vy = (b[0] - a[0]) * ky, vl = Math.hypot(vx, vy) || 1, nx = -vy / vl, ny = vx / vl; // across the road
       const cands = []; for (const f of [0.3, 0.5, 0.7]) for (const off of [-36000, -24000, -13000, 13000, 24000, 36000]) cands.push([a[0] + ((b[0] - a[0]) * f) + ny * off / ky, a[1] + ((b[1] - a[1]) * f) + nx * off / kx]);
-      const G = await Promise.race([loadGraph(tilesFor(bboxFor([a, b, ...cands], 9000)), { quiet: true, noOsm: 'outside' }), new Promise(r => setTimeout(() => r(null), 40000))]).catch(() => null);
+      const G = await Promise.race([loadGraph(tilesFor(bboxFor([a, b, ...cands], 9000)), { quiet: true, noOsm: 'outside', simplify: 5 }), new Promise(r => setTimeout(() => r(null), 40000))]).catch(() => null);
       if (!G) return null;
       // trail density: dirt km within 7 km of each candidate
       const dens = cands.map(c => { let m = 0; for (let e = 0; e < G.eLen.length; e++) { if (G.eAsph[e]) continue; const n = G.eA[e]; if (Math.abs(G.lat[n] - c[0]) < 0.065 && Math.abs(G.lon[n] - c[1]) < 0.085) m += G.eLen[e]; } return { c, m }; }).sort((x, y) => y.m - x.m);
@@ -3351,6 +3568,7 @@ async function planOverland(p, sLL, eLL, viaLL) {
         if (!p1 || !p2) continue;
         const r = routeStats(G, [...p1, ...p2], s0), off = r.len - r.asph;
         if (off / r.len < 0.4 || r.len > (B.km - A.km) * 1000 + (j.room + (j.more ? 25 : 0)) * 1000 || selfRevisit(r.coords) > 0.12) continue;
+        if (r.hrs - driveH(A, B) > j.budgetH) { trimmed.add(j.d + 1); continue; }
         const int = interest(G, r); if (!best || off * (0.6 + int) > best.off * (0.6 + best.int)) best = { A, B, r, off, int };
       }
       return best && best.off > have ? best : null;
@@ -3360,11 +3578,11 @@ async function planOverland(p, sLL, eLL, viaLL) {
         const found = [];
         // one graph for the whole day's corridor: every stretch tried on this day reuses it (building a graph per try was most of the wait)
         { const u = new Set(); for (const { A, B } of j.tries) for (const k of tilesFor(bboxFor([A.c, B.c], 5000))) u.add(k);
-          if (u.size && u.size <= 60) await Promise.race([loadGraph([...u], { quiet: true, noOsm: 'outside' }), new Promise(r => setTimeout(r, 40000))]).catch(() => null); }
+          if (u.size && u.size <= 60) await Promise.race([loadGraph([...u], { quiet: true, noOsm: 'outside', simplify: 5 }), new Promise(r => setTimeout(r, 40000))]).catch(() => null); }
         for (const { A, B } of j.tries) {
           if (Date.now() > deadline) { j.late = !found.length; break; }
           const pad = 5000, a = A.c, b = B.c;
-          const G = await Promise.race([loadGraph(tilesFor(bboxFor([a, b], pad)), { quiet: true, noOsm: 'outside' }), new Promise((_, rj) => setTimeout(() => rj(new Error('timeout')), 40000))]).catch(() => null);
+          const G = await Promise.race([loadGraph(tilesFor(bboxFor([a, b], pad)), { quiet: true, noOsm: 'outside', simplify: 5 }), new Promise((_, rj) => setTimeout(() => rj(new Error('timeout')), 40000))]).catch(() => null);
           if (!G) break; // no prebuilt trails here: skip fast instead of waiting on OSM servers
           const fac = dirtFac(G); // trails preferred, roads only as connectors
           const s0 = nearestNode(G, a[0], a[1], fac, 3000), e0 = nearestNode(G, b[0], b[1], fac, 3000);
@@ -3379,14 +3597,17 @@ async function planOverland(p, sLL, eLL, viaLL) {
         // the best stretches that do not overlap, until the day reaches its off-road share
         // dirt that is worth driving first: winding, sights, curated trails
         const pick = list => { list.sort((x, y) => y.off * (0.6 + (y.int || 0)) - x.off * (0.6 + (x.int || 0))); const u = []; let o = 0;
-          let extra = 0; const cap = (j.room + (j.more ? 25 : 0)) * 1000; // all stretches of the day together stay within the day's room
-          for (const f of list) { if (u.some(v => !(f.B.i < v.A.i || f.A.i > v.B.i))) continue; const x = Math.max(0, f.r.len - (f.B.km - f.A.km) * 1000); if (extra + x > cap) continue; u.push(f); o += f.off; extra += x; if (o >= j.target * 1000 * 1.1 || u.length >= 5) break; }
+          let extra = 0, xh = 0; const cap = (j.room + (j.more ? 25 : 0)) * 1000; // all stretches of the day together stay within the day's room, in km and in hours
+          for (const f of list) { if (u.some(v => !(f.B.i < v.A.i || f.A.i > v.B.i))) continue; const x = Math.max(0, f.r.len - (f.B.km - f.A.km) * 1000); if (extra + x > cap) continue;
+            const h = Math.max(0, f.r.hrs - driveH(f.A, f.B)); if (xh + h > j.budgetH) { trimmed.add(j.d + 1); continue; }
+            u.push(f); o += f.off; extra += x; xh += h; if (o >= j.target * 1000 * 1.1 || u.length >= 5) break; }
+          j.leftH = j.budgetH - xh;
           return [u, o]; };
         let [used, offSum] = pick(found);
         // the road runs through farmland (tracks there are short dead ends): move the day into the hills where the trails are
         if (offSum < j.target * 1000 * 0.6 && Date.now() < deadline - 15000 && j.tries.length) {
           const seek = await seekTrails(j, offSum).catch(e => { console.warn('seek', j.d, e?.message || e); return null; });
-          if (seek && seek.off > offSum + 10000) [used, offSum] = [[seek], seek.off];
+          if (seek && seek.off > offSum + 10000) { [used, offSum] = [[seek], seek.off]; j.leftH = j.budgetH - Math.max(0, seek.r.hrs - driveH(seek.A, seek.B)); }
         }
         for (const { r } of used) live.dirt(r.coords);
         for (const { A, B, r } of used) dayOff.push({ d: j.d, A, B, coords: r.coords, segs: r.segs, len: r.len, hrs: r.hrs, byD: r.byD, maxD: r.maxD, asph: r.asph, unk: r.unk, res: r.res || 0, pois: [] });
@@ -3394,10 +3615,12 @@ async function planOverland(p, sLL, eLL, viaLL) {
         if (offSum >= j.target * 1000 * 0.6) return; // enough; otherwise a loop into the trails, but only one worth driving (see below)
         if (j.M && used.some(u => j.M.i >= u.A.i && j.M.i <= u.B.i)) j.M = timeline.find(t => t.i > Math.max(...used.map(u => u.B.i)) && !t.sea) || null;
         j.loopKm = Math.max(12, Math.min(35, j.target - offSum / 1000 + 8));
+        if (j.leftH < 1) { trimmed.add(j.d + 1); return; } // no hours left for a loop
+        if (j.loopKm > j.leftH * 13) { j.loopKm = Math.max(8, j.leftH * 13); trimmed.add(j.d + 1); }
         // no trail runs alongside the road here (mountain tracks are often dead ends): an off-road loop from the road instead
         if (j.M && Date.now() < deadline) {
           const c = j.M.c;
-          const G = await Promise.race([loadGraph(tilesFor(bboxFor([c], 9000)), { quiet: true, noOsm: 'outside' }), new Promise(r => setTimeout(() => r(null), 30000))]).catch(() => null);
+          const G = await Promise.race([loadGraph(tilesFor(bboxFor([c], 9000)), { quiet: true, noOsm: 'outside', simplify: 5 }), new Promise(r => setTimeout(() => r(null), 30000))]).catch(() => null);
           if (!G) return;
           const fac = dirtFac(G);
           const s0 = nearestNode(G, c[0], c[1], fac, 4000); if (s0 < 0) return;
@@ -3415,13 +3638,29 @@ async function planOverland(p, sLL, eLL, viaLL) {
     const miss = jobs.filter(j => !gotDay.has(j.d) && !j.late).map(j => j.d + 1), late = jobs.filter(j => j.late).map(j => j.d + 1);
     if (miss.length) notes.push(`בימים ${miss.join(', ')} לא מצאתי שטח פתוח לרכב ליד הדרך, אז הם בכביש.`);
     if (late.length) notes.push(`החיפוש לקח יותר מדי זמן, אז ימים ${late.join(', ')} עדיין בכביש.`);
+    const why = p.hours_per_day ? `כדי לעמוד ב-${p.hours_per_day} שעות נהיגה ביום` : 'כדי שיום נהיגה לא יעבור 9.5 שעות';
+    const gotKm = d => (dayOff.filter(x => x.d === d).reduce((t, x) => t + x.len - x.asph, 0) + (dayLoop[d] ? dayLoop[d].len - dayLoop[d].asph : 0)) / 1000;
+    const cut = jobs.filter(j => trimmed.has(j.d + 1) && gotKm(j.d) < j.target * 0.8).map(j => j.d + 1); // only days that ended up short of what was asked
+    if (cut.length) notes.push(`${cut.length === 1 ? 'ביום' : 'בימים'} ${cut.join(', ')} יש פחות שטח ממה שביקשתם, ${why}. ליותר שטח: יותר ימים, או יותר שעות נהיגה ביום.`);
+    if (tight.length) notes.push(`⚠ ${tight.length === 1 ? 'ביום' : 'בימים'} ${tight.join(', ')} הכביש לבדו ממלא את שעות הנהיגה של היום (${p.hours_per_day || 9.5}), אז אין בהם קטעי שטח. הוסיפו ימים או קצרו את הדרך.`);
   }
   // 3. campsites near each cut (lakeside first when asked), fuel + food every few days
   status(`מחפש ${cuts.length} חניוני לילה בדרך…`);
   const wantLake = !!p.night_near_water || /אגם|lake|lago|jezero/i.test(current?.prompt || '') || /אגם/.test($('prompt').value);
   const land = cuts.map((c, k) => c.ferryNight ? null : k).filter(k => k != null);
-  const fromT = land.length ? await poisFromTiles(land.map(k => cuts[k].c), 30000) : { camps: [], supply: [], miss: [] };
-  const camps = fromT.camps, supply = fromT.supply;
+  const lodging = p.lodging === 'hotel' || p.lodging === 'mix' ? p.lodging : 'camp', hotelEvery = Math.max(2, Math.round(p.hotel_every_days || 3));
+  const fromT = land.length ? await poisFromTiles(land.map(k => cuts[k].c), 30000, { lodging: lodging !== 'camp' }) : { camps: [], supply: [], hotels: [], miss: [], noLodge: [] };
+  const camps = fromT.camps, supply = fromT.supply, hotels = fromT.hotels || [];
+  if (lodging !== 'camp' && fromT.noLodge?.length) { // the prebuilt map of this area is from before hotels were added: ask OSM, briefly
+    status('מחפש מלונות ומוטלים ליד סוף כל יום…');
+    const more = await Promise.race([hotelCandidates(fromT.noLodge.map(n => cuts[land[n]].c)), new Promise(r => setTimeout(() => r(null), 22000))]).catch(() => null);
+    if (more) { for (const h of more) if (!hotels.some(x => x.id === h.id)) hotels.push(h); }
+    else notes.push('שרתי המפה איטיים כרגע, אז לא בכל האזורים הצלחתי להביא מלונות. נסו שוב בעוד כמה דקות.');
+  }
+  const pickHotel = (c, maxD = 14000) => { let best = null, bs = Infinity; // close to the day's end; a motel or a place with a site to book on comes first, a hostel last
+    for (const h of hotels) { const d = hav(c.c[0], c.c[1], h.lat, h.lon); if (d > maxD) continue; const sc = d - (h.hotel === 'motel' ? 1500 : h.hotel === 'hostel' ? -4000 : 0) - (h.website ? 2500 : h.phone ? 1000 : 0); if (sc < bs) { bs = sc; best = h; } }
+    return best; };
+  const noHotel = [];
   const slow = fromT.miss.map(n => cuts[land[n]].c);
   if (slow.length) { // areas without prebuilt tiles: ask OSM, but never wait long
     const more = await Promise.race([nightCandidates(slow, wantLake), new Promise(r => setTimeout(() => r(null), 25000))]).catch(() => null);
@@ -3435,6 +3674,8 @@ async function planOverland(p, sLL, eLL, viaLL) {
     for (const cp of camps) { const d = hav(c.c[0], c.c[1], cp.lat, cp.lon); if (d < 25000) L.push({ ...cp, _d: d - (cp.lake ? 4000 : 0) }); }
     if (rule !== 'no') for (const x of fromT.wild || []) { const d = hav(c.c[0], c.c[1], x.lat, x.lon); if (d < 15000) L.push({ type: 'nightcamp', wild: true, lake: x.kind === 'lake', name: `🌲 לינת שטח: ${x.name}`, lat: x.lat, lon: x.lon, auth: rule === 'yes' ? 'לינת שטח (לא קמפינג). מקובלת כאן מחוץ לשמורות.' : 'לינת שטח (לא קמפינג). רשמית אסורה כאן אבל נסבלת לרוב.', _d: d + 2000 }); }
     L.sort((a, b) => a._d - b._d); const seen = new Set();
+    { const H = hotels.map(h => ({ ...h, _d: hav(c.c[0], c.c[1], h.lat, h.lon) })).filter(h => h._d < 15000).sort((a, b) => a._d - b._d).slice(0, lodging === 'camp' ? 2 : 4); // a roof nearby is always one of the choices
+      if (lodging === 'camp') L.splice(Math.min(L.length, 3), 0, ...H); else L.unshift(...H); }
     const kept = [];
     return L.filter(x => { if (kept.some(y => (y.name === x.name && hav(y.lat, y.lon, x.lat, x.lon) < 4000) || hav(y.lat, y.lon, x.lat, x.lon) < 300)) return false; kept.push(x); return true; }).slice(0, 6).map(({ _d, ...x }) => ({ ...x, km: Math.round(hav(c.c[0], c.c[1], x.lat, x.lon) / 1000) }));
   };
@@ -3450,9 +3691,12 @@ async function planOverland(p, sLL, eLL, viaLL) {
       if (w) { sinceCamp++; return { type: 'nightcamp', wild: true, lake: w.kind === 'lake', name: `🌲 לינת שטח: ${w.name}`, lat: w.lat, lon: w.lon,
         auth: rule === 'yes' ? 'לינת שטח (לא קמפינג). מקובלת כאן מחוץ לשמורות. בלי מדורה בקיץ, השאירו נקי.' : 'לינת שטח (לא קמפינג). רשמית אסורה כאן אבל נסבלת לרוב: לילה אחד, רחוק מחופים ואתרים, בלי לפרוש מחנה.' }; }
     }
+    if (lodging === 'hotel' || (lodging === 'mix' && (k + 1) % hotelEvery === 0)) { const h = pickHotel(c); if (h) { sinceCamp = 0; return h; } noHotel.push(k + 1); }
     const pc = pickCamp(c, k); sinceCamp = pc?.wild ? sinceCamp + 1 : 0;
     return pc;
   });
+  if (noHotel.length) notes.push(`${noHotel.length === 1 ? 'בלילה' : 'בלילות'} ${noHotel.join(', ')} לא מצאתי במפה מלון או מוטל עד 14 ק"מ מסוף היום, אז הלינה שם בקמפינג.`);
+  if (nights.some(n => n?.hotel)) notes.push('מלונות ומוטלים נבחרו לפי המפה (OpenStreetMap), בלי בדיקת מחיר או מקום פנוי: הזמינו מראש בקישורים של כל לילה.');
   function pickCamp(c, k) {
     let best = null, bs = Infinity;
     for (const cp of camps) { const d = hav(c.c[0], c.c[1], cp.lat, cp.lon); if (d > 16000) continue; const sc = d - (cp.lake ? (wantLake ? 10000 : 5000) : 0) - (cp.name !== 'קמפינג' && cp.name !== 'חניון קרוואנים' ? 1500 : 0) - (cp.website ? 2500 : cp.phone ? 1000 : 0) + (p.date && openOn(cp.hours, addDays(p.date, k)) === false ? 30000 : 0); if (sc < bs) { bs = sc; best = cp; } }
@@ -3460,13 +3704,14 @@ async function planOverland(p, sLL, eLL, viaLL) {
       let far = null, fd = 32000; for (const cp of camps) { const d = hav(c.c[0], c.c[1], cp.lat, cp.lon); if (d < fd) { fd = d; far = cp; } }
       const rule = WILD_NIGHT[countryAt(c.c)] || 'no';
       let w = null, wd = 20000; if (rule !== 'no') for (const x of fromT.wild || []) { const d = hav(c.c[0], c.c[1], x.lat, x.lon); if (d < wd) { wd = d; w = x; } }
+      { const h = !(w && wildOk) && pickHotel(c, 12000); if (h) { notes.push(`לילה ${k + 1}: אין קמפינג עד 16 ק"מ מסוף היום, אז הלינה ב${LODGE_HE[h.hotel] || 'מלון'} ${latinName(h.name)}.`); return h; } } // the planner says when: a roof where there is no campsite
       if (w && !far) return { type: 'nightcamp', wild: true, lake: w.kind === 'lake', name: `🌲 לינת שטח: ${w.name}`, lat: w.lat, lon: w.lon, auth: `לינת שטח (אין קמפינג קרוב). ${rule === 'yes' ? 'מקובלת כאן מחוץ לשמורות.' : 'רשמית אסורה כאן אבל נסבלת לרוב: לילה אחד, בלי לפרוש מחנה.'}` };
       if (far) { notes.push(`לילה ${k + 1}: הקמפינג הקרוב ביותר ${Math.round(fd / 1000)} ק"מ מסוף היום.`); return far; }
       notes.push(`לילה ${k + 1}: לא מצאתי קמפינג רשמי ב-30 ק"מ מנקודת סוף היום.`); return { type: 'dayend', name: 'סוף היום: אין קמפינג רשמי קרוב', lat: c.c[0], lon: c.c[1] };
     }
     return best;
   }
-  nights.forEach(n => n && live.dot([n.lat, n.lon], `<div class="livenight">${ico(n.ferry ? 'ferry' : n.wild ? (n.lake ? 'lake' : 'tree') : 'tent')}</div>`));
+  nights.forEach(n => n && live.dot([n.lat, n.lon], `<div class="livenight">${ico(n.ferry ? 'ferry' : n.hotel ? 'bed' : n.wild ? (n.lake ? 'lake' : 'tree') : 'tent')}</div>`));
   nights.forEach((n, k) => { if (n && !cuts[k].ferryNight) n.alts = altsOf(cuts[k]).filter(x => Math.abs(x.lat - n.lat) > 1e-5 || Math.abs(x.lon - n.lon) > 1e-5).slice(0, 4); });
   if (wildOk && nights.some(n => n?.wild)) notes.push(`לינות שטח: נקודות על שפת אגם, בתצפית או בחניון יום שדרך עפר מגיעה אליהם. קמפינג מסודר כל ${every} לילות. לא בדקתי את המקום בשטח: הגיעו לפני החושך.`);
   if (wildOk && cuts.some(c => !c.ferryNight && (WILD_NIGHT[countryAt(c.c)] || 'no') === 'no')) notes.push('באיטליה, קרואטיה, סלובניה, אוסטריה ופורטוגל לינה מחוץ לקמפינג אסורה ונאכפת בקנסות, אז שם יש רק קמפינגים.');
@@ -3561,6 +3806,8 @@ async function planOverland(p, sLL, eLL, viaLL) {
   });
   for (const x of ferries) pois.push({ type: 'via', name: '⛴ מעבורת' + (x.f.name ? ': ' + x.f.name : ''), note: `מעבורת ביום ${x.day}: כ-${Math.round(x.m / 1000)} ק"מ בים, כ-${fmtH(x.f.from ? x.f.s / 3600 : x.h)} שעות שיט. בדקו לוח זמנים והזמינו מקום לרכב מראש.`, lat: x.lat, lon: x.lon, fer: x.f.s ? { line: x.f.name || '', ...ferryTimes(x.f), ops: x.f.ops || '', freq: x.f.freq || '', url: x.f.url || '', short: x.f.s <= 6 * 3600 } : null });
   if (ferries.length) notes.push(`המסלול כולל ${ferries.length === 1 ? 'מעבורת' : ferries.length + ' מעבורות'} (כ-${Math.round(sea / 1000)} ק"מ בים). זמני השיט משוערים ולא כוללים המתנה: בדקו לוח זמנים, והזמינו מקום לרכב בעונה.`);
+  { const over = days.map((d, k) => d.hrs > hardH * 1.07 ? k + 1 : 0).filter(Boolean);
+    if (over.length) notes.push(`⚠ ${over.length === 1 ? 'יום' : 'ימים'} ${over.join(', ')}: יותר מ-${p.hours_per_day || 9.5} שעות נהיגה (עד ${fmtH(Math.max(...days.map(d => d.hrs)))}). ${askedDays ? `ב-${days.length} ימים הדרך לא נכנסת בשעות האלה: הוסיפו ימים, או קצרו את המסלול.` : 'קצרו את המסלול או הוסיפו ימים.'}`); }
   if (maxKm) { const over = days.map((d, k) => d.len > maxKm * 1000 * 1.15 ? k + 1 : 0).filter(Boolean); if (over.length) notes.push(`⚠ ימים ${over.join(', ')} עוברים את ${maxKm} ק"מ ליום (עד ${Math.round(Math.max(...days.map(d => d.len)) / 1000)} ק"מ), בגלל קטעי השטח והדרך ללינה. אפשר לבקש יום נוסף או פחות עצירות.`); }
   const off = len - asph;
   notes.unshift(`טיול ארוך: ${days.length} ימים, כ-${Math.round(len / 1000)} ק"מ: כ-${Math.round(off / 1000)} ק"מ שטח (${Math.round(off / len * 100)}%) וכ-${Math.round((len - off) / 1000)} ק"מ כביש${ferries.length ? `, ועוד ${ferries.length === 1 ? 'מעבורת' : ferries.length + ' מעבורות'}` : ''}. בכל יום מחפשים קטע שטח פתוח לרכב ליד הדרך.`);
@@ -3586,6 +3833,7 @@ const countryCache = {};
 async function countryOf(lat, lon) {
   const k = lat.toFixed(1) + ',' + lon.toFixed(1);
   if (countryCache[k] !== undefined) return countryCache[k];
+  { const B = await borders(), cc = B && ccAt(B, lat, lon); if (cc) return (countryCache[k] = cc); } // our own map of countries: no request, no waiting
   try { const j = await (await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&zoom=3&lat=${lat}&lon=${lon}`)).json(); countryCache[k] = (j.address?.country_code || '').toUpperCase() || null; }
   catch { countryCache[k] = null; }
   return countryCache[k];
@@ -3769,19 +4017,20 @@ function costDays(r) {
   const D = r.days && r.days.length > 1 ? r.days : [{ from: 0, to: r.coords.length - 1, camp: null }];
   return D.map((d, k) => {
     let road = 0, dirt = 0; for (const sg of (D.length > 1 ? segsInRange(r, d.from, d.to) : r.segs)) { if (sg.ferry) continue; const m = pathLen(sg.pts); if (sg.d === 0 || sg.road) road += m; else dirt += m; }
-    const c = d.camp, night = k === D.length - 1 || !c ? 'none' : c.ferry ? 'ferry' : c.wild || c.type === 'dayend' ? 'wild' : 'camp';
+    const c = d.camp, night = k === D.length - 1 || !c ? 'none' : c.ferry ? 'ferry' : c.hotel ? 'hotel' : c.wild || c.type === 'dayend' ? 'wild' : 'camp';
     return { road: road / 1000, dirt: dirt / 1000, night, a: r.coords[d.from], b: r.coords[d.to], camp: c };
   });
 }
 function costCalc(r, C, set) {
   const days = costDays(r), cc = k => C.countries[C.days[k]] || Object.values(C.countries)[0] || {};
-  let litres = 0, fuel = 0, camp = 0, nights = 0, wild = 0; const perC = {};
+  let litres = 0, fuel = 0, camp = 0, nights = 0, wild = 0, hotelN = 0; const perC = {};
   days.forEach((d, k) => { const l = (d.road + d.dirt * DIRT_FUEL) * set.cons / 100, c = cc(k), pr = +c[set.fuel] || 0; litres += l; fuel += l * pr;
     const e = perC[C.days[k]] || (perC[C.days[k]] = { km: 0, l: 0 }); e.km += d.road + d.dirt; e.l += l;
-    if (d.night === 'camp') { nights++; camp += (+c.camp || 0) * (0.5 + 0.25 * set.people); } else if (d.night === 'wild') wild++; });
+    if (d.night === 'camp') { nights++; camp += (+c.camp || 0) * (0.5 + 0.25 * set.people); } else if (d.night === 'wild') wild++;
+    else if (d.night === 'hotel') { nights++; hotelN++; camp += (+c.hotel || Math.max(70, (+c.camp || 25) * 3)) * Math.ceil(set.people / 2); } }); // a double room for every two people
   const sum = a => (a || []).reduce((t, x) => t + (+x.eur || 0), 0);
   const tolls = Object.values(C.countries).reduce((t, c) => t + (+c.toll_eur || 0), 0), borders = sum(C.borders), ferries = sum(C.ferries) * (C.people ? (0.6 + 0.4 * set.people / C.people) : 1);
-  return { litres, fuel, camp, nights, wild, tolls, borders, ferries, perC, total: fuel + camp + tolls + borders + ferries, missing: Object.entries(perC).filter(([k]) => !(+(C.countries[k] || {})[set.fuel])).map(([k]) => k) };
+  return { litres, fuel, camp, nights, wild, hotelN, tolls, borders, ferries, perC, total: fuel + camp + tolls + borders + ferries, missing: Object.entries(perC).filter(([k]) => !(+(C.countries[k] || {})[set.fuel])).map(([k]) => k) };
 }
 let costBusy = false;
 async function costLookup(r, p) {
@@ -3792,10 +4041,10 @@ async function costLookup(r, p) {
     const ferries = [], fl = x => String(x || '').replace(/[\u2068\u2069]/g, '').replace('←', '->').trim();
     for (const x of [...(r.days || []).map(d => d.camp), ...(r.pois || [])]) { const ln = fl(x?.fer?.line); if (ln && !ferries.some(f => f.line === ln)) ferries.push({ line: ln, ops: x.fer.ops || '', hours: x.fer.hours }); }
     const ask = `A 4x4 trip (Toyota Land Cruiser, about 5 m long and 2 m high, roof tent), ${set.people} people in the vehicle${p?.date ? ', starting ' + p.date : ''}.\n` +
-      days.map((d, k) => `Day ${k + 1}: ${at(d.a)} -> ${at(d.b)}, ${Math.round(d.road)} km road, ${Math.round(d.dirt)} km dirt, night: ${d.night === 'camp' ? 'campsite' + (d.camp?.name ? ' "' + String(d.camp.name).replace(/[⁨⁩"]/g, '') + '"' : '') : d.night}`).join('\n') +
+      days.map((d, k) => `Day ${k + 1}: ${at(d.a)} -> ${at(d.b)}, ${Math.round(d.road)} km road, ${Math.round(d.dirt)} km dirt, night: ${d.night === 'hotel' ? 'hotel / motel' : d.night === 'camp' ? 'campsite' + (d.camp?.name ? ' "' + String(d.camp.name).replace(/[⁨⁩"]/g, '') + '"' : '') : d.night}`).join('\n') +
       (ferries.length ? '\nFerries (vehicle + passengers, cheapest sensible fare; a cabin on an overnight sailing):\n' + ferries.map(f => `- ${f.line}${f.ops ? ' (' + f.ops + ')' : ''}${f.hours ? ', about ' + Math.round(f.hours) + ' h' : ''}`).join('\n') : '') +
       `\n\nSearch the web for current prices and answer with JSON only, no other text:\n{"eur_ils": number, "days": ["CC", ...one ISO country code per day, the country where most of that day's driving is, exactly ${days.length} items],` +
-      ` "countries": {"CC": {"name": "Hebrew name", "petrol": EUR per litre, "diesel": EUR per litre, "lpg": EUR per litre or 0 if not sold, "camp": EUR for one night at an ordinary campsite for a vehicle and 2 adults in season, "toll_eur": EUR of motorway tolls and vignettes for this vehicle on this route in that country (0 if none), "toll_note": "short Hebrew: vignette or toll roads, what and how to pay"}},` +
+      ` "countries": {"CC": {"name": "Hebrew name", "petrol": EUR per litre, "diesel": EUR per litre, "lpg": EUR per litre or 0 if not sold, "camp": EUR for one night at an ordinary campsite for a vehicle and 2 adults in season, "hotel": EUR for one night in a simple double room (motel / 2-3 star hotel) in season, "toll_eur": EUR of motorway tolls and vignettes for this vehicle on this route in that country (0 if none), "toll_note": "short Hebrew: vignette or toll roads, what and how to pay"}},` +
       ` "borders": [{"name": "short Hebrew", "eur": number, "note": "short Hebrew"}], "ferries": [{"line": "as given", "eur": number, "note": "short Hebrew: what the price includes"}], "notes": "short Hebrew: what is uncertain"}\n` +
       `"borders": only real costs when crossing between these countries with a foreign-registered car: border car insurance where the green card is not valid, entry or road taxes, environmental stickers. Empty list if none. Prices in EUR, numbers only. If a ferry price was not found give your best estimate and say so in its note.`;
     const j = await api('/claude', { method: 'POST', body: JSON.stringify({ max_tokens: 8000, system: 'You estimate travel costs for an overland 4x4 trip from current web sources. JSON only.', messages: [{ role: 'user', content: ask }], tools: [{ type: WEB_SEARCH.type, max_uses: 5 }] }) });
@@ -3826,7 +4075,7 @@ function renderCost(r, p) {
     const row = (t, sub, v) => `<tr><td>${t}${sub ? `<small>${sub}</small>` : ''}</td><td>${eur(v)}</td></tr>`;
     body = `<table class="costtab">` +
       row(`דלק (${FUELS[set.fuel]})`, `${Math.round(K.litres)} ליטר. בשטח חושב ${Math.round((DIRT_FUEL - 1) * 100)}% יותר מבכביש.<br>${fuelBy}`, K.fuel) +
-      (K.nights || K.wild ? row('קמפינג', `${K.nights} לילות בקמפינג${K.wild ? `, ${K.wild} לילות שטח בלי עלות` : ''}`, K.camp) : '') +
+      (K.nights || K.wild ? row(K.hotelN ? 'לינה' : 'קמפינג', `${K.hotelN ? `${K.hotelN} לילות במלון / מוטל (הערכה)` + (K.nights - K.hotelN ? `, ${K.nights - K.hotelN} בקמפינג` : '') : `${K.nights} לילות בקמפינג`}${K.wild ? `, ${K.wild} לילות שטח בלי עלות` : ''}`, K.camp) : '') +
       (C.ferries.length ? row('מעבורות', C.ferries.map(f => `${gEsc(f.line)}: €${Math.round(f.eur)}${f.note ? ' · ' + gEsc(f.note) : ''}`).join('<br>'), K.ferries) : '') +
       (K.tolls ? row('אגרות כבישים', Object.entries(C.countries).filter(([, c]) => c.toll_eur).map(([k, c]) => `${nm(k)}: €${Math.round(c.toll_eur)}${c.toll_note ? ' · ' + gEsc(c.toll_note) : ''}`).join('<br>'), K.tolls) : '') +
       (C.borders.length ? row('מעברי גבול וביטוח', C.borders.map(b => `${gEsc(b.name)}: €${Math.round(b.eur)}${b.note ? ' · ' + gEsc(b.note) : ''}`).join('<br>'), K.borders) : '') +
@@ -3842,13 +4091,23 @@ function renderCost(r, p) {
 }
 
 // ---------- field reports ----------
+// One request covers an area for two minutes: a long trip builds dozens of area graphs, and each used to ask the server again.
+let repArea = null;
+async function reportsIn(s, w, n, e, wide = 0) {
+  const a = repArea;
+  if (a && Date.now() - a.at < 120000 && s >= a.s && n <= a.n && w >= a.w && e <= a.e) return (await a.list).filter(r => r.lat >= s && r.lat <= n && r.lon >= w && r.lon <= e);
+  const b = { s: s - wide, w: w - wide, n: n + wide, e: e + wide, at: Date.now() };
+  b.list = api(`/reports?s=${b.s}&w=${b.w}&n=${b.n}&e=${b.e}`).then(j => j.reports || []);
+  if (wide) repArea = b;
+  return (await b.list).filter(r => r.lat >= s && r.lat <= n && r.lon >= w && r.lon <= e);
+}
 const REPORT_KINDS = { closed: 'סגור / חסום', harder: 'קשה מהצפוי', easier: 'קל מהצפוי', missing: 'הדרך לא קיימת', note: 'הערה' };
 let reports = [];
 async function loadReports(G) {
   if (!hasGroup() || !G.N) { applyReports(G, []); return; }
   let s = 90, n = -90, w = 180, e = -180;
   for (let i = 0; i < G.N; i += 7) { const a = G.lat[i], o = G.lon[i]; if (a < s) s = a; if (a > n) n = a; if (o < w) w = o; if (o > e) e = o; }
-  try { reports = (await api(`/reports?s=${s}&w=${w}&n=${n}&e=${e}`)).reports || []; } catch { reports = []; }
+  try { reports = await reportsIn(s, w, n, e); } catch { reports = []; }
   G.repCount = applyReports(G, reports.filter(r => r.kind !== 'note'));
 }
 const repIcon = k => L.divIcon({ className: '', html: `<div class="repic rep-${k}">${{ closed: '⛔', harder: '▲', easier: '▼', missing: '✕', note: 'i' }[k] || '!'}</div>`, iconSize: [22, 22], iconAnchor: [11, 11] });
@@ -3924,11 +4183,12 @@ let lastRunErr = null;
 async function run(fromPrompt, preset = null, changeText = null) {
   // every plan is saved; a change of the trip on screen becomes its next version
   const baseTrip = (!fromPrompt || changeText) ? (current?.trip || null) : null;
+  const asked = changeText || pendingChange || ''; // what the steps card says is being changed
   const change = !baseTrip ? null : changeText || pendingChange || 'שינוי בהגדרות'; pendingChange = null;
   const btns = [$('goBtn'), $('rebuildBtn')]; btns.forEach(b => b.disabled = true); busy = true; bgNote = '';
   const changing = !$('results').hidden && $('sheet').classList.contains('has-results');
-  if (changing) $('results').classList.add('working'); // the old trip stays in view while the new one is planned
-  else { $('results').hidden = true; stageStart(fromPrompt && !preset); routeLayer.clearLayers(); markLayer.clearLayers(); }
+  if (changing) { $('results').classList.add('working'); if (!stageLive()) stageStart(false, change || asked); } // the old trip stays in view while the new one is planned, with the steps above it
+  else { $('results').hidden = true; stageStart(fromPrompt && !preset); routeLayer.clearLayers(); markLayer.clearLayers(); setArrows(null); }
   live.clear(); liveOn = !changing;
   try {
     let p;
@@ -3966,6 +4226,8 @@ async function run(fromPrompt, preset = null, changeText = null) {
       { const sh = offroadShare(text); if (sh && !p.offroad_share) p.offroad_share = sh; }
       { const m = [...text.matchAll(/(?:יותר|עוד|הרבה)\s+שטח[^\d]{0,12}(?:ב?ימים?|ב?יום)\s*([\d ,ו-]+)/g)].flatMap(x => x[1].match(/\d+/g) || []).map(Number); if (m.length && !p.more_offroad_days?.length) p.more_offroad_days = m; }
       if (p.wild_camping == null && /בלי קמפינג|לא חייב(ים)? (להיות )?קמפינג|לינת שטח|לינה בטבע|ביער|wild camp/i.test(text)) p.wild_camping = true;
+      if (!p.lodging && /מלון|מלונות|מוטל|בית הארחה|בתי הארחה|צימר|hotel|motel/i.test(text) && !/(בלי|לא) (מלון|מלונות|מוטל)/.test(text)) p.lodging = /קמפינג|אוהל|גם|לפעמים|מדי פעם|כל (כמה|\d+) (לילות|ימים)/.test(text) ? 'mix' : 'hotel';
+      { const m = text.match(/(\d+(?:\.\d+)?)\s*שעות\s*(?:של\s*)?(?:נהיגה|נסיעה)\s*(?:ביום|ליום|כל יום)/); if (m && !p.hours_per_day) p.hours_per_day = +m[1]; }
       fillForm(p);
       const und = [p._smartErr ? '⚠️ ' + p._smartErr + ' תכננתי לפי פענוח בסיסי, שמבין רק מקום התחלה פשוט. נסו "בנה מסלול" שוב.' : null, p.summary_he ? 'הבנתי: ' + p.summary_he : null, p.story_he || null, p._searched ? '(חיפשתי ברשת כדי לתכנן)' : null].filter(Boolean).join('\n');
       $('understood').hidden = !und; $('understood').textContent = und; $('understood').style.whiteSpace = 'pre-line';
@@ -3973,7 +4235,7 @@ async function run(fromPrompt, preset = null, changeText = null) {
     } else {
       p = readForm(current?.p || {});
       p.story_he = current?.p?.story_he; p._startNote = current?.p?._startNote; p.nightPins = current?.p?.nightPins; p._prevDayOff = current?.p?._prevDayOff;
-      for (const k of ['offroad_share', 'wild_camping', 'camp_every_days', 'resupply_every_days', 'max_km_per_day', 'stay_within_km', 'night_near_water', 'country', 'more_offroad_days']) if (current?.p?.[k] != null && p[k] == null) p[k] = current.p[k];
+      for (const k of ['lodging', 'hotel_every_days', 'offroad_share', 'wild_camping', 'camp_every_days', 'resupply_every_days', 'max_km_per_day', 'stay_within_km', 'night_near_water', 'country', 'more_offroad_days']) if (current?.p?.[k] != null && p[k] == null) p[k] = current.p[k];
     }
 
     status('מאתר מקומות…');
@@ -4181,6 +4443,7 @@ function ferrySub(c) { // everything known about the crossing, and what is only 
   return bits.filter(Boolean).join(' · ');
 }
 function campSub(c) {
+  if (c.hotel) return latinName([c.auth || LODGE_HE[c.hotel] || 'מלון', c.phone ? 'טלפון ' + c.phone : null, c.website ? null : 'בלי אתר במפה: בדקו ב-Booking או ב-Google'].filter(Boolean).join(' · '));
   const abroad = !inIsrael(c.lat, c.lon);
   const bits = [c.auth ? (abroad ? c.auth : 'חניון לילה מורשה · ' + c.auth) : 'אתר קמפינג לא מאומת: ייתכן שהלינה בו אסורה'];
   if (c.fee === 'yes') bits.push('בתשלום'); else if (c.fee === 'no') bits.push('ללא תשלום');
@@ -4219,6 +4482,10 @@ const ICON = {
   fuel: '<path d="M5 21V5a1.5 1.5 0 0 1 1.5-1.5h7A1.5 1.5 0 0 1 15 5v16M3.5 21h13M5 10h10M15 8l3 2.5V17a1.5 1.5 0 0 0 3 0v-7l-3-3"/>',
   water: '<path d="M12 3.5s-6 6.6-6 11a6 6 0 0 0 12 0c0-4.4-6-11-6-11z"/>',
   mountain: '<path d="M2.5 19.5 9 8l4 6.5 2.5-3.5 6 8.5z"/>',
+  expand: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+  shrink: '<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>',
+  panel: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 13h17"/>',
+  border: '<path d="M12 3v3M12 9v3M12 15v3M12 21v0"/><path d="M4 8l3 4-3 4M20 8l-3 4 3 4"/>',
 };
 const ico = (k, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON[k] || ''}</svg>`;
 // The trip's sections as one accordion: each box becomes a row with an icon, a title and its key figure, opened on demand.
@@ -4247,6 +4514,22 @@ const ico = (k, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-h
     new MutationObserver(sync).observe(box, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-sum'] });
   }
 }
+// the panel as a drawer: closed, the map has the whole screen; the same button (or the pill at the bottom) brings it back
+function setDrawer(open) {
+  document.body.classList.toggle('drawer-off', !open);
+  const a = document.querySelector('.fullctl a'); if (a) { a.innerHTML = ico(open ? 'expand' : 'shrink'); a.title = open ? 'מפה על כל המסך' : 'החזרת הפאנל'; a.setAttribute('aria-label', a.title); a.setAttribute('aria-pressed', String(!open)); }
+  setTimeout(() => map.invalidateSize(), 260);
+}
+{
+  const FullCtl = L.Control.extend({ options: { position: 'topleft' }, onAdd() {
+    const box = L.DomUtil.create('div', 'leaflet-bar fullctl'); L.DomEvent.disableClickPropagation(box);
+    const a = L.DomUtil.create('a', '', box); a.href = '#'; a.role = 'button';
+    L.DomEvent.on(a, 'click', e => { L.DomEvent.preventDefault(e); setDrawer(document.body.classList.contains('drawer-off')); });
+    return box; } });
+  new FullCtl().addTo(map); setDrawer(true);
+  $('drawerBack').innerHTML = ico('panel') + '<span>הטיול וההגדרות</span>'; $('drawerBack').onclick = () => setDrawer(true);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.body.classList.contains('drawer-off')) setDrawer(true); });
+}
 // the map button for the Toyota garages (here: it needs the icons)
 {
   const GarCtl = L.Control.extend({ options: { position: 'topleft' }, onAdd() {
@@ -4264,6 +4547,7 @@ function nameKind(name, pt = {}) {
   if (/^⛴/.test(n) || pt.ferry) return ['ferry', n.replace(/^⛴\s*/, '')];
   if (/^🌲/.test(n) || pt.wild) return [pt.lake ? 'lake' : 'tree', n.replace(/^🌲\s*/, '')];
   if (/^📍/.test(n)) return ['pin', n.replace(/^📍\s*/, '')];
+  if (pt.hotel) return ['bed', n];
   if (pt.type === 'nightcamp') return [pt.lake ? 'lake' : 'tent', n];
   return [null, n];
 }
@@ -4581,6 +4865,11 @@ function placeLinks(pt) {
     out.push(['לוח הפלגות וכרטיסים', 'https://www.google.com/search?q=' + q(`${ports.join(' to ')} car ferry timetable tickets ${pt.fer?.ops || ''}`.trim())]);
     if (pt.fer && (pt.fer.est || !pt.fer.ops) && hasGroup()) out.push([pt.fer.none ? 'חפש שוב שעות הפלגה' : 'מצא שעות הפלגה וחברות', '#findferry']);
     out.push(['Ferryhopper', 'https://www.ferryhopper.com/en/'], ['Direct Ferries', 'https://www.directferries.com/']);
+  } else if (pt.hotel) {
+    if (pt.website) out.push(['אתר המקום והזמנה', pt.website]);
+    if (pt.phone) out.push(['טלפון ' + pt.phone, 'tel:' + pt.phone.replace(/[^\d+]/g, '')]);
+    out.push(['מחיר והזמנה ב-Booking', `https://www.booking.com/searchresults.html?ss=${q(nm)}&latitude=${(+pt.lat).toFixed(4)}&longitude=${(+pt.lon).toFixed(4)}`]);
+    out.push(['ביקורות ותמונות', `https://www.google.com/maps/search/${q(nm)}/@${ll},15z`], ['עוד מלונות באזור', `https://www.google.com/maps/search/hotels/@${ll},13z`]);
   } else if (pt.type === 'nightcamp' && !pt.wild && !pt.ferry && pt.type !== 'dayend') {
     const anon = /^(קמפינג|חניון קרוואנים|חניון לילה|camping|campsite)$/i.test(nm.trim());
     if (pt.website) out.push([pt.webFound === 'portal' ? 'דף הקמפינג (נמצא בחיפוש)' : pt.webFound ? 'אתר הקמפינג (נמצא בחיפוש)' : 'אתר הקמפינג והזמנה', /^https?:/.test(pt.website) ? pt.website : 'https://' + pt.website]);
@@ -4591,7 +4880,7 @@ function placeLinks(pt) {
     if (!pt.website && !anon && hasGroup()) out.push(['חפש את אתר הקמפינג', '#findsite']);
     if (!pt.website && !inIsrael(pt.lat, pt.lon)) out.push(['הזמנה ב-Pitchup', '#pitchup']); // a booking site for campsites: the bookable ones around this town
   }
-  if (pt.type === 'nightcamp' && !pt.ferry && pt.type !== 'dayend' && !inIsrael(pt.lat, pt.lon)) { // every place campers sleep around here, with their reviews
+  if (pt.type === 'nightcamp' && !pt.hotel && !pt.ferry && pt.type !== 'dayend' && !inIsrael(pt.lat, pt.lon)) { // every place campers sleep around here, with their reviews
     out.push(['Park4night באזור', `https://park4night.com/en/search?lat=${(+pt.lat).toFixed(5)}&lng=${(+pt.lon).toFixed(5)}&z=13`]);
   }
   out.push([pt.ferry ? 'Waze לנמל' : 'Waze', `https://waze.com/ul?ll=${ll}&navigate=yes`], [pt.ferry ? 'הנמל ב-Google Maps' : 'Google Maps', `https://www.google.com/maps/search/?api=1&query=${ll}`]);
@@ -4915,7 +5204,7 @@ $('refineBtn').onclick = async () => {
   const ask = $('refineIn').value.trim(); if (!ask || !current) return;
   if (!hasGroup() && !store.get('apiKey')) { status('שיפור במילים צריך את הפענוח החכם: הכניסו קוד קבוצה ב-⚙. בינתיים אפשר לערוך תחנות ידנית או בהגדרות המסלול.', true); return; }
   const slim = JSON.parse(JSON.stringify(current.p, (k, v) => k.startsWith('_') || k === 'researched' ? undefined : v));
-  $('refineBtn').disabled = true; status('מעדכן את הטיול לפי הבקשה…'); $('refineIn').blur();
+  $('refineBtn').disabled = true; stageStart(true, ask); status('מעדכן את הטיול לפי הבקשה…'); $('refineIn').blur();
   try {
     // fast path: "more off-road on day N" needs no AI at all, the planner handles it directly
     const MORE = /(?:תן|תנו|תעשה|אפשר|רוצה|בבקשה|גם|\s|,|ו)*(?:יותר|עוד|הרבה)\s+שטח[^\d]{0,12}(?:ב?ימים?|ב?יום)\s*[\d ,ו-]+/g;
@@ -4937,7 +5226,7 @@ $('refineBtn').onclick = async () => {
     current.p = { ...np, story_he: np.story_he || current.p.story_he, _prevDayOff: (rr.days || []).map(d => d.len ? Math.round((d.off || 0) / d.len * 100) : 0) };
     fillForm(current.p); $('refineIn').value = '';
     pendingChange = ask.slice(0, 200); await run(false);
-  } catch (e) { status('העדכון נכשל: ' + (e.detail || e.message), true); }
+  } catch (e) { stageEnd(); status('העדכון נכשל: ' + (e.detail || e.message), true); }
   finally { $('refineBtn').disabled = false; }
 };
 $('refineIn').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('refineBtn').click(); } });
@@ -4945,6 +5234,7 @@ $('refineIn').addEventListener('keydown', e => { if (e.key === 'Enter') { e.prev
 const fmtH = h => { const hh = Math.floor(h), mm = Math.round((h - hh) * 60 / 5) * 5; return mm === 60 ? `${hh + 1}:00` : `${hh}:${String(mm).padStart(2, '0')}`; };
 // keep the route clear of the panel, wherever the panel sits (bottom sheet / side panel)
 function mapPad() {
+  if (document.body.classList.contains('drawer-off')) return { paddingTopLeft: [50, 30], paddingBottomRight: [30, 70] };
   const sh = $('sheet').getBoundingClientRect(), side = sh.width < innerWidth - 20;
   if (side) return { paddingTopLeft: [20, 70], paddingBottomRight: [innerWidth - sh.left + 20, 20] };
   const target = Math.min(sh.height, parseFloat(getComputedStyle($('sheet')).maxHeight) || sh.height); // sheet may still be animating
@@ -4963,10 +5253,12 @@ function segsInRange(r, from, to) {
   return out;
 }
 function render(i, day = null) {
-  live.clear();
+  live.clear(); $('planCard').hidden = true; // the steps card is done: the panel has its final height before the map is fitted
   const { res, p } = current; if (current.sel !== i) day = null; current.sel = i; current.day = day;
   const r = res.results[i];
   $('results').hidden = false; $('sheet').classList.remove('min', 'full'); $('sheet').classList.add('has-results');
+  $('hpdRow').hidden = $('lodgeRow').hidden = !r.overland; if (r.overland) drawPickers();
+  if (document.body.classList.contains('drawer-off') && !current._drawn) setDrawer(true); current._drawn = true; // a new trip opens the panel; moving between its days leaves a full-screen map alone
   tripHead(r, p);
   const D = r.days && r.days.length > 1 ? r.days : null;
   const dv = D && day != null ? D[day] : null;
@@ -5026,7 +5318,7 @@ function render(i, day = null) {
   if (D) D.forEach((d, k) => {
     const c = d.camp; if (!c || c.ferry) return;
     const pp = placePopup(c, c.name, campSub(c));
-    const html = `<div class="nightpin" style="--c:${DAYC[k % DAYC.length]}">${ico(c.wild ? 'moon' : 'tent')}<b>לילה ${k + 1}</b><span></span></div>`;
+    const html = `<div class="nightpin" style="--c:${DAYC[k % DAYC.length]}">${ico(c.hotel ? 'bed' : c.wild ? 'moon' : 'tent')}<b>לילה ${k + 1}</b><span></span></div>`;
     const m = L.marker([c.lat, c.lon], { icon: L.divIcon({ className: '', html, iconSize: null, iconAnchor: [14, 30] }), zIndexOffset: 1200 }).addTo(markLayer).bindPopup(pp.div, { maxWidth: 320, minWidth: 220 }).on('popupopen', pp.load);
     const sp = m.getElement()?.querySelector('.nightpin span'); if (sp) sp.textContent = (c.name || '').replace(/^🌲\s*/, '').replace(/^לינת שטח:\s*/, '').slice(0, 26);
   });
@@ -5046,6 +5338,7 @@ function render(i, day = null) {
   });
   const fitB = L.latLngBounds(dv ? r.coords.slice(dv.from, dv.to + 1) : r.coords);
   map.fitBounds(fitB, mapPad());
+  setArrows(dv ? r.coords.slice(dv.from, dv.to + 1) : r.coords);
   clearTimeout(window.__refit); window.__refit = setTimeout(() => { map.invalidateSize(); map.fitBounds(fitB, mapPad()); }, 320); // after the panel settles
 
   const stopH = r.pois.filter(x => x.type !== 'nightcamp').length * 0.25;
@@ -5126,7 +5419,7 @@ function render(i, day = null) {
     if (!D && days[0]) { const sc = daySchedule(r, p, days[0], 0, true); if (sc) info.push(sc.text); }
     if (D) { // campsites that are closed on the night you would be there (many close for the winter)
       const date = p.date || $('pDate').value || isoToday(), shut = [];
-      D.forEach((d, k) => { const c = d.camp; if (!c || c.wild || c.ferry) return; c.closedOn = openOn(c.hours, addDays(date, k)) === false; if (c.closedOn) shut.push(`לילה ${k + 1} (\u2068${latinName(c.name)}\u2069, פתוח ${c.hours})`); });
+      D.forEach((d, k) => { const c = d.camp; if (!c || c.wild || c.ferry || c.hotel) return; c.closedOn = openOn(c.hours, addDays(date, k)) === false; if (c.closedOn) shut.push(`לילה ${k + 1} (\u2068${latinName(c.name)}\u2069, פתוח ${c.hours})`); });
       if (shut.length) w.push(`לפי שעות הפתיחה, הקמפינג סגור בתאריך הטיול: ${shut.join(', ')}. בדקו מול המקום או החליפו לינה.`);
       const fer = D.map((d, k) => d.camp?.fer ? { k, f: d.camp.fer } : null).filter(Boolean);
       for (const { k, f } of fer) (f.none ? w : info).push(`מעבורת בלילה ${k + 1}: ${ferrySub(D[k].camp)}`);
@@ -5207,7 +5500,7 @@ function render(i, day = null) {
         sw.innerHTML = `<summary>החלף לינה (${alts.length} אפשרויות)</summary>`;
         for (const a of alts) {
           const b = document.createElement('button'); b.type = 'button'; b.className = 'alt';
-          b.innerHTML = '<b></b><small></small>'; setName(b.querySelector('b'), a.name, a); b.querySelector('small').textContent = `${a.km} ק"מ מסוף היום · ${a.wild ? 'בטבע' : a.lake ? 'קמפינג על שפת אגם' : 'קמפינג'}`;
+          b.innerHTML = '<b></b><small></small>'; setName(b.querySelector('b'), a.name, a); b.querySelector('small').textContent = `${a.km} ק"מ מסוף היום · ${a.hotel ? (a.auth || 'מלון') : a.wild ? 'בטבע' : a.lake ? 'קמפינג על שפת אגם' : 'קמפינג'}`;
           b.onclick = () => { const pins = { ...(current.p.nightPins || {}) }; const { alts: _a, day: _d, km: _k, ...keep } = a; pins[k] = keep; current.p.nightPins = pins; pendingChange = `לילה ${k + 1}: ${keep.name || ''}`; run(false); };
           sw.append(b);
         }
@@ -5223,6 +5516,7 @@ function render(i, day = null) {
     });
     $('dayPlan').append(box);
   }
+  drawBorders(r, D, dv);
   renderChecklist(p, r, D);
   renderStops(p, r);
   $('poiList').innerHTML = '';
@@ -5347,6 +5641,7 @@ function showSaved(row) {
   current = { p, res: { results: [r], L: null }, G: null, sel: 0, saved: row, trip: row.trip_id ? row : null, prompt: row.prompt || '' };
   $('verList').hidden = true;
   if (row.prompt) $('prompt').value = row.prompt;
+  if (row.params?.start) { fillForm(p); if (p.start.latlng) pickedStart = p.start.latlng; }
   $('understood').hidden = true; status('');
   render(0);
 }
@@ -5456,7 +5751,7 @@ async function thCommit(save) {
 }
 $('thInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); thCommit(true); } else if (e.key === 'Escape') thCommit(false); });
 $('thInput').addEventListener('blur', () => thCommit(true));
-$('verChip').textContent = 'v' + '1.118 · 15.11.2026 14:52'.split(' ')[0]; // so everyone can tell which version they are on
+$('verChip').textContent = 'v' + '1.123 · 16.11.2026 00:47'.split(' ')[0]; // so everyone can tell which version they are on
 // naming: type a name and press Enter (or just leave the field); it is saved for every version of the trip
 $('routeName').addEventListener('focus', e => setTimeout(() => e.target.select(), 0));
 $('routeName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
@@ -5471,25 +5766,7 @@ $('shareBtn').onclick = async () => {
 };
 // the group's latest trips on the start screen: one tap to open
 const verCount = r => r.versions > 1 ? `${r.versions} גרסאות` : null;
-async function loadRecent() {
-  if (!hasGroup()) return;
-  try {
-    const j = await api('/routes'), all = j.routes || [], me = store.get('nick') || null;
-    const rows = all.slice(0, 5); // the latest, and what the others saved lately even if yours fill the top
-    for (const r of all.filter(r => r.created_by && r.created_by !== me && !rows.includes(r)).slice(0, 2)) rows.push(r);
-    if (!rows.length) return;
-    const list = document.querySelector('#recent .rlist'); list.innerHTML = '';
-    for (const r of rows) {
-      const b = document.createElement('button'); b.type = 'button'; b.innerHTML = '<b></b><small></small>';
-      b.querySelector('b').textContent = r.name; b.querySelector('small').textContent = [r.stats?.len ? Math.round(r.stats.len / 1000) + ' ק"מ' : null, verCount(r), r.created_by, new Date(r.created_at).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' })].filter(Boolean).join(' · ');
-      b.onclick = async () => { try { const k = await api('/routes/' + r.id); showSaved(k.route); } catch { status('לא הצלחתי לפתוח את הטיול.', true); } };
-      list.append(b);
-    }
-    $('recent').hidden = false;
-  } catch {}
-}
-setTimeout(loadRecent, 400);
-document.addEventListener('visibilitychange', () => { if (!document.hidden && !current) loadRecent(); });
+
 async function checkSharedLink() { const m = location.hash.match(/#r=([0-9a-f-]{36})/); if (!m || !hasGroup()) return;
   try { status('פותח את הטיול ששותף…'); const j = await api('/routes/' + m[1]); showSaved(j.route); status(''); } catch { status('לא הצלחתי לפתוח את הטיול ששותף. בדקו את קוד הקבוצה ב-⚙.', true); } }
 checkSharedLink();
@@ -5502,7 +5779,7 @@ $('delBtn').onclick = () => { $('delConfirm').hidden = false; };
 $('delNo').onclick = () => { $('delConfirm').hidden = true; };
 $('delYes').onclick = async () => {
   const sv = tripRow(); if (!sv) return;
-  try { await api('/routes/' + sv.id, { method: 'DELETE' }); libCache = null; current = null; routeLayer.clearLayers(); markLayer.clearLayers(); $('results').hidden = true; $('tripHead').hidden = true; $('verList').hidden = true; status('הטיול נמחק, עם כל הגרסאות שלו.'); }
+  try { await api('/routes/' + sv.id, { method: 'DELETE' }); libCache = null; current = null; setArrows(null); routeLayer.clearLayers(); markLayer.clearLayers(); $('results').hidden = true; $('tripHead').hidden = true; $('verList').hidden = true; status('הטיול נמחק, עם כל הגרסאות שלו.'); }
   catch (e) { status(e.message, true); }
 };
 
@@ -5546,7 +5823,7 @@ const prefDB = (() => { let dbp = null; return () => dbp || (dbp = new Promise((
 const prefKV = async (mode, fn) => { const db = await prefDB(); return new Promise((res, rej) => { const tx = db.transaction('kv', mode), st = tx.objectStore('kv'); const q = fn(st); tx.oncomplete = () => res(q?.result); tx.onerror = () => rej(tx.error); }); };
 // fetched per 1° cell of the trip's area (all of Europe is ~1M points: too much for a phone at once), kept in IndexedDB
 let tetSig = null, tetSigAt = 0; const tetCells = new Map(); // "lat,lon" (1°) -> Set of ~60 m cells
-const tetCell = (la, lo) => Math.round(la / 0.0006) + ',' + Math.round(lo / 0.00072);
+const tetCell = (la, lo) => (Math.round(la / 0.0006) + 200000) * 1048576 + Math.round(lo / 0.00072) + 500000;
 async function tetSignature() {
   if (tetSig && Date.now() - tetSigAt < 600000) return tetSig;
   const list = (await api('/tracks')).tracks || []; tetSig = list.map(t => t.name + '@' + t.created_at).join('|'); tetSigAt = Date.now(); return tetSig;
@@ -5558,18 +5835,19 @@ async function tetCellSet(ci, cj, sig) {
   const g = new Set(); for (let i = 0; i + 1 < pts.length; i += 2) g.add(tetCell(pts[i], pts[i + 1]));
   tetCells.set(k, g); return g;
 }
-const tetNear = (g, la, lo) => { const a = Math.round(la / 0.0006), b = Math.round(lo / 0.00072); for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) if (g.has((a + x) + ',' + (b + y))) return true; return false; };
+const tetNear = (g, la, lo) => { const a = Math.round(la / 0.0006), b = Math.round(lo / 0.00072); for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) if (g.has((a + x + 200000) * 1048576 + b + y + 500000)) return true; return false; };
 async function tetMarkGraph(G) {
   if (!hasGroup() || !G.N) return;
   try {
     const sig = await tetSignature(); if (!sig) return;
     let s0 = 90, n0 = -90, w0 = 180, e0 = -180; for (let i = 0; i < G.N; i++) { const a = G.lat[i], o = G.lon[i]; if (a < s0) s0 = a; if (a > n0) n0 = a; if (o < w0) w0 = o; if (o > e0) e0 = o; }
     const sets = new Map();
-    for (let ci = Math.floor(s0); ci <= Math.floor(n0); ci++) for (let cj = Math.floor(w0); cj <= Math.floor(e0); cj++) sets.set(ci + ',' + cj, await tetCellSet(ci, cj, sig));
-    if (![...sets.values()].some(g => g.size)) return;
-    const near = (la, lo) => { const g = sets.get(Math.floor(la) + ',' + Math.floor(lo)); return g && g.size && tetNear(g, la, lo); };
+    for (let ci = Math.floor(s0); ci <= Math.floor(n0); ci++) for (let cj = Math.floor(w0); cj <= Math.floor(e0); cj++) { const g = await tetCellSet(ci, cj, sig); if (g.size) sets.set((ci + 90) * 400 + cj + 180, g); }
+    if (!sets.size) return;
+    const nn = new Uint8Array(G.N); // each node once: is it on a preferred track
+    for (let i = 0; i < G.N; i++) { const la = G.lat[i], lo = G.lon[i], g = sets.get((Math.floor(la) + 90) * 400 + Math.floor(lo) + 180); if (g && tetNear(g, la, lo)) nn[i] = 1; if ((i & 262143) === 262143) await breathe(); }
     const m = new Uint8Array(G.E); let n = 0;
-    for (let e = 0; e < G.E; e++) { const a = G.eA[e], b = G.eB[e]; if (near(G.lat[a], G.lon[a]) && near(G.lat[b], G.lon[b])) { m[e] = 1; n++; } }
+    for (let e = 0; e < G.E; e++) if (nn[G.eA[e]] && nn[G.eB[e]]) { m[e] = 1; n++; }
     if (n) G.eTet = m;
   } catch (e) { console.warn('preferred tracks', e?.message || e); }
 }

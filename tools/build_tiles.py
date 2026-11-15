@@ -27,9 +27,14 @@ CAMP_TAGS = ["contact:website", "url", "contact:url", "phone", "contact:phone", 
              "capacity", "stars", "tents", "caravans", "motorhome", "dog", "shower", "power_supply", "internet_access", "sanitary_dump_station", "charge", "swimming_pool", "openfire", "addr:city"]
 # fuel stations and shops: which fuels are sold (diesel, petrol, LPG) and when they are open
 SUPPLY_TAGS = ["opening_hours", "fuel:diesel", "fuel:lpg", "fuel:octane_95", "fuel:octane_98", "self_service", "payment:credit_cards"]
-POI_SCHEMA = 3  # raised when the kept tags change: the EU workflow rebuilds countries built with an older one
+# a roof for the night on trips that are not all camping: named hotels, motels, guest houses and hostels, with how to reach them
+LODGING = ("hotel", "motel", "guest_house", "hostel")
+LODGE_TAGS = ["contact:website", "url", "phone", "contact:phone", "email", "contact:email", "stars", "rooms", "opening_hours", "addr:city"]
+def is_lodging(t): return t.get("tourism") in LODGING and "name" in t
+POI_SCHEMA = 4  # raised when the kept tags change: the EU workflow rebuilds countries built with an older one (4: + lodging)
 def poi_tags(t):
     if t.get("tourism") in ("camp_site", "caravan_site"): return pick(t, POI_TAGS + CAMP_TAGS)
+    if t.get("tourism") in LODGING: return pick(t, POI_TAGS + LODGE_TAGS)
     if t.get("amenity") == "fuel" or t.get("shop") in ("supermarket", "convenience"): return pick(t, POI_TAGS + SUPPLY_TAGS)
     return pick(t, POI_TAGS)
 MIL_TAGS = ["landuse", "military", "leisure", "boundary", "protect_class", "name", "name:he", "name:en"]
@@ -54,7 +59,7 @@ def keep_way(t):
 
 
 def poi_node(t):
-    return (t.get("tourism") in ("viewpoint", "camp_site", "caravan_site", "picnic_site") or t.get("amenity") in ("fuel", "drinking_water") or t.get("natural") == "spring"
+    return (t.get("tourism") in ("viewpoint", "camp_site", "caravan_site", "picnic_site") or is_lodging(t) or t.get("amenity") in ("fuel", "drinking_water") or t.get("natural") == "spring"
             or t.get("shop") in ("supermarket", "convenience")  # food resupply on long trips
             or (t.get("natural") in ("peak", "water") and "name" in t) or ("historic" in t and "name" in t))
 
@@ -142,7 +147,7 @@ class Builder(osmium.SimpleHandler):
 
     def area(self, a):
         t = {tg.k: tg.v for tg in a.tags}
-        mil, camp = is_mil(t) or is_reserve(t), t.get("tourism") in ("camp_site", "caravan_site")
+        mil, camp = is_mil(t) or is_reserve(t), t.get("tourism") in ("camp_site", "caravan_site") or is_lodging(t)
         lake = is_lake(t)
         if not (mil or camp or lake): return
         rings = []
@@ -193,7 +198,7 @@ def main(src, out, world=False, merge=False, name=None):
         fn = os.path.join(out, k + ".json.gz")
         if merge and os.path.exists(fn):
             with gzip.open(fn, "rt", encoding="utf-8") as f: tl = merge_into(json.load(f), tl)
-        tl.update({"at": at, "key": k})
+        tl.update({"at": at, "key": k, "ps": POI_SCHEMA})
         data = gzip.compress(json.dumps(tl, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), 9)
         with open(os.path.join(out, k + ".json.gz"), "wb") as f: f.write(data)
         keys.append(k); total += len(data)
