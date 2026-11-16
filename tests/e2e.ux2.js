@@ -54,4 +54,7 @@ const line=(a,b,n=200)=>Array.from({length:n+1},(_,i)=>[a[1]+(b[1]-a[1])*i/n,a[0
  await p.click('#wzNext');await p.waitForTimeout(300);
  ok(await p.evaluate(t=>document.getElementById('prompt').value===t&&document.getElementById('wiz').hidden&&(busy||!!current),sayTxt),'"build" puts it in the request box and starts planning');
  await p.waitForFunction(()=>!busy,null,{timeout:120000});
+ const wp=await p.evaluate(()=>current&&{hpd:current.p.hours_per_day,lodging:current.p.lodging,days:current.p.days,start:current.p.start?.name,end:current.p.end?.name,over:!!current.res.results[0].overland,nights:current.res.results[0].days.map(d=>d.camp?.hotel||null),err:lastRunErr});
+ ok(wp&&wp.hpd===6&&wp.lodging==='hotel'&&wp.start==='Thessaloniki'&&wp.end==='Dolomites'&&wp.over,'without the smart reading the answers still plan the trip: '+JSON.stringify(wp));
+ ok(await p.evaluate(()=>/חשב/.test(document.getElementById('sumCost')?.textContent||'')===hasGroup()),'cost not worked out yet: the summary line offers it (with a group code)');
  console.log(errs.join('\n')||'no page errors');await b.close();})();
