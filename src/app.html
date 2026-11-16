@@ -1361,7 +1361,7 @@ const TOOL = {
 const SYSTEM = () => `Today is ${new Date().toISOString().slice(0, 10)} (${new Date().toLocaleDateString('en-US', { weekday: 'long' })}). You plan 4x4 jeep trips in Israel and in Europe for a group of Israeli friends and convert each request into structured parameters by calling route_request exactly once at the end.
 - Include lat/lon for every place and set country.
 - Long journeys (hundreds of km, e.g. between countries): put off-road highlight areas in via, in driving order (real dirt-road areas: TET sections, mountain gravel roads). days = TOTAL trip days including the way back. A round trip that returns to the start: loop=true, and the vias cover the way there AND back.
-- Car ferries: when a ferry saves driving days (e.g. Igoumenitsa/Patras <-> Venice/Ancona/Bari, Durres <-> Bari, Split <-> Ancona), or when the user asks for one, put the departure port as a via with ferry_to_next=true and ferry_hours, and the arrival port as the next via. Look the line up on the web and fill ferry_operator, ferry_depart (usual departure time), ferry_freq and ferry_url from what you found; only lines that take cars and really sail between these two ports (if no such line exists, choose the nearest port pair that has one). A round trip by ferry both ways has two ferry pairs. Every ferry_to_next via MUST be followed by its arrival port as the next via (never leave the trip's end or start as the arrival unless that town itself is the port the ferry lands at); if that would pass 10 vias, drop a sightseeing via, not a port. Keep total vias <= 10.
+- Car ferries: when a ferry saves driving days (e.g. Igoumenitsa/Patras <-> Venice/Ancona/Bari, Durres <-> Bari, Split <-> Ancona), or when the user asks for one, put the departure port as a via with ferry_to_next=true and ferry_hours, and the arrival port as the next via. Look the line up on the web and fill ferry_operator, ferry_depart (usual departure time), ferry_freq and ferry_url from what you found; only lines that take cars and really sail between these two ports (if no such line exists, choose the nearest port pair that has one). A round trip by ferry both ways has two ferry pairs, and on the way back ferry_to_next goes on the port the return sailing LEAVES from (e.g. ..., Ancona Port [ferry_to_next=true], Igoumenitsa Port), never on the port it arrives at. Every ferry_to_next via MUST be followed by its arrival port as the next via (never leave the trip's end or start as the arrival unless that town itself is the port the ferry lands at); if that would pass 10 vias, drop a sightseeing via, not a port. Keep total vias <= 10.
 - Europe: names in the local/English form. Prefer regions and routes where driving unpaved public roads is legal (e.g. known overland/4x4 routes, TET sections), start at a town, and for several days rely on official campsites (nightcamp). Israeli rules (firing zones, Area A) do not apply abroad. Use web_search when you are not sure of a place's location or when the request is themed.
 - Themed requests (a historical event or military operation, a book, a person, a named trail, "in the footsteps of", "בעקבות"): research the theme, then choose the real sites in order as start, via and end. Prefer points reachable by 4x4 (trailheads, memorial sites, viewpoints, ruins) over city centers, and skip sites that are now inside military bases or Area A. Add a short Hebrew note per via and a 2-4 sentence Hebrew story_he. Keep at most 8 vias and keep notes short. The theme's final destination MUST be "end" (with lat/lon), never left out or put only in via.
 - Refinement requests come with the current parameters as JSON: return the full updated parameters, changing only what was asked.
@@ -2953,16 +2953,25 @@ async function run(fromPrompt, preset = null, changeText = null) {
     else { pickedEnd = null; if (endMarker) { endMarker.remove(); endMarker = null; } }
     const viaLL = [];
     const lost = [];
-    for (const v of p.via || []) { const ll = await geocode(v); if (!ll) { lost.push(v.name); continue; } viaLL.push({ ll, name: v.name, note: v.note, ferry: !!v.ferry_to_next, ferryHours: v.ferry_hours || null, ferryInfo: v.ferry_to_next ? { depart: /^\d{1,2}:\d{2}$/.test(v.ferry_depart || '') ? timeToH(v.ferry_depart) : null, ops: v.ferry_operator || '', freq: v.ferry_freq || '', url: /^https:\/\//.test(v.ferry_url || '') ? v.ferry_url : '' } : null }); }
+    for (const v of p.via || []) { const ll = await geocode(v); if (!ll) { lost.push(v.name); continue; } viaLL.push({ src: v, ll, name: v.name, note: v.note, ferry: !!v.ferry_to_next, ferryHours: v.ferry_hours || null, ferryInfo: v.ferry_to_next ? { depart: /^\d{1,2}:\d{2}$/.test(v.ferry_depart || '') ? timeToH(v.ferry_depart) : null, ops: v.ferry_operator || '', freq: v.ferry_freq || '', url: /^https:\/\//.test(v.ferry_url || '') ? v.ferry_url : '' } : null }); }
     for (const pl of [p.start, p.end, ...(p.via || [])]) { // a trip crosses borders: each place gets its own country (sets the rules for nights and the clock)
       if (!pl?.countryGuess) continue;
       const ll = pl === p.start ? sLL : pl === p.end ? eLL : viaLL.find(v => v.name === pl.name)?.ll;
       if (!ll || inIsrael(ll[0], ll[1])) continue;
       const cc = await countryOf(ll[0], ll[1]); if (cc) { pl.country = cc; delete pl.countryGuess; }
     }
+    // The way back by the same ferry: Claude sometimes copies the outbound port with its ferry mark (Igoumenitsa -> Ancona ... Ancona -> Igoumenitsa*)
+    // instead of marking the port the return sailing leaves from. Then the car drove Ancona -> Igoumenitsa through the Balkans, and "sailed" from Igoumenitsa
+    // to the trip's end. A leg between the two ports of a ferry already in the trip is that ferry, the other way.
+    { const near = (a, b) => a && b && hav(a[0], a[1], b[0], b[1]) < 3000;
+      const pairs = viaLL.map((v, i) => v.ferry && viaLL[i + 1] ? [v, viaLL[i + 1]] : null).filter(Boolean);
+      viaLL.forEach((v, i) => { const next = viaLL[i + 1]; if (v.ferry || !next) return;
+        const pr = pairs.find(([a, b]) => near(v.ll, b.ll) && near(next.ll, a.ll)); if (!pr) return;
+        v.ferry = true; v.ferryHours = pr[0].ferryHours; v.ferryInfo = { ...(pr[0].ferryInfo || {}), depart: null };
+        const o = pr[0].src; Object.assign(v.src, { ferry_to_next: true, ferry_hours: o.ferry_hours, ferry_operator: o.ferry_operator, ferry_freq: o.ferry_freq, ferry_url: o.ferry_url }); }); } // the saved trip gets it right too
     viaLL.forEach((v, i) => { // Claude sometimes marks both ports of a pair; a ferry leg must start where the last one did not end, and cross real distance
       const next = viaLL[i + 1]?.ll || (p.loop ? sLL : eLL);
-      if (v.ferry && (viaLL[i - 1]?.ferry || !next || hav(v.ll[0], v.ll[1], next[0], next[1]) < 20000)) v.ferry = false;
+      if (v.ferry && (viaLL[i - 1]?.ferry || !next || hav(v.ll[0], v.ll[1], next[0], next[1]) < 20000)) { v.ferry = false; if (v.src) delete v.src.ferry_to_next; }
     });
     viaLL.forEach((v, i) => { v.port = v.ferry || !!viaLL[i - 1]?.ferry; });
     if (!changing) { const all = [sLL, ...(eLL ? [eLL] : []), ...viaLL.map(v => v.ll)]; if (all.length > 1) map.fitBounds(L.latLngBounds(all).pad(0.15), mapPad()); else map.setView(sLL, 11); } // the map moves to the trip right away
