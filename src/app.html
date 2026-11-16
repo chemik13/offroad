@@ -221,6 +221,28 @@ textarea:focus,select:focus,input:focus,button:focus-visible{outline:2px solid v
 .mic.on{background:var(--danger);border-color:var(--danger);color:#fff}
 @media (prefers-reduced-motion:no-preference){.mic.on{animation:micpulse 1.2s ease-in-out infinite}}
 @keyframes micpulse{0%,100%{box-shadow:0 0 0 0 rgba(198,47,47,.45)}50%{box-shadow:0 0 0 8px rgba(198,47,47,0)}}
+.examples button.wizopen{display:inline-flex;align-items:center;gap:6px;background:var(--ink);color:#fff;border-color:var(--ink);font-weight:600}
+.examples button.wizopen:hover{color:#fff}
+.wizopen .ico{width:15px;height:15px;stroke:#fff}
+.wiz{border:1px solid var(--line);border-radius:14px;background:#fff;padding:12px;display:flex;flex-direction:column;gap:12px}
+.wiz[hidden]{display:none}
+.wizhead{display:flex;align-items:center;gap:10px}
+.wizhead b{font:700 17px var(--display);flex:1}
+.wizdots{display:flex;gap:5px}.wizdots i{width:22px;height:4px;border-radius:2px;background:var(--line)}.wizdots i.on{background:var(--ink)}
+.wizstep{display:flex;flex-direction:column;gap:10px}
+.wizstep[hidden]{display:none}
+.wiz label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+.wiz input[type=text]{font:16px var(--body);padding:10px 12px;border:1px solid var(--line);border-radius:10px;color:var(--ink);background:#fff;min-width:0}
+.wiz input[type=text]:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.wiz .chk{flex-direction:row;align-items:center;gap:8px;font-size:15px;color:var(--ink)}
+.wiz .chk input{width:20px;height:20px}
+.wiznum{display:flex;align-items:center;gap:10px}
+.wiznum button{width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:#fff;font:600 22px var(--body);color:var(--ink);cursor:pointer}
+.wiznum output{font:700 24px var(--display);min-width:120px;text-align:center;font-variant-numeric:tabular-nums}
+.wizsay{background:var(--stone);border-radius:10px;padding:10px 12px;font-size:15px;line-height:1.45;color:var(--ink)}
+.wizact{display:flex;gap:8px;align-items:center}
+.wizact .go{flex:1}
+.wizact .linkbtn{margin-inline-start:auto}
 .examples{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
 .examples button{flex:none;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:5px 11px;font:13px var(--body);cursor:pointer}
 .examples button:hover{border-color:var(--accent);color:var(--accent)}
@@ -424,8 +446,8 @@ body.ux2 .uxp[data-t=set]>*{margin-top:10px}
 body.ux2 #stats{display:none}
 body.ux2 #sheet.has-results #params{display:none}
 body.ux2 #sheet.has-results[data-tab=set] #params{display:block}
-body.ux2 #dayPlan.onesel .daycard:not(.sel){display:none}
-body.ux2 #dayPlan.onesel>.daytop,body.ux2 #dayPlan.onesel>button,body.ux2 #dayPlan.onesel>a{display:none}
+body.ux2:not(.uxall) #dayPlan.onesel .daycard:not(.sel){display:none}
+body.ux2:not(.uxall) #dayPlan.onesel>.daytop,body.ux2:not(.uxall) #dayPlan.onesel>button,body.ux2:not(.uxall) #dayPlan.onesel>a{display:none}
 body.ux2 .daystrip{display:flex;position:fixed;z-index:6;gap:6px;overflow-x:auto;scrollbar-width:none;padding:6px;background:rgba(255,255,255,.92);backdrop-filter:blur(6px);border-radius:14px;box-shadow:0 3px 14px rgba(20,30,25,.22);left:auto;right:12px;bottom:16px;direction:rtl;max-width:calc(100vw - 24px)}
 body.ux2 .acc[data-k=dayPlan]>summary{display:none}body.ux2 .acc[data-k=dayPlan]>div{padding:10px 10px 12px}
 body.ux2 .daystrip[hidden]{display:none}
@@ -436,6 +458,8 @@ body.ux2 .daystrip[hidden]{display:none}
 .daystrip button[aria-pressed=true] small{color:#cfd6d2}
 .daystrip button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 body.ux2 #dayChips{display:none!important}
+/* every tab's boxes at once, and the old day buttons: for the automated tests of the boxes themselves (localStorage accAll=1) */
+body.uxall .uxp[hidden]{display:block!important}body.uxall #sheet.has-results #params{display:block}body.uxall #dayChips:not([hidden]){display:flex!important}body.uxall #stats{display:grid}
 .accgroup{border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-top:10px;background:#fff}
 .accgroup:not(:has(.acc:not([hidden]))){display:none}
 .acc{border-top:1px solid var(--line)}.acc.first{border-top:0}
@@ -601,6 +625,26 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
         <button class="mic" id="micBtn" type="button" aria-label="דברו במקום להקליד" title="דברו במקום להקליד"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg></button></div>
       <div style="display:flex;flex-direction:column;gap:6px"><button class="go" id="goBtn">בנה מסלול</button><button class="ghost" id="talkBtn" title="מצב שיחה: מדברים והאפליקציה עונה בקול" style="padding:7px 8px;font-size:13px">שיחה</button></div>
     </div>
+      <div class="wiz" id="wiz" hidden>
+        <div class="wizhead"><b id="wizTitle"></b><span class="wizdots" id="wizDots" aria-hidden="true"><i></i><i></i><i></i></span></div>
+        <div class="wizstep" data-s="0">
+          <label>מאיפה יוצאים<input type="text" id="wzStart" placeholder="למשל: מצפה רמון, או Thessaloniki" enterkeyhint="next"></label>
+          <label class="chk"><input type="checkbox" id="wzLoop"> חוזרים לנקודת ההתחלה (לופ)</label>
+          <label id="wzEndL">לאן מגיעים<input type="text" id="wzEnd" placeholder="למשל: אילת, או Dolomites" enterkeyhint="next"></label>
+          <label>דרך איפה (לא חובה)<input type="text" id="wzVia" placeholder="מקומות שחייבים לעבור בהם, מופרדים בפסיק" enterkeyhint="next"></label>
+        </div>
+        <div class="wizstep" data-s="1" hidden>
+          <label>כמה זמן<div class="wiznum"><button type="button" id="wzLess" aria-label="פחות">−</button><output id="wzDays"></output><button type="button" id="wzMore" aria-label="יותר">+</button></div></label>
+          <label id="wzHpdL">שעות נהיגה ביום<div class="seg" id="wzHpd" role="radiogroup"></div></label>
+          <label>כמה שטח<div class="seg" id="wzOff" role="radiogroup"></div></label>
+        </div>
+        <div class="wizstep" data-s="2" hidden>
+          <label id="wzLodgeL">איפה ישנים<div class="seg" id="wzLodge" role="radiogroup"></div></label>
+          <label>קושי<div class="seg" id="wzDiff" role="radiogroup"></div></label>
+          <div class="wizsay" id="wzSay"></div>
+        </div>
+        <div class="wizact"><button class="ghost" id="wzBack" type="button">חזרה</button><button class="go" id="wzNext" type="button"></button><button class="linkbtn" id="wzText" type="button">כתיבה חופשית</button></div>
+      </div>
       <div class="examples" id="examples"></div>
     </div>
     <div id="tripHead" hidden>
@@ -1000,7 +1044,7 @@ function seg(el, opts, val, onPick) {
 }
 function drawPickers() {
   const cp = (() => { try { return current?.p; } catch { return null; } })(); // the long-trip controls: hours at the wheel a day, and where to sleep
-  seg($('hpdSeg'), [['', 'לפי התכנון'], ...[4, 5, 6, 7, 8, 9].map(h => [String(h), String(h)])], String($('pHpd').value || ''), k => { $('pHpd').value = k; drawPickers(); pendingChange = k ? `עד ${k} שעות נהיגה ביום` : 'שעות נהיגה ביום: לפי התכנון'; rebuildWith(); });
+  seg($('hpdSeg'), [['', 'אוטו'], ...[4, 5, 6, 7, 8, 9].map(h => [String(h), String(h)])], String($('pHpd').value || ''), k => { $('pHpd').value = k; drawPickers(); pendingChange = k ? `עד ${k} שעות נהיגה ביום` : 'שעות נהיגה ביום: לפי התכנון'; rebuildWith(); });
   seg($('lodgeSeg'), [['camp', 'קמפינג'], ['mix', 'קמפינג + מלון'], ['hotel', 'מלון / מוטל']], cp?.lodging || 'camp', k => { if (!current?.p) return; current.p.lodging = k; drawPickers(); pendingChange = 'לינה: ' + ({ camp: 'קמפינג', mix: 'קמפינג, ומלון כל כמה לילות', hotel: 'מלונות ומוטלים' })[k]; rebuildWith(); });
   seg($('diffSeg'), DIFFS, $('pDiff').value || 'medium', k => { $('pDiff').value = k; drawPickers(); pendingChange = 'קושי: ' + (DIFFS.find(d => d[0] === k)?.[1] || k); rebuildWith(); });
 }
@@ -2659,7 +2703,7 @@ function costCalc(r, C, set) {
 }
 let costBusy = false;
 async function costLookup(r, p) {
-  if (costBusy) return; costBusy = true; renderCost(r, p);
+  if (costBusy) return; costBusy = true; renderCost(r, p); ux2Again();
   try {
     const set = costSet(), days = costDays(r), at = c => c ? `${(+c[0]).toFixed(2)},${(+c[1]).toFixed(2)}` : '?';
     // each line once: the same sailing is on the night's card and on its waypoints
@@ -2684,7 +2728,7 @@ async function costLookup(r, p) {
     const sv = current?.saved || current?.trip;
     if (sv?.id && current?.res?.results?.[current.sel] === r) { const b = packRoute(r); api('/routes/' + sv.id, { method: 'PATCH', body: JSON.stringify({ coords: b.coords, waypoints: b.waypoints, stats: b.stats }) }).then(() => { libCache = null; }).catch(() => {}); }
   } catch (e) { status('אומדן העלויות לא הצליח: ' + (e.message || e), true); }
-  finally { costBusy = false; if (current?.res?.results?.[current.sel] === r) renderCost(r, p); }
+  finally { costBusy = false; if (current?.res?.results?.[current.sel] === r) { renderCost(r, p); ux2Again(); } }
 }
 function renderCost(r, p) {
   // abroad only: at home the prices are known and there are no borders, ferries or vignettes
@@ -2988,6 +3032,7 @@ async function run(fromPrompt, preset = null, changeText = null) {
   } finally { btns.forEach(b => b.disabled = false); busy = false; stageEnd(); liveOn = false; live.clear(); $('results').classList.remove('working'); if (!$('busyLine').classList.contains('err')) $('busyLine').hidden = true; }
 }
 $('goBtn').onclick = () => run(true);
+
 $('rebuildBtn').onclick = () => run(false);
 $('prompt').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); run(true); } });
 
@@ -3139,11 +3184,48 @@ const ico = (k, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-h
     new MutationObserver(sync).observe(box, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-sum'] });
   }
 }
-// ---------- the trip screen, second layout (?ux=2 switches it on, ?ux=1 off) ----------
+// ---------- a new trip, step by step: three short screens that write the request for you ----------
+// The answers become one Hebrew sentence in the request box, and the trip is planned from it exactly as if it had been typed.
+{
+  const W = { step: 0, days: 1, hpd: '', off: 'mid', lodge: 'camp', diff: 'medium' };
+  const DAYS = [0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 21, 24, 28, 30, 35, 42];
+  const pre = (he, name) => he + (/^[A-Za-z0-9]/.test(name) ? '-' : '') + name;
+  const say = () => { const st = $('wzStart').value.trim(), en = $('wzEnd').value.trim(), via = $('wzVia').value.trim(), loop = $('wzLoop').checked, multi = W.days > 1;
+    return [(W.days === 0.5 ? 'חצי יום' : W.days === 1 ? 'יום אחד' : W.days === 2 ? 'טיול של יומיים' : `טיול של ${W.days} ימים`) + (st ? ' ' + pre('מ', st) : '') + (loop ? ' וחזרה לנקודת ההתחלה (לופ)' : en ? ' ' + pre('ל', en) : ''),
+      via ? 'דרך ' + via : null, multi && W.hpd ? `עד ${W.hpd} שעות נהיגה ביום` : null,
+      { low: 'מעט שטח, רוב הדרך בכביש', mid: 'בערך חצי שטח וחצי כביש', high: 'כמה שיותר שטח' }[W.off],
+      multi ? { camp: 'לינה בקמפינגים', mix: 'לינה בקמפינג, עם מלון או מוטל כל כמה לילות', hotel: 'לינה במלונות ומוטלים', wild: 'לינת שטח' }[W.lodge] : null,
+      'קושי ' + { easy: 'קל', medium: 'בינוני', hard: 'קשה' }[W.diff]].filter(Boolean).join(', '); };
+  const draw = () => { const multi = W.days > 1;
+    $('wizTitle').textContent = ['לאן נוסעים', 'כמה זמן וכמה שטח', multi ? 'לינה וקושי' : 'קושי'][W.step];
+    [...$('wizDots').children].forEach((d, k) => d.classList.toggle('on', k <= W.step));
+    document.querySelectorAll('.wizstep').forEach(x => x.hidden = +x.dataset.s !== W.step);
+    $('wzEndL').hidden = $('wzLoop').checked; $('wzHpdL').hidden = $('wzLodgeL').hidden = !multi;
+    $('wzDays').textContent = W.days === 0.5 ? 'חצי יום' : W.days === 1 ? 'יום אחד' : W.days === 2 ? 'יומיים' : W.days + ' ימים';
+    seg($('wzHpd'), [['', 'אוטו'], ...[4, 5, 6, 7, 8, 9].map(h => [String(h), String(h)])], W.hpd, k => { W.hpd = k; draw(); });
+    seg($('wzOff'), [['low', 'מעט'], ['mid', 'חצי־חצי'], ['high', 'כמה שיותר']], W.off, k => { W.off = k; draw(); });
+    seg($('wzLodge'), [['camp', 'קמפינג'], ['mix', 'משולב'], ['hotel', 'מלון'], ['wild', 'בשטח']], W.lodge, k => { W.lodge = k; draw(); });
+    seg($('wzDiff'), [['easy', 'קל'], ['medium', 'בינוני'], ['hard', 'קשה']], W.diff, k => { W.diff = k; draw(); });
+    $('wzSay').textContent = say(); $('wzBack').hidden = W.step === 0; $('wzNext').textContent = W.step === 2 ? 'בנה מסלול' : 'המשך'; };
+  const open = on => { $('wiz').hidden = !on; document.querySelector('#compose .promptrow').hidden = on; $('examples').hidden = on; if (on) { W.step = 0; draw(); setTimeout(() => $('wzStart').focus(), 50); } };
+  { const b = document.createElement('button'); b.id = 'wizOpen'; b.type = 'button'; b.className = 'wizopen'; b.innerHTML = ico('route') + '<span>שלב אחר שלב</span>'; b.title = 'בניית טיול בשלושה שלבים קצרים, בלי לכתוב'; b.onclick = () => open(true); $('examples').prepend(b); } // first among the examples: no extra row on a phone
+  $('wzLoop').onchange = draw;
+  const stepDays = d => { const i = DAYS.indexOf(W.days); W.days = DAYS[Math.max(0, Math.min(DAYS.length - 1, i + d))]; draw(); };
+  $('wzLess').onclick = () => stepDays(-1); $('wzMore').onclick = () => stepDays(1);
+  $('wzBack').onclick = () => { W.step = Math.max(0, W.step - 1); draw(); };
+  $('wzText').onclick = () => { if ($('wzStart').value.trim()) $('prompt').value = say(); open(false); $('prompt').focus(); }; // what was chosen so far goes with you, as text
+  $('wzNext').onclick = () => {
+    if (W.step === 0 && !$('wzStart').value.trim() && !pickedStart) { $('wzStart').focus(); $('wzStart').placeholder = 'כתבו מאיפה יוצאים, או סמנו נקודה על המפה'; return; }
+    if (W.step < 2) { W.step++; draw(); return; }
+    $('prompt').value = say(); open(false); run(true);
+  };
+  for (const id of ['wzStart', 'wzEnd', 'wzVia']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('wzNext').click(); } });
+}
+// ---------- the trip screen (the older layout is still there behind ?ux=1, and ?ux=2 comes back to this one) ----------
 // One summary line and the three main buttons stay on top; the days are a strip on the map; everything else sits in four tabs;
 // notes and warnings fold behind one chip. The boxes are the same ones as before, only arranged.
 { const q = new URLSearchParams(location.search).get('ux'); if (q === '2' || q === '1') store.set('ux', q); }
-const UX2 = store.get('ux') === '2';
+const UX2 = store.get('ux') !== '1';
 const UXT = [['days', 'ימים'], ['before', 'לפני היציאה'], ['road', 'על הדרך'], ['set', 'הגדרות']];
 function uxTab(t) {
   $('sheet').dataset.tab = t;
@@ -3157,7 +3239,7 @@ function placeStrip() { // on the map, clear of the panel: beside it on a wide s
   st.style.bottom = (off ? 70 : side ? 16 : Math.max(16, innerHeight - sh.top + 8)) + 'px';
 }
 if (UX2) {
-  document.body.classList.add('ux2');
+  document.body.classList.add('ux2'); if (store.get('accAll') === '1') document.body.classList.add('uxall');
   const R = $('results'), mk = (tag, cls, id) => { const e = document.createElement(tag); if (cls) e.className = cls; if (id) e.id = id; return e; };
   const sum = mk('div', 'sumline', 'sumLine'), chip = mk('button', 'warnchip', 'warnChip'), tabs = mk('div', 'uxtabs', 'uxTabs'); chip.type = 'button'; chip.hidden = true; tabs.setAttribute('role', 'tablist');
   const P = {}; for (const [t, he] of UXT) { const b = mk('button'); b.type = 'button'; b.dataset.t = t; b.textContent = he; b.setAttribute('role', 'tab'); b.onclick = () => uxTab(t); tabs.append(b); P[t] = mk('div', 'uxp'); P[t].dataset.t = t; }
@@ -3178,6 +3260,7 @@ if (UX2) {
   new ResizeObserver(placeStrip).observe($('sheet')); addEventListener('resize', placeStrip);
   new MutationObserver(placeStrip).observe(document.body, { attributes: true, attributeFilter: ['class'] });
 }
+function ux2Again() { const r = current?.res?.results?.[current.sel]; if (!UX2 || !r) return; const D = r.days && r.days.length > 1 ? r.days : null, day = D ? current.day : null; ux2Render(r, current.p, D, D && day != null ? D[day] : null, current.sel, day ?? null); }
 // what the summary line and the day strip show for this trip (or for the chosen day of it)
 function ux2Render(r, p, D, dv, i, day) {
   if (!UX2) return;
@@ -3188,9 +3271,10 @@ function ux2Render(r, p, D, dv, i, day) {
     h = cell(`יום ${day + 1}`, `מתוך ${D.length}`, 'scope') + cell(Math.round((dv.len + sea) / 1000), 'ק"מ') + (off != null ? cell(Math.round(off / 1000), 'ק"מ שטח') : '') + cell(fmtH(dv.hrs), 'שעות נהיגה') + cell(dv.camp ? ico(dv.camp.ferry ? 'ferry' : dv.camp.hotel ? 'bed' : 'tent') : ico('flag'), dv.camp ? latinName(dv.camp.name || 'לינה').slice(0, 18) : 'סיום');
   } else { const km = (r.len + sea) / 1000, offP = Math.round((r.len - r.asph) / Math.max(1, r.len) * 100); let cost = null;
     try { if (r.cost && r.cost.countries) cost = costCalc(r, r.cost, costSet()).total; } catch {}
-    h = (D ? cell(D.length, 'ימים') : '') + cell(km >= 100 ? Math.round(km).toLocaleString('en') : km.toFixed(1), 'ק"מ') + cell(offP + '%', 'שטח') + cell(fmtH(r.hrs), D ? 'שעות נהיגה' : 'שעות') + (cost ? cell('€' + Math.round(cost).toLocaleString('en'), 'עלות משוערת') : (!D && !r.unrated ? cell((DIFF[r.maxD]?.he || '').replace(/ \(.*\)/, ''), 'הכי קשה') : ''));
+    h = (D ? cell(D.length, 'ימים') : '') + cell(km >= 100 ? Math.round(km).toLocaleString('en') : km.toFixed(1), 'ק"מ') + cell(offP + '%', 'שטח') + cell(fmtH(r.hrs), D ? 'שעות נהיגה' : 'שעות') + (cost ? `<div role="button" tabindex="0" id="sumCost" style="cursor:pointer"><b>€${Math.round(cost).toLocaleString('en')}</b><span>עלות משוערת</span></div>` : $('cost').firstElementChild && hasGroup() ? `<div role="button" tabindex="0" id="sumCost" style="cursor:pointer"><b style="font-size:15px;line-height:1.5;color:var(--accent)">${costBusy ? 'מחשב…' : 'חשב'}</b><span>אומדן עלות</span></div>` : (!D && !r.unrated ? cell((DIFF[r.maxD]?.he || '').replace(/ \(.*\)/, ''), 'הכי קשה') : ''));
   }
   $('sumLine').innerHTML = h;
+  { const sc = $('sumCost'); if (sc) sc.onclick = sc.onkeydown = e => { if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return; uxTab('before'); const a = document.querySelector('.acc[data-k=cost]'); a.open = true; a.scrollIntoView({ block: 'nearest' }); if (!r.cost && !costBusy) costLookup(r, p); }; }
   $('dayPlan').classList.toggle('onesel', day != null);
   const st = $('dayStrip'); st.innerHTML = ''; st.hidden = !D;
   if (D) { const btn = (top, sub, k) => { const b = document.createElement('button'); b.type = 'button'; b.innerHTML = `${top}<small>${sub}</small>`; b.setAttribute('aria-pressed', String(k === day)); b.onclick = () => { render(i, k); uxTab('days'); }; st.append(b); return b; };
@@ -3724,7 +3808,7 @@ async function renderWeather(r, p, D) {
   const date = p.date || $('pDate').value || isoToday();
   const nDays = D ? D.length : 1;
   const ahead = daysBetween(isoToday(), date);
-  box.innerHTML = '';
+  box.innerHTML = ''; delete box.dataset.sum;
   if (ahead + nDays - 1 < 0) return;
   if (ahead > 15) { box.innerHTML = `<div class="wx"><h3>מזג אוויר<small>${heDay(date)}</small></h3><div class="wxrow"><span></span><span class="wd" style="grid-column:2/4">תחזית זמינה עד 16 יום קדימה. נסו שוב קרוב יותר לטיול.</span></div></div>`; return; }
   box.innerHTML = '<div class="wx"><h3>מזג אוויר<small>טוען…</small></h3></div>';
@@ -3738,7 +3822,8 @@ async function renderWeather(r, p, D) {
   const rings = pts.map(c => desert(c) ? ringOf(c) : []);
   const all = [...pts, ...camps.filter(Boolean), r.coords[0], ...rings.flat()];
   let ws;
-  try { ws = await fetchWx(all, addDays(date, 0) < isoToday() ? isoToday() : date, addDays(date, nDays)); }
+  const lastWx = addDays(isoToday(), 15), endWx = addDays(date, nDays) > lastWx ? lastWx : addDays(date, nDays); // the forecast reaches 16 days ahead: a longer trip asks for what there is
+  try { ws = await fetchWx(all, addDays(date, 0) < isoToday() ? isoToday() : date, endWx); }
   catch { if (token === renderWeather.tok) box.innerHTML = '<div class="wx"><h3>מזג אוויר<small>אין חיבור לשירות</small></h3></div>'; return; }
   if (token !== renderWeather.tok) return;
   const warn = [];
@@ -3776,6 +3861,9 @@ async function renderWeather(r, p, D) {
       }
     }
   });
+  { const got = days.filter((d, k) => dayIdx(ws[k], addDays(date, k)) >= 0).length;
+    if (got < days.length) html += `<div class="wxrow"><span></span><span class="wd" style="grid-column:2/4">${got ? `ימים ${got + 1}–${days.length}` : 'כל הימים'}: עוד אין תחזית (היא מגיעה עד 16 יום קדימה). פתחו שוב קרוב יותר לתאריך.</span></div>`;
+    box.dataset.sum = got < days.length ? `תחזית ל-${got} מתוך ${days.length} ימים` : ''; if (!box.dataset.sum) delete box.dataset.sum; }
   html += '</div>';
   box.innerHTML = html;
   if (warn.length) $('warns').insertAdjacentHTML('afterbegin', [...new Set(warn)].map(t => `<div class="warn">${t}</div>`).join(''));

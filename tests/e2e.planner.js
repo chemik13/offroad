@@ -6,7 +6,7 @@ function fakeOSM(){const els=[];let id=1;const la0=30.45,lo0=34.65,st=0.004,n=90
  els.push({type:'node',id:id++,lat:30.589,lon:34.888,tags:{tourism:'camp_site',name:'בארות'}});
  return {elements:els};}
 (async()=>{
-const b=await chromium.launch();const p=await b.newPage({viewport:{width:400,height:860}});
+const b=await chromium.launch();const p=await b.newPage({viewport:{width:400,height:860}});await p.addInitScript(()=>localStorage.setItem('accAll','1'));
 const errs=[];p.on('pageerror',e=>errs.push('PAGEERR '+e.message));p.on('console',m=>{if(m.type()==='error')errs.push('CONSOLE '+m.text())});
 const data=JSON.stringify(fakeOSM());let overpassCalls=0;
 await p.route(/overpass/,r=>{overpassCalls++;r.fulfill({status:200,contentType:'application/json',body:data})});

@@ -45,4 +45,13 @@ const line=(a,b,n=200)=>Array.from({length:n+1},(_,i)=>[a[1]+(b[1]-a[1])*i/n,a[0
  ok(await vis('#dayStrip')&&await p.evaluate(()=>document.getElementById('dayStrip').getBoundingClientRect().bottom<innerHeight-50),'full-screen map keeps the day strip');
  await p.screenshot({path:(process.argv[3]||'/tmp/ux2')+'.png'});
  await p.click('#drawerBack');await p.click('#newTripBtn');ok(!(await vis('#dayStrip')),'new trip: the strip goes');
+ // the step-by-step builder writes the request and plans from it
+ await p.click('#wizOpen');ok(await vis('#wzStart')&&!(await vis('#prompt')),'step by step: the first screen replaces the text box');
+ await p.fill('#wzStart','Thessaloniki');await p.fill('#wzEnd','Dolomites');await p.click('#wzNext');
+ for(let i=0;i<3;i++)await p.click('#wzMore');await p.click('#wzHpd button:nth-child(4)');await p.click('#wzNext');await p.click('#wzLodge button:nth-child(3)');
+ const sayTxt=await p.textContent('#wzSay');
+ ok(/4 ימים מ-Thessaloniki ל-Dolomites/.test(sayTxt)&&/עד 6 שעות נהיגה ביום/.test(sayTxt)&&/מלונות ומוטלים/.test(sayTxt),'the request it writes: '+sayTxt);
+ await p.click('#wzNext');await p.waitForTimeout(300);
+ ok(await p.evaluate(t=>document.getElementById('prompt').value===t&&document.getElementById('wiz').hidden&&(busy||!!current),sayTxt),'"build" puts it in the request box and starts planning');
+ await p.waitForFunction(()=>!busy,null,{timeout:120000});
  console.log(errs.join('\n')||'no page errors');await b.close();})();
