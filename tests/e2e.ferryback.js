@@ -38,4 +38,15 @@ const line=(a,b,n=200)=>Array.from({length:n+1},(_,i)=>[a[1]+(b[1]-a[1])*i/n,a[0
  await p.evaluate(()=>run(false));await p.waitForFunction(()=>!busy,null,{timeout:150000});
  const r2=await p.evaluate(()=>{const r=current.res.results[0];return {fer:r.segs.filter(s=>s.ferry).map(s=>[s.pts[0].map(x=>+x.toFixed(1)),s.pts[s.pts.length-1].map(x=>+x.toFixed(1))]),via:current.p.via.map(v=>v.name+(v.ferry_to_next?'⛴':''))}});
  ok(JSON.stringify(r2.fer)===JSON.stringify(r.fer)&&JSON.stringify(r2.via)===JSON.stringify(r.via),'again from the repaired settings: '+JSON.stringify(r2));
+ // quick road transfers: home -> the port and the port -> home "as fast as possible": one day each, road only
+ const F={...P,via:[{...IG,fast_from_prev:true},{...AN},{name:'Passo Giau',lat:46.4833,lon:12.0517,country:'IT'},{...AN,ferry_to_next:true,ferry_hours:17.5,ferry_operator:'Minoan Lines'},{...IG,ferry_to_next:false}],fast_to_end:true,days:8,hours_per_day:6};
+ await p.evaluate(x=>run(true,x),F);await p.waitForFunction(()=>!busy,null,{timeout:150000});
+ const q=await p.evaluate(()=>{const r=current.res.results[0];return {err:lastRunErr,days:r.days.map(d=>({km:Math.round(d.len/1000),h:+d.hrs.toFixed(1),off:Math.round((d.off||0)/1000),camp:d.camp?.ferry?'ferry':d.camp?'night':'end'}))}});
+ const d1=q.days[0],last=q.days[q.days.length-1];
+ ok(d1.camp==='ferry'&&d1.off<3,'day 1: straight to the port and onto the ferry, road only: '+JSON.stringify(d1));
+ ok(last.off<3&&q.days.length===8,'last day: from the port home, road only, and the 8 days go to Italy: '+JSON.stringify(q.days.map(d=>d.km+'/'+d.off)));
+ // without the marks nothing changes: the planner spreads the trip as before
+ await p.evaluate(x=>run(true,x),{...P,days:8,hours_per_day:6});await p.waitForFunction(()=>!busy,null,{timeout:150000});
+ const q0=await p.evaluate(()=>current.res.results[0].days.map(d=>d.camp?.ferry?'F':'.').join(''));
+ const q0off=await p.evaluate(()=>current.res.results[0].days.map(d=>Math.round((d.off||0)/1000)));ok(q0off[0]>3||q0off[q0off.length-1]>3,'unmarked: the same days get trails as before: '+q0off.join(','));
  console.log(errs.join('\n')||'no page errors');await b.close();})();
