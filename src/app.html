@@ -3444,10 +3444,10 @@ async function flyOver(coords, title, marks = []) {
     const m0 = dayMarks[k], end = k + 1 < dayMarks.length ? dayMarks[k + 1].d : total, km = Math.floor((t - m0.d) / 1000);
     if (k === curDay && km === lastKm) return; lastKm = km;
     $('flyDay').innerHTML = ''; const big = document.createElement('b'); big.textContent = m0.name; const of = document.createElement('span'); of.textContent = ` מתוך ${m0.of || dayMarks.length}`;
-    const sub = document.createElement('small'); sub.textContent = `${km} / ${Math.round((end - m0.d) / 1000)} ק"מ היום${m0.to ? ' · אל ' + m0.to : ''}`;
+    const sub = document.createElement('small'); sub.textContent = `${km} / ${Math.round((end - m0.d) / 1000)} ק"מ היום${m0.to ? ' · אל ' + latinName(m0.to) : ''}`;
     $('flyDay').append(big, of, sub);
     if (k === curDay) return; curDay = k; const m = m0;
-    $('flyBanner').innerHTML = ''; const b = document.createElement('div'); b.textContent = m.name; const sm = document.createElement('small'); sm.textContent = m.to ? (/סיום/.test(m.to) ? m.to : 'לינה: ' + m.to) : ''; $('flyBanner').append(b.firstChild, sm);
+    $('flyBanner').innerHTML = ''; const b = document.createElement('div'); b.textContent = m.name; const sm = document.createElement('small'); sm.textContent = m.to ? (/סיום/.test(m.to) ? m.to : 'לינה: ' + latinName(m.to)) : ''; $('flyBanner').append(b.firstChild, sm);
     $('flyBanner').classList.add('show'); clearTimeout(bannerT); bannerT = setTimeout(() => $('flyBanner').classList.remove('show'), 2600); };
   const near = (la, lo) => { let bi = 0, bd = Infinity; for (let i = 0; i < pts.length; i += 4) { const d = hav(la, lo, pts[i][1], pts[i][0]); if (d < bd) { bd = d; bi = i; } } return bd < 3000 ? pts[bi][2] : null; };
   for (const m of marks) { const d = m.d != null ? m.d : near(m.lat, m.lon); if (d == null || d < 200 || d > total - 200) continue;
