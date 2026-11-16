@@ -78,6 +78,9 @@ body.drawer-off .drawerback{display:inline-flex}
 #flyMap{position:absolute;inset:0}
 .flytop{position:absolute;top:calc(env(safe-area-inset-top,0px) + 12px);inset-inline:12px;display:flex;gap:10px;align-items:center;pointer-events:none}
 .flytitle{color:#fff;font:600 16px var(--display);text-shadow:0 1px 4px rgba(0,0,0,.6)}
+.flycc{background:rgba(134,25,143,.88);color:#fff;font:700 15px var(--body);padding:7px 13px;border-radius:999px;white-space:nowrap;backdrop-filter:blur(4px);transition:transform .25s}
+.flycc.new{transform:scale(1.18)}
+.flycc[hidden]{display:none}
 .flybtn{pointer-events:auto;width:44px;height:44px;border-radius:50%;border:0;background:rgba(255,255,255,.92);color:#111;font:600 15px var(--body);cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.35);flex:none}
 .flybar{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);inset-inline:12px;display:flex;gap:10px;align-items:center;background:rgba(0,0,0,.45);backdrop-filter:blur(6px);border-radius:999px;padding:6px}
 .flyprog{flex:1;position:relative;height:28px;cursor:pointer;touch-action:none;outline:none}
@@ -395,6 +398,44 @@ ul.pois li{margin-bottom:8px}
 #dayPlan .daycard:not(.sel) .plinks,#dayPlan .daycard:not(.sel) .dalts,#dayPlan .daycard:not(.sel) .dnight>.fly3d,#dayPlan .daycard:not(.sel) .dnight>.gmapsbtn,#dayPlan .daycard:not(.sel) .dphoto{display:none}
 .dnight.tap{cursor:pointer}
 /* the trip's sections: one list, a row per subject with its key figure; opened on demand */
+/* ---- the trip screen, second layout (body.ux2): one summary line, days on the map, four tabs, notes behind one chip ---- */
+.sumline,.uxtabs,.warnchip,.daystrip{display:none}
+body.ux2 .sumline{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:0;border:1px solid var(--line);border-radius:14px;background:#fff;overflow:hidden;margin-top:8px}
+.sumline>div{padding:9px 6px 8px;text-align:center;border-inline-start:1px solid var(--line);min-width:0}
+.sumline>div:first-child{border-inline-start:0}
+.sumline b{display:block;font:700 20px/1.1 var(--display);font-variant-numeric:tabular-nums;white-space:nowrap}
+.sumline span{display:block;font-size:12px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sumline .scope{background:var(--ink);color:#fff}.sumline .scope span{color:#cfd6d2}
+body.ux2 .warnchip{display:inline-flex;align-items:center;gap:7px;margin-top:8px;border:1px solid #f0c36d;background:#fff7e0;color:#6b4a00;border-radius:999px;padding:7px 13px;font:600 14px var(--body);cursor:pointer}
+body.ux2 .warnchip[hidden]{display:none}
+.warnchip.calm{border-color:var(--line);background:#fff;color:var(--ink)}
+.warnchip .ico{width:16px;height:16px}
+.warnchip .accchev{transition:transform .15s}.warnchip[aria-expanded=true] .accchev{transform:rotate(180deg)}
+body.ux2 #warns{display:none!important}
+body.ux2 #warns.open{display:flex!important}
+body.ux2 #warns .more{border:0;padding:0}body.ux2 #warns .more>summary{display:none}
+body.ux2 .uxtabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:var(--stone);border-radius:12px;padding:4px;margin-top:10px;position:sticky;top:0;z-index:3}
+.uxtabs button{border:0;background:transparent;border-radius:9px;padding:9px 4px;font:600 14px var(--body);color:var(--muted);cursor:pointer;white-space:nowrap}
+.uxtabs button[aria-selected=true]{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(20,30,25,.15)}
+.uxtabs button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.uxp[hidden]{display:none}
+body.ux2 .uxp .accgroup{margin-top:8px}
+body.ux2 .uxp[data-t=set]>*{margin-top:10px}
+body.ux2 #stats{display:none}
+body.ux2 #sheet.has-results #params{display:none}
+body.ux2 #sheet.has-results[data-tab=set] #params{display:block}
+body.ux2 #dayPlan.onesel .daycard:not(.sel){display:none}
+body.ux2 #dayPlan.onesel>.daytop,body.ux2 #dayPlan.onesel>button,body.ux2 #dayPlan.onesel>a{display:none}
+body.ux2 .daystrip{display:flex;position:fixed;z-index:6;gap:6px;overflow-x:auto;scrollbar-width:none;padding:6px;background:rgba(255,255,255,.92);backdrop-filter:blur(6px);border-radius:14px;box-shadow:0 3px 14px rgba(20,30,25,.22);left:auto;right:12px;bottom:16px;direction:rtl;max-width:calc(100vw - 24px)}
+body.ux2 .acc[data-k=dayPlan]>summary{display:none}body.ux2 .acc[data-k=dayPlan]>div{padding:10px 10px 12px}
+body.ux2 .daystrip[hidden]{display:none}
+.daystrip::-webkit-scrollbar{display:none}
+.daystrip button{flex:none;border:1px solid var(--line);background:#fff;border-radius:10px;padding:5px 10px;min-width:44px;min-height:40px;font:600 14px var(--body);color:var(--ink);cursor:pointer;display:flex;flex-direction:column;align-items:center;line-height:1.15}
+.daystrip button small{font-weight:400;font-size:11px;color:var(--muted)}
+.daystrip button[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.daystrip button[aria-pressed=true] small{color:#cfd6d2}
+.daystrip button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+body.ux2 #dayChips{display:none!important}
 .accgroup{border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-top:10px;background:#fff}
 .accgroup:not(:has(.acc:not([hidden]))){display:none}
 .acc{border-top:1px solid var(--line)}.acc.first{border-top:0}
@@ -550,6 +591,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
 </header>
 
 <button class="drawerback" id="drawerBack" type="button"></button>
+<nav class="daystrip" id="dayStrip" aria-label="ימי הטיול" hidden></nav>
 <section id="sheet">
   <button class="grip" id="grip" aria-label="כווץ / הרחב"></button>
   <div id="body">
@@ -656,7 +698,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
 
 <div id="fly" class="fly" hidden>
   <div id="flyMap"></div>
-  <div class="flytop"><button class="flybtn" id="flyClose" type="button" aria-label="סגירה"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button><div class="flytitle" id="flyTitle"></div><div class="flyday" id="flyDay" hidden></div></div>
+  <div class="flytop"><button class="flybtn" id="flyClose" type="button" aria-label="סגירה"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button><div class="flytitle" id="flyTitle"></div><div class="flycc" id="flyCc" hidden aria-live="polite"></div><div class="flyday" id="flyDay" hidden></div></div>
   <div class="flybanner" id="flyBanner" aria-live="polite"></div>
   <div class="flybar"><button class="flybtn play" id="flyPlay" type="button" aria-label="עצירה">❚❚</button><div class="flyprog" id="flyBar" role="slider" tabindex="0" aria-label="מיקום במעוף" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="flyProg"></i><b id="flyKnob"></b></div><div class="flykm" id="flyKm"></div><button class="flybtn" id="flySpeed" type="button">1×</button></div>
   <div class="flymsg" id="flyMsg"></div>
@@ -695,7 +737,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
     <div id="healthList" class="hlist"></div>
     <button class="ghost" id="healthRun" type="button">בדיקה מחדש</button>
   </details>
-  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.125 · 16.11.2026 00:53</div>
+  <div style="font-size:12px;margin-top:6px;color:var(--muted)">גרסה 1.126 · 16.11.2026 09:18</div>
   <div class="actions" style="margin-top:12px"><button class="go" id="saveKey">שמירה</button><button class="ghost" id="closeSettings">סגירה</button></div>
 </dialog>
 
@@ -2381,7 +2423,7 @@ function drawPickers() {
 }
 function rebuildWith() { if (!busy && current?.p) run(false); }
 $('clrBtn').onclick = () => { $('prompt').value = ''; store.set('lastPrompt', ''); growPrompt(); $('prompt').focus(); };
-$('newTripBtn').onclick = () => {
+$('newTripBtn').onclick = () => { $('dayStrip').hidden = true;
   $('sheet').classList.remove('has-results', 'min', 'full'); $('results').hidden = true; $('tripHead').hidden = true; $('verList').hidden = true; $('composer').hidden = true; $('understood').hidden = true;
   status(''); drawPickers(); $('prompt').focus(); $('prompt').select();
 };
@@ -2496,7 +2538,7 @@ const HEALTH = [
   ['הדפדפן הזה', [
     ['אינטרנט', async () => [navigator.onLine ? 'ok' : 'bad', navigator.onLine ? 'מחובר' : 'אין חיבור']],
     ['זיהוי דיבור', async () => (window.SpeechRecognition || window.webkitSpeechRecognition) ? ['ok', 'נתמך'] : ['warn', 'לא נתמך בדפדפן הזה. אפשר להשתמש במיקרופון של המקלדת']],
-    ['גרסת האפליקציה', async () => ['ok', '1.125 · 16.11.2026 00:53']],
+    ['גרסת האפליקציה', async () => ['ok', '1.126 · 16.11.2026 09:18']],
   ]],
 ];
 const imgHealth = url => new Promise(res => { const t = Date.now(), im = new Image(); const to = setTimeout(() => res(['bad', 'לא נטען תוך 10 שניות']), 10000); im.onload = () => { clearTimeout(to); const ms = Date.now() - t; res([ms > 4000 ? 'warn' : 'ok', `נטען (${ms} ms)`]); }; im.onerror = () => { clearTimeout(to); res(['bad', 'לא נטען']); }; im.src = url + (url.includes('?') ? '&' : '?') + 'h=' + Date.now(); });
@@ -4188,7 +4230,7 @@ async function run(fromPrompt, preset = null, changeText = null) {
   const btns = [$('goBtn'), $('rebuildBtn')]; btns.forEach(b => b.disabled = true); busy = true; bgNote = '';
   const changing = !$('results').hidden && $('sheet').classList.contains('has-results');
   if (changing) { $('results').classList.add('working'); if (!stageLive()) stageStart(false, change || asked); } // the old trip stays in view while the new one is planned, with the steps above it
-  else { $('results').hidden = true; stageStart(fromPrompt && !preset); routeLayer.clearLayers(); markLayer.clearLayers(); setArrows(null); }
+  else { $('results').hidden = true; stageStart(fromPrompt && !preset); routeLayer.clearLayers(); markLayer.clearLayers(); setArrows(null); $('dayStrip').hidden = true; }
   live.clear(); liveOn = !changing;
   try {
     let p;
@@ -4514,6 +4556,65 @@ const ico = (k, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-h
     new MutationObserver(sync).observe(box, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-sum'] });
   }
 }
+// ---------- the trip screen, second layout (?ux=2 switches it on, ?ux=1 off) ----------
+// One summary line and the three main buttons stay on top; the days are a strip on the map; everything else sits in four tabs;
+// notes and warnings fold behind one chip. The boxes are the same ones as before, only arranged.
+{ const q = new URLSearchParams(location.search).get('ux'); if (q === '2' || q === '1') store.set('ux', q); }
+const UX2 = store.get('ux') === '2';
+const UXT = [['days', 'ימים'], ['before', 'לפני היציאה'], ['road', 'על הדרך'], ['set', 'הגדרות']];
+function uxTab(t) {
+  $('sheet').dataset.tab = t;
+  for (const b of $('uxTabs').children) b.setAttribute('aria-selected', String(b.dataset.t === t));
+  for (const x of document.querySelectorAll('.uxp')) x.hidden = x.dataset.t !== t;
+}
+function placeStrip() { // on the map, clear of the panel: beside it on a wide screen, above it on a phone
+  const st = $('dayStrip'); if (st.hidden) return;
+  const off = document.body.classList.contains('drawer-off'), sh = $('sheet').getBoundingClientRect(), side = !off && sh.height > innerHeight * 0.7 && sh.width < innerWidth * 0.7;
+  st.style.right = (side ? innerWidth - sh.left + 12 : 12) + 'px'; st.style.maxWidth = (side ? sh.left - 24 : innerWidth - 24) + 'px';
+  st.style.bottom = (off ? 70 : side ? 16 : Math.max(16, innerHeight - sh.top + 8)) + 'px';
+}
+if (UX2) {
+  document.body.classList.add('ux2');
+  const R = $('results'), mk = (tag, cls, id) => { const e = document.createElement(tag); if (cls) e.className = cls; if (id) e.id = id; return e; };
+  const sum = mk('div', 'sumline', 'sumLine'), chip = mk('button', 'warnchip', 'warnChip'), tabs = mk('div', 'uxtabs', 'uxTabs'); chip.type = 'button'; chip.hidden = true; tabs.setAttribute('role', 'tablist');
+  const P = {}; for (const [t, he] of UXT) { const b = mk('button'); b.type = 'button'; b.dataset.t = t; b.textContent = he; b.setAttribute('role', 'tab'); b.onclick = () => uxTab(t); tabs.append(b); P[t] = mk('div', 'uxp'); P[t].dataset.t = t; }
+  const acc = k => document.querySelector(`.acc[data-k="${k}"]`), group = (...ks) => { const g = mk('div', 'accgroup'); g.append(...ks.map(acc)); return g; };
+  const barBox = $('bar').parentElement, actions = $('offroadBtn').parentElement;
+  P.days.append($('stats'), barBox, group('dayPlan', 'stopsBox', 'poiList', 'elev'));
+  P.before.append(group('checklist', 'wx', 'cost', 'safe'));
+  P.road.append(group('supply', 'garages', 'p4n'));
+  P.set.append(document.querySelector('#results .quick'), $('saveRow'), $('savedTag'), $('orHint'), $('orLinkRow'), $('savedActions'), $('delConfirm'));
+  $('accGroup').remove();
+  R.prepend(sum, $('tabs'), actions, chip, $('warns'), tabs, P.days, P.before, P.road, P.set);
+  chip.onclick = () => { const o = $('warns').classList.toggle('open'); chip.setAttribute('aria-expanded', String(o)); };
+  const count = () => { const W = $('warns'), n = W.querySelectorAll('.warn').length + W.querySelectorAll('.more li').length, hot = W.querySelectorAll('.warn .ico, .xwarn').length;
+    chip.hidden = !n; chip.classList.toggle('calm', !hot); chip.innerHTML = (hot ? ico('warn') : '') + `<span>${n === 1 ? 'דבר אחד לבדוק' : n + ' דברים לבדוק'}</span>` + ico('chev', 'accchev'); chip.setAttribute('aria-expanded', String(W.classList.contains('open')));
+    const m = W.querySelector('.more'); if (m) m.open = true; };
+  new MutationObserver(count).observe($('warns'), { childList: true, subtree: true });
+  uxTab('days'); acc('dayPlan').open = true; acc('dayPlan').addEventListener('toggle', e => { if (!e.target.open) e.target.open = true; });
+  new ResizeObserver(placeStrip).observe($('sheet')); addEventListener('resize', placeStrip);
+  new MutationObserver(placeStrip).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+}
+// what the summary line and the day strip show for this trip (or for the chosen day of it)
+function ux2Render(r, p, D, dv, i, day) {
+  if (!UX2) return;
+  const cell = (b, t, cls) => `<div${cls ? ` class="${cls}"` : ''}><b>${b}</b><span>${t}</span></div>`;
+  const sea = (dv ? segsInRange(r, dv.from, dv.to) : r.segs).filter(sg => sg.ferry).reduce((t, sg) => t + pathLen(sg.pts), 0);
+  let h = '';
+  if (dv) { const off = dv.off != null ? dv.off : null;
+    h = cell(`יום ${day + 1}`, `מתוך ${D.length}`, 'scope') + cell(Math.round((dv.len + sea) / 1000), 'ק"מ') + (off != null ? cell(Math.round(off / 1000), 'ק"מ שטח') : '') + cell(fmtH(dv.hrs), 'שעות נהיגה') + cell(dv.camp ? ico(dv.camp.ferry ? 'ferry' : dv.camp.hotel ? 'bed' : 'tent') : ico('flag'), dv.camp ? latinName(dv.camp.name || 'לינה').slice(0, 18) : 'סיום');
+  } else { const km = (r.len + sea) / 1000, offP = Math.round((r.len - r.asph) / Math.max(1, r.len) * 100); let cost = null;
+    try { if (r.cost && r.cost.countries) cost = costCalc(r, r.cost, costSet()).total; } catch {}
+    h = (D ? cell(D.length, 'ימים') : '') + cell(km >= 100 ? Math.round(km).toLocaleString('en') : km.toFixed(1), 'ק"מ') + cell(offP + '%', 'שטח') + cell(fmtH(r.hrs), D ? 'שעות נהיגה' : 'שעות') + (cost ? cell('€' + Math.round(cost).toLocaleString('en'), 'עלות משוערת') : (!D && !r.unrated ? cell((DIFF[r.maxD]?.he || '').replace(/ \(.*\)/, ''), 'הכי קשה') : ''));
+  }
+  $('sumLine').innerHTML = h;
+  $('dayPlan').classList.toggle('onesel', day != null);
+  const st = $('dayStrip'); st.innerHTML = ''; st.hidden = !D;
+  if (D) { const btn = (top, sub, k) => { const b = document.createElement('button'); b.type = 'button'; b.innerHTML = `${top}<small>${sub}</small>`; b.setAttribute('aria-pressed', String(k === day)); b.onclick = () => { render(i, k); uxTab('days'); }; st.append(b); return b; };
+    btn('הכול', `${D.length} ימים`, null);
+    D.forEach((d, k) => { const b = btn(k + 1, Math.round(d.len / 1000) + ' ק"מ', k); b.title = `יום ${k + 1}`; b.setAttribute('aria-label', `יום ${k + 1}, ${Math.round(d.len / 1000)} ק"מ`); });
+    placeStrip(); st.querySelector('[aria-pressed=true]')?.scrollIntoView({ block: 'nearest', inline: 'center' }); }
+}
 // the panel as a drawer: closed, the map has the whole screen; the same button (or the pill at the bottom) brings it back
 function setDrawer(open) {
   document.body.classList.toggle('drawer-off', !open);
@@ -4748,6 +4849,13 @@ async function flyOver(coords, title, marks = []) {
   // the whole trip: which day you are flying over, and a title card when a new day starts
   const dayMarks = marks.filter(m => m.day && m.d != null).sort((a, b) => a.d - b.d); let curDay = -1, bannerT = null;
   $('flyDay').hidden = !dayMarks.length; $('flyBanner').classList.remove('show');
+  // which country the car is in, at the top (trips abroad): looked up again every 1.5 km
+  let B = null, ccNow = null, ccAtD = -1e9; $('flyCc').hidden = true;
+  if (!inIsrael(coords[0][0], coords[0][1]) || !inIsrael(coords[coords.length - 1][0], coords[coords.length - 1][1])) borders().then(x => { B = x; });
+  const showCountry = (t, here) => { if (!B || Math.abs(t - ccAtD) < 1500) return; ccAtD = t;
+    const cc = ccAt(B, here[1], here[0]); if (!cc || cc === ccNow) return; const first = ccNow == null; ccNow = cc;
+    const el = $('flyCc'); el.textContent = ccName(B, cc); el.hidden = false;
+    if (!first) { el.classList.add('new'); setTimeout(() => el.classList.remove('new'), 900); } };
   let lastKm = -1;
   const showDay = t => { if (!dayMarks.length) return; let k = 0; while (k + 1 < dayMarks.length && dayMarks[k + 1].d <= t) k++;
     const m0 = dayMarks[k], end = k + 1 < dayMarks.length ? dayMarks[k + 1].d : total, km = Math.floor((t - m0.d) / 1000);
@@ -4816,7 +4924,7 @@ async function flyOver(coords, title, marks = []) {
       const near = at(Math.min(total, flyState.t + 40)), back = at(Math.max(0, flyState.t - 40)); // the car turns with the track itself
       const hd = near === back ? (heading ?? want) : Math.atan2((near[0] - back[0]) * Math.cos(here[1] * Math.PI / 180), near[1] - back[1]) * 180 / Math.PI;
       if (heading == null) heading = hd; heading += (((hd - heading + 540) % 360) - 180) * Math.min(1, dt * 6);
-      car.setLngLat([here[0], here[1]]).setRotation(heading); showDay(flyState.t);
+      car.setLngLat([here[0], here[1]]).setRotation(heading); showDay(flyState.t); showCountry(flyState.t, here);
       const look = at(Math.min(total, flyState.t + 220)); // the camera looks a little ahead, so the car sits low in the view
       // faster than the imagery can load: climb higher, so the ground stays visible
       const v = mps * flyState.speed, zWant = Math.max(11, 14.7 - Math.log2(Math.max(1, v / 4500)));
@@ -5517,6 +5625,7 @@ function render(i, day = null) {
     $('dayPlan').append(box);
   }
   drawBorders(r, D, dv);
+  ux2Render(r, p, D, dv, i, day);
   renderChecklist(p, r, D);
   renderStops(p, r);
   $('poiList').innerHTML = '';
@@ -5751,7 +5860,7 @@ async function thCommit(save) {
 }
 $('thInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); thCommit(true); } else if (e.key === 'Escape') thCommit(false); });
 $('thInput').addEventListener('blur', () => thCommit(true));
-$('verChip').textContent = 'v' + '1.125 · 16.11.2026 00:53'.split(' ')[0]; // so everyone can tell which version they are on
+$('verChip').textContent = 'v' + '1.126 · 16.11.2026 09:18'.split(' ')[0]; // so everyone can tell which version they are on
 // naming: type a name and press Enter (or just leave the field); it is saved for every version of the trip
 $('routeName').addEventListener('focus', e => setTimeout(() => e.target.select(), 0));
 $('routeName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
@@ -5779,7 +5888,7 @@ $('delBtn').onclick = () => { $('delConfirm').hidden = false; };
 $('delNo').onclick = () => { $('delConfirm').hidden = true; };
 $('delYes').onclick = async () => {
   const sv = tripRow(); if (!sv) return;
-  try { await api('/routes/' + sv.id, { method: 'DELETE' }); libCache = null; current = null; setArrows(null); routeLayer.clearLayers(); markLayer.clearLayers(); $('results').hidden = true; $('tripHead').hidden = true; $('verList').hidden = true; status('הטיול נמחק, עם כל הגרסאות שלו.'); }
+  try { await api('/routes/' + sv.id, { method: 'DELETE' }); libCache = null; current = null; setArrows(null); $('dayStrip').hidden = true; routeLayer.clearLayers(); markLayer.clearLayers(); $('results').hidden = true; $('tripHead').hidden = true; $('verList').hidden = true; status('הטיול נמחק, עם כל הגרסאות שלו.'); }
   catch (e) { status(e.message, true); }
 };
 
