@@ -842,8 +842,10 @@ const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Wo
 const ihm = L.tileLayer('https://israelhiking.osm.org.il/Hebrew/Tiles/{z}/{x}/{y}.png', { maxZoom: 18, maxNativeZoom: 16, attribution: '<a href="https://israelhiking.osm.org.il" target="_blank" rel="noopener">Israel Hiking Map</a> · © OpenStreetMap' });
 // abroad the OSM maps show local scripts (Greek, Georgian, Cyrillic): there the default is a topo map with English names
 const topoEn = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Esri, HERE, Garmin, © OpenStreetMap' });
-map.createPane('borders').style.zIndex = 350; map.getPane('borders').style.pointerEvents = 'none';
-map.createPane('bordlines').style.zIndex = 360; map.getPane('bordlines').style.pointerEvents = 'none'; // the border lines and country names: above the colours, not multiplied
+// Both panes go where the map tiles are (the pane that turns with the map): beside the map pane itself they sat under the tiles and nothing showed.
+{ const home = map.getPane('rotatePane') || undefined;
+  map.createPane('borders', home).style.zIndex = 350; map.getPane('borders').style.pointerEvents = 'none';
+  map.createPane('bordlines', home).style.zIndex = 360; map.getPane('bordlines').style.pointerEvents = 'none'; } // the border lines: above the colours, not multiplied
 const borderLayer = L.layerGroup(); // countries tinted, land borders in purple; filled when first shown
 L.control.layers({ 'מפת טיולים (ישראל): שבילים מסומנים ומספרי כבישים': ihm, 'טופוגרפית': topo, 'טופוגרפית, שמות באנגלית': topoEn, 'רגילה': osm, 'לוויין': sat }, { 'מדינות וגבולות': borderLayer }, { position: 'topleft' }).addTo(map);
 { // which map: the one you picked, else by where the map is (Israel: Hebrew topo; abroad: English names)
@@ -931,7 +933,7 @@ function fillBorderLayer(B) {
     const big = c.rings.reduce((a, r) => ((r.n - r.s) * (r.e - r.w) > (a.n - a.s) * (a.e - a.w) ? r : a)), size = Math.max(big.n - big.s, (big.e - big.w) * 0.7);
     let la = 0, lo = 0; for (const q of big.pts) { la += q[0]; lo += q[1]; } la /= big.pts.length; lo /= big.pts.length;
     if (!inRing(big.pts, la, lo)) { la = (big.s + big.n) / 2; lo = (big.w + big.e) / 2; }
-    const m = L.marker([la, lo], { interactive: false, keyboard: false, pane: 'bordlines', icon: L.divIcon({ className: 'cclabel', html: `<span>${gEsc(c.he || c.en)}</span>`, iconSize: [0, 0] }) }); m.minZ = size > 7 ? 4 : size > 3 ? 5 : size > 1.2 ? 6 : 7;
+    const m = L.marker([la, lo], { interactive: false, keyboard: false, zIndexOffset: -5000, icon: L.divIcon({ className: 'cclabel', html: `<span>${gEsc(c.he || c.en)}</span>`, iconSize: [0, 0] }) }); m.minZ = size > 7 ? 4 : size > 3 ? 5 : size > 1.2 ? 6 : 7;
     m.addTo(borderLayer); ccLabels.push(m);
   }
   showCcLabels();

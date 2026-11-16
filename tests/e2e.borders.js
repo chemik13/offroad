@@ -34,6 +34,7 @@ const line=(a,b,n=200)=>Array.from({length:n+1},(_,i)=>[a[1]+(b[1]-a[1])*i/n,a[0
  ok(bx.pins.length>=3&&bx.pins[0].startsWith('GR'),'border crossings on the map: '+bx.pins.join(', '));
  ok(bx.cards.length===bx.pins.length,'each crossing is in its day card: '+bx.cards[0]);
  ok(bx.layer&&bx.shapes>50,'countries and borders drawn ('+bx.shapes+' shapes)');
+ ok(await p.evaluate(()=>{const b=map.getPane('borders'),t=map.getPane('tilePane');return b.parentElement===t.parentElement&&+getComputedStyle(b).zIndex>+getComputedStyle(t).zIndex&&document.querySelectorAll('.cclabel').length>20}),'the colours sit above the map tiles, in the same pane group, with country names');
  ok(/ביקורת גבולות/.test(bx.warn),'non-Schengen crossings are called out: '+bx.warn.slice(0,90));
  // 2. arrows follow the route's direction (it runs north-west: they point up and left)
  const ar=await p.evaluate(()=>[...document.querySelectorAll('.rarrow')].map(e=>+e.style.transform.match(/-?\d+/)[0]));
