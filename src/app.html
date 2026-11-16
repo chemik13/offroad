@@ -191,11 +191,14 @@ a.fly3d{text-decoration:none}
 .busyline::after{content:'';position:absolute;inset-inline-start:0;bottom:0;height:3px;width:30%;background:var(--accent);animation:bl 1.2s ease-in-out infinite}
 .busyline.err::after{display:none}
 @keyframes bl{0%{transform:translateX(0)}50%{transform:translateX(-230%)}100%{transform:translateX(0)}}
-#composer{display:flex;gap:8px;padding-top:10px;margin-top:6px;border-top:1px solid var(--line);flex:none}
+#composer{display:flex;gap:8px;padding-top:10px;margin-top:6px;border-top:1px solid var(--line);flex:none;align-items:flex-end}
 #composer[hidden]{display:none}
 .refwrap{position:relative;flex:1;min-width:0;display:flex}
-#composer input{flex:1;min-width:0;padding-inline-start:46px!important;font:inherit;font-size:16px;color:var(--ink);background:var(--stone);border:1px solid transparent;border-radius:10px;padding:10px 12px}
-#composer input:focus{background:#fff;border-color:var(--accent)}
+/* the change box: one line when empty, grows with the text up to about six lines, then scrolls */
+#composer textarea{flex:1;min-width:0;min-height:0;height:46px;max-height:min(30vh,170px);resize:none;overflow-y:auto;line-height:1.4;padding-inline-start:46px!important;font:inherit;font-size:16px;color:var(--ink);background:var(--stone);border:1px solid transparent;border-radius:10px;padding:11px 12px}
+#composer textarea:focus{background:#fff;border-color:var(--accent)}
+.refwrap .mic{top:auto;bottom:6px;transform:none}
+#composer .go{min-height:46px}
 details.params{margin-top:10px}
 .grip{position:relative}
 .grip::after{content:"";position:absolute;inset:-12px -40px}
@@ -584,7 +587,7 @@ body{font-family:var(--body);font-size:16px}
 .grip{width:44px;height:5px;background:#c9cdc6;touch-action:none}
 #sheet.dragging{transition:none!important}
 @media (max-width:759px){.grip::after{inset:-16px -80px}}
-textarea,#composer input{font-family:var(--body);font-size:17px}
+textarea{font-family:var(--body);font-size:17px}
 /* phones: a little more room and bigger targets */
 @media (max-width:759px){
   #sheet{padding-inline:16px}
@@ -737,7 +740,7 @@ textarea,#composer input{font-family:var(--body);font-size:17px}
   </div>
   <div id="busyLine" class="busyline" hidden></div>
   <div id="composer" hidden>
-    <div class="refwrap"><input type="text" id="refineIn" enterkeyhint="send" aria-label="מה לשנות במסלול" placeholder="מה לשנות? אפשר גם לדבר">
+    <div class="refwrap"><textarea id="refineIn" rows="1" enterkeyhint="send" aria-label="מה לשנות במסלול" placeholder="מה לשנות? אפשר גם לדבר"></textarea>
       <button class="mic" id="micBtn2" type="button" aria-label="דברו במקום להקליד" title="דברו במקום להקליד"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg></button></div>
     <button class="go" id="refineBtn" type="button">שנה</button>
   </div>
@@ -1741,7 +1744,9 @@ function dictation(btn, field, onDone, grow = () => {}) {
 }
 dictation($('micBtn'), $('prompt'), () => { $('prompt').dispatchEvent(new Event('input')); /* starts background trail download */ status('הבנתי. בונה מסלול…'); run(true); }, () => growPrompt());
 // the change box takes voice too: say the change, it is applied when you stop talking
-dictation($('micBtn2'), $('refineIn'), () => { status('הבנתי. משנה…'); $('refineBtn').click(); });
+const growRefine = () => { const t = $('refineIn'); t.style.height = '46px'; if (t.scrollHeight > t.clientHeight) t.style.height = Math.min(t.scrollHeight + 2, 170, innerHeight * 0.3) + 'px'; };
+$('refineIn').addEventListener('input', growRefine); addEventListener('resize', () => growRefine());
+dictation($('micBtn2'), $('refineIn'), () => { status('הבנתי. משנה…'); $('refineBtn').click(); }, growRefine);
 
 // ---------- conversation mode (talk, it answers out loud, refine by voice) ----------
 const talk = (() => {
@@ -4031,12 +4036,13 @@ $('refineBtn').onclick = async () => {
     { const m = [...ask.matchAll(/(?:יותר|עוד|הרבה)\s+שטח[^\d]{0,12}(?:ב?ימים?|ב?יום)\s*([\d ,ו-]+)/g)].flatMap(x => x[1].match(/\d+/g) || []).map(Number); if (m.length) np.more_offroad_days = [...new Set([...(np.more_offroad_days || []), ...m])]; }
     const rr = current.res.results[current.sel];
     current.p = { ...np, story_he: np.story_he || current.p.story_he, _prevDayOff: (rr.days || []).map(d => d.len ? Math.round((d.off || 0) / d.len * 100) : 0) };
-    fillForm(current.p); $('refineIn').value = '';
+    fillForm(current.p); $('refineIn').value = ''; growRefine();
     pendingChange = ask.slice(0, 200); await run(false);
   } catch (e) { stageEnd(); status('העדכון נכשל: ' + (e.detail || e.message), true); }
   finally { $('refineBtn').disabled = false; }
 };
-$('refineIn').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('refineBtn').click(); } });
+// Enter sends; Shift+Enter starts a new line (long text wraps by itself either way)
+$('refineIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('refineBtn').click(); } });
 
 const fmtH = h => { const hh = Math.floor(h), mm = Math.round((h - hh) * 60 / 5) * 5; return mm === 60 ? `${hh + 1}:00` : `${hh}:${String(mm).padStart(2, '0')}`; };
 // keep the route clear of the panel, wherever the panel sits (bottom sheet / side panel)
@@ -4394,7 +4400,7 @@ function tripHead(r, p) {
   $('thEdit').hidden = !hasGroup();
   $('thSub').textContent = [current.saved ? null : p.summary_he, D ? `${D} ימים` : null].filter(Boolean).join(' · ');
   $('tripHead').hidden = false;
-  $('composer').hidden = !!current.saved && !current.saved.params;
+  $('composer').hidden = !!current.saved && !current.saved.params; requestAnimationFrame(growRefine); // on a narrow phone the hint itself takes two lines
   const und = [p._smartErr ? '⚠️ ' + p._smartErr + ' תכננתי לפי פענוח בסיסי. נסו שוב.' : null, p.story_he || null].filter(Boolean).join('\n');
   $('understood').hidden = !und; $('understood').textContent = und;
   drawPickers();
