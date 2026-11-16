@@ -2967,15 +2967,16 @@ async function run(fromPrompt, preset = null, changeText = null) {
       const pairs = viaLL.map((v, i) => v.ferry && viaLL[i + 1] ? [v, viaLL[i + 1]] : null).filter(Boolean);
       viaLL.forEach((v, i) => { const next = viaLL[i + 1]; if (v.ferry || !next) return;
         const pr = pairs.find(([a, b]) => near(v.ll, b.ll) && near(next.ll, a.ll)); if (!pr) return;
-        v.ferry = true; v.ferryHours = pr[0].ferryHours; v.ferryInfo = { ...(pr[0].ferryInfo || {}), depart: null };
-        const o = pr[0].src; Object.assign(v.src, { ferry_to_next: true, ferry_hours: o.ferry_hours, ferry_operator: o.ferry_operator, ferry_freq: o.ferry_freq, ferry_url: o.ferry_url }); }); } // the saved trip gets it right too
+        v.ferry = true; v.ferryHours = pr[0].ferryHours; v.ferryInfo = { ...(pr[0].ferryInfo || {}), depart: null }; v.ferryFrom = pr[0].src; }); }
     viaLL.forEach((v, i) => { // Claude sometimes marks both ports of a pair; a ferry leg must start where the last one did not end, and cross real distance
       const next = viaLL[i + 1]?.ll || (p.loop ? sLL : eLL);
-      if (v.ferry && (viaLL[i - 1]?.ferry || !next || hav(v.ll[0], v.ll[1], next[0], next[1]) < 20000)) { v.ferry = false; if (v.src) delete v.src.ferry_to_next; }
+      if (v.ferry && (viaLL[i - 1]?.ferry || !next || hav(v.ll[0], v.ll[1], next[0], next[1]) < 20000)) v.ferry = false;
     });
     viaLL.forEach((v, i) => { v.port = v.ferry || !!viaLL[i - 1]?.ferry; });
     if (!changing) { const all = [sLL, ...(eLL ? [eLL] : []), ...viaLL.map(v => v.ll)]; if (all.length > 1) map.fitBounds(L.latLngBounds(all).pad(0.15), mapPad()); else map.setView(sLL, 11); } // the map moves to the trip right away
     if (lost.length) { p.via = (p.via || []).filter(v => !lost.includes(v.name)); } p._lost = lost;
+    // the trip's settings follow the ferry marks as planned (new objects: the same port can be one object twice in the list)
+    p.via = viaLL.map(v => { const o = { ...v.src }; if (v.ferry) { o.ferry_to_next = true; const f = v.ferryFrom; if (f) Object.assign(o, { ferry_hours: f.ferry_hours, ferry_operator: f.ferry_operator, ferry_freq: f.ferry_freq, ferry_url: f.ferry_url }); delete o.ferry_depart; if (!f && v.src.ferry_depart) o.ferry_depart = v.src.ferry_depart; } else { for (const k of ['ferry_to_next', 'ferry_hours', 'ferry_depart', 'ferry_operator', 'ferry_freq', 'ferry_url']) delete o[k]; } return o; });
 
     const multi = (p.days || 1) > 1;
     if (multi && !(p.poi_types || []).includes('nightcamp')) p.poi_types = [...(p.poi_types || []), 'nightcamp'];

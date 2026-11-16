@@ -25,7 +25,8 @@ const line=(a,b,n=200)=>Array.from({length:n+1},(_,i)=>[a[1]+(b[1]-a[1])*i/n,a[0
  const ok=(c,t)=>console.log(c?'PASS':'FAIL',t);
  const IG={name:'Igoumenitsa Port',lat:39.5003,lon:20.264,country:'GR',ferry_to_next:true,ferry_hours:17.5,ferry_depart:'21:30',ferry_operator:'Minoan Lines',ferry_freq:'כל יום',ferry_url:'https://www.minoan.it/'};
  const AN={name:'Ancona Port',lat:43.6203,lon:13.5029,country:'IT'};
- const P={start:{name:'Thessaloniki',lat:40.64,lon:22.94,country:'GR'},loop:true,via:[{...IG},{...AN},{name:'Passo Giau',lat:46.4833,lon:12.0517,country:'IT'},{...AN},{...IG}],days:8,country:'IT'};
+ const AN0={...AN}, IG0={...IG};
+ const P={start:{name:'Thessaloniki',lat:40.64,lon:22.94,country:'GR'},loop:true,via:[IG0,AN0,{name:'Passo Giau',lat:46.4833,lon:12.0517,country:'IT'},AN0,IG0],days:8,country:'IT'};
  await p.fill('#prompt','מסלוניקי לדולומיטים במעבורת הלוך וחזור');await p.evaluate(x=>run(true,x),P);await p.waitForFunction(()=>!busy,null,{timeout:150000});await p.waitForTimeout(500);
  const r=await p.evaluate(()=>{const r=current.res.results[0];return {err:lastRunErr,fer:r.segs.filter(s=>s.ferry).map(s=>[s.pts[0].map(x=>+x.toFixed(1)),s.pts[s.pts.length-1].map(x=>+x.toFixed(1))]),maxLat:Math.max(...r.coords.map(c=>c[0])),eastOfAdriatic:r.coords.filter(c=>c[0]>42.5&&c[1]>15.5).length,via:current.p.via.map(v=>v.name+(v.ferry_to_next?'⛴':'')),night:r.days.map(d=>d.camp?.ferry?'ferry':'')}});
  ok(!r.err&&r.fer.length===2,'two sailings: '+JSON.stringify(r.fer));
@@ -33,4 +34,8 @@ const line=(a,b,n=200)=>Array.from({length:n+1},(_,i)=>[a[1]+(b[1]-a[1])*i/n,a[0
  ok(r.eastOfAdriatic===0,'no driving through the Balkans north of Albania ('+r.eastOfAdriatic+' points)');
  ok(!r.fer.some(f=>Math.abs(f[1][0]-40.6)<0.2&&Math.abs(f[1][1]-22.9)<0.2),'no "ferry" into Thessaloniki');
  ok(JSON.stringify(r.via)==JSON.stringify(['Igoumenitsa Port⛴','Ancona Port','Passo Giau','Ancona Port⛴','Igoumenitsa Port']),'the trip\'s settings are repaired too: '+r.via.join(' > '));
+ // and planning it again from those settings gives the same two sailings (the same port object twice in the list, as a saved trip can have)
+ await p.evaluate(()=>run(false));await p.waitForFunction(()=>!busy,null,{timeout:150000});
+ const r2=await p.evaluate(()=>{const r=current.res.results[0];return {fer:r.segs.filter(s=>s.ferry).map(s=>[s.pts[0].map(x=>+x.toFixed(1)),s.pts[s.pts.length-1].map(x=>+x.toFixed(1))]),via:current.p.via.map(v=>v.name+(v.ferry_to_next?'⛴':''))}});
+ ok(JSON.stringify(r2.fer)===JSON.stringify(r.fer)&&JSON.stringify(r2.via)===JSON.stringify(r.via),'again from the repaired settings: '+JSON.stringify(r2));
  console.log(errs.join('\n')||'no page errors');await b.close();})();
